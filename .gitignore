@@ -1,0 +1,10 @@
+# Dirs
+toolchain/
+ovmf/
+build/
+.cache/
+.vscode/
+
+# Files
+compile_commands.json
+.clangd
