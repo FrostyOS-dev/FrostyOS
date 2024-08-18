@@ -4,7 +4,11 @@ ovmf/
 build/
 .cache/
 .vscode/
+depend/
+dist/
+iso/
 
 # Files
 compile_commands.json
 .clangd
+limine.h
