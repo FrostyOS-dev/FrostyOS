@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "kernel.hpp"
 
 #include <stddef.h>
+#include <stdio.h>
 
 #include <Graphics/VGA.hpp>
 
@@ -65,7 +66,8 @@ void StartKernel() {
 
     g_CurrentTTY = &g_KTTY;
     
-    g_CurrentTTY->WriteString("Hello, World!");
+    puts("Starting FrostyOS\n");
+    dbgputs("Starting FrostyOS\n");
 
     while (true) {
 
