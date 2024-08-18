@@ -15,25 +15,44 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _KERNEL_HPP
-#define _KERNEL_HPP
+#include "TTYBackend.hpp"
 
-#include <stdint.h>
+TTYBackend::TTYBackend() : m_type(TTYBackendType::INVALID) {
 
-#include <Graphics/Framebuffer.hpp>
+}
 
-struct KernelParams {
-    uint64_t HHDMStart;
-    FrameBuffer framebuffer;
-    void** MemoryMap;
-    uint64_t MemoryMapEntryCount;
-    void* RSDP;
-    uint64_t kernelPhysical;
-    uint64_t kernelVirtual;
-};
+TTYBackend::TTYBackend(TTYBackendType type) : m_type(type) {
+    
+}
 
-extern KernelParams g_kernelParams;
+void TTYBackend::WriteChar(char c) {
+    
+}
 
-void StartKernel();
+void TTYBackend::WriteString(const char* str) {
+    
+}
 
-#endif /* _KERNEL_HPP */
+char TTYBackend::ReadChar() {
+    return '\0';
+}
+
+void TTYBackend::ReadString(char* str, uint64_t length) {
+    
+}
+
+void TTYBackend::SetCursor(uint64_t x, uint64_t y) {
+    
+}
+
+void TTYBackend::GetCursor(uint64_t& x, uint64_t& y) {
+    
+}
+
+void TTYBackend::Seek(uint64_t pos) {
+    
+}
+
+TTYBackendType TTYBackend::GetType() const {
+    return m_type;
+}

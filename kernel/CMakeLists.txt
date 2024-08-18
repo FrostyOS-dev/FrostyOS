@@ -18,6 +18,7 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/E9.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/IO.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/start.asm
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/KernelSymbols.cpp
     )
 
     set(kernel_lib_sources
@@ -30,6 +31,14 @@ endif()
 
 set(kernel_sources
     ${kernel_sources}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Colour.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Framebuffer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGA.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGAFont.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/DebugBackend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/VGABackend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTY.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTYBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/debug.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/kernel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/limine_entry.cpp

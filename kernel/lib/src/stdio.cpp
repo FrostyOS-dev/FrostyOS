@@ -22,15 +22,50 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <errno.h>
 #include <util.h>
 
+#include <tty/TTY.hpp>
+#include <tty/TTYBackend.hpp>
 
 #define max(a, b) ((a) > (b) ? (a) : (b))
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
+TTYBackendStream FDToTTYBackendStream(fd_t file) {
+    switch (file) {
+        case stdin:
+            return TTYBackendStream::IN;
+        case stdout:
+            return TTYBackendStream::OUT;
+        case stderr:
+            return TTYBackendStream::ERR;
+        case stddebug:
+            return TTYBackendStream::DEBUG;
+        default:
+            return TTYBackendStream::INVALID;
+    }
+}
+
 int64_t internal_read(fd_t file, void* data, size_t size) {
+    if (g_CurrentTTY != nullptr) {
+        TTYBackendStream stream = FDToTTYBackendStream(file);
+        if (stream != TTYBackendStream::INVALID) {
+            for (size_t i = 0; i < size; i++)
+                ((char*)data)[i] = g_CurrentTTY->ReadChar(stream);
+            return size;
+        }
+        return -EBADF;
+    }
     return -ENOSYS;
 }
 
 int64_t internal_write(fd_t file, const void* data, size_t size) {
+    if (g_CurrentTTY != nullptr) {
+        TTYBackendStream stream = FDToTTYBackendStream(file);
+        if (stream != TTYBackendStream::INVALID) {
+            for (size_t i = 0; i < size; i++)
+                g_CurrentTTY->WriteChar(((char*)data)[i], stream);
+            return size;
+        }
+        return -EBADF;
+    }
     return -ENOSYS;
 }
 
@@ -43,6 +78,14 @@ int internal_close(fd_t file) {
 }
 
 long internal_seek(fd_t file, long offset) {
+    if (g_CurrentTTY != nullptr) {
+        TTYBackendStream stream = FDToTTYBackendStream(file);
+        if (stream != TTYBackendStream::INVALID) {
+            g_CurrentTTY->Seek(stream, offset);
+            return offset;
+        }
+        return -EBADF;
+    }
     return -ENOSYS;
 }
 

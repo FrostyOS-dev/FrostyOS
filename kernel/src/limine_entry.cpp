@@ -88,8 +88,25 @@ void _start() {
         limine_request_fail("paging_mode_request");
 #endif
 
+    if (framebuffer_request.response->framebuffer_count == 0)
+        limine_request_fail("framebuffer_count");
+
+    limine_framebuffer* fb = framebuffer_request.response->framebuffers[0];
+
     g_kernelParams.HHDMStart = hhdm_request.response->offset;
-    g_kernelParams.framebuffer = framebuffer_request.response->framebuffers[0];
+    g_kernelParams.framebuffer = {
+        fb->address,
+        fb->width,
+        fb->height,
+        fb->pitch,
+        fb->bpp,
+        (uint8_t)((1 << fb->red_mask_size) - 1),
+        fb->red_mask_shift,
+        (uint8_t)((1 << fb->green_mask_size) - 1),
+        fb->green_mask_shift,
+        (uint8_t)((1 << fb->blue_mask_size) - 1),
+        fb->blue_mask_shift
+    };
     g_kernelParams.MemoryMap = (void**)memmap_request.response->entries;
     g_kernelParams.MemoryMapEntryCount = memmap_request.response->entry_count;
     g_kernelParams.RSDP = rsdp_request.response->address;

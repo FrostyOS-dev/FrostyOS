@@ -15,25 +15,34 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _KERNEL_HPP
-#define _KERNEL_HPP
+#ifndef _COLOUR_HPP
+#define _COLOUR_HPP
 
 #include <stdint.h>
 
-#include <Graphics/Framebuffer.hpp>
+class Colour
+{
+public:
+    Colour();
+    Colour(uint8_t r, uint8_t g, uint8_t b);
 
-struct KernelParams {
-    uint64_t HHDMStart;
-    FrameBuffer framebuffer;
-    void** MemoryMap;
-    uint64_t MemoryMapEntryCount;
-    void* RSDP;
-    uint64_t kernelPhysical;
-    uint64_t kernelVirtual;
+    uint64_t Render(uint16_t bpp, uint8_t red_mask, uint8_t red_shift, uint8_t green_mask, uint8_t green_shift, uint8_t blue_mask, uint8_t blue_shift);
+
+    uint8_t GetR() const;
+    uint8_t GetG() const;
+    uint8_t GetB() const;
+
+    void SetR(uint8_t r);
+    void SetG(uint8_t g);
+    void SetB(uint8_t b);
+
+private:
+    bool m_dirty;
+    uint64_t m_colour;
+
+    uint8_t m_r;
+    uint8_t m_g;
+    uint8_t m_b;
 };
 
-extern KernelParams g_kernelParams;
-
-void StartKernel();
-
-#endif /* _KERNEL_HPP */
+#endif

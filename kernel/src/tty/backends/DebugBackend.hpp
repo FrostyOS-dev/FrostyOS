@@ -15,25 +15,17 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _KERNEL_HPP
-#define _KERNEL_HPP
+#ifndef _TTY_DEBUG_BACKEND_HPP
+#define _TTY_DEBUG_BACKEND_HPP
 
-#include <stdint.h>
+#include "../TTYBackend.hpp"
 
-#include <Graphics/Framebuffer.hpp>
+class TTYBackendDebug : public TTYBackend {
+public:
+    TTYBackendDebug();
 
-struct KernelParams {
-    uint64_t HHDMStart;
-    FrameBuffer framebuffer;
-    void** MemoryMap;
-    uint64_t MemoryMapEntryCount;
-    void* RSDP;
-    uint64_t kernelPhysical;
-    uint64_t kernelVirtual;
+    void WriteChar(char c) override;
+    void WriteString(const char* str) override;
 };
 
-extern KernelParams g_kernelParams;
-
-void StartKernel();
-
-#endif /* _KERNEL_HPP */
+#endif /* _TTY_DEBUG_BACKEND_HPP */

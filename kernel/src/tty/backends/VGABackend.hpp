@@ -15,25 +15,29 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _KERNEL_HPP
-#define _KERNEL_HPP
+#ifndef _TTY_BACKEND_VGA_HPP
+#define _TTY_BACKEND_VGA_HPP
 
-#include <stdint.h>
+#include "../TTYBackend.hpp"
 
-#include <Graphics/Framebuffer.hpp>
+#include <Graphics/VGA.hpp>
 
-struct KernelParams {
-    uint64_t HHDMStart;
-    FrameBuffer framebuffer;
-    void** MemoryMap;
-    uint64_t MemoryMapEntryCount;
-    void* RSDP;
-    uint64_t kernelPhysical;
-    uint64_t kernelVirtual;
+class TTYBackendVGA : public TTYBackend {
+public:
+    TTYBackendVGA();
+    TTYBackendVGA(VGA* vga);
+
+    void Init(VGA* vga);
+
+    void WriteChar(char c) override;
+    void WriteString(const char* str) override;
+
+    void SetCursor(uint64_t x, uint64_t y) override;
+    void GetCursor(uint64_t& x, uint64_t& y) override;
+
+    void Seek(uint64_t pos) override;
+private:
+    VGA* m_vga;
 };
 
-extern KernelParams g_kernelParams;
-
-void StartKernel();
-
-#endif /* _KERNEL_HPP */
+#endif /* _TTY_BACKEND_VGA_HPP */

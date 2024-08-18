@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2022-2024  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,25 +15,22 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _KERNEL_HPP
-#define _KERNEL_HPP
+#ifndef _VGA_FONT_HPP
+#define _VGA_FONT_HPP
 
 #include <stdint.h>
 
-#include <Graphics/Framebuffer.hpp>
+#include "Framebuffer.hpp"
 
-struct KernelParams {
-    uint64_t HHDMStart;
-    FrameBuffer framebuffer;
-    void** MemoryMap;
-    uint64_t MemoryMapEntryCount;
-    void* RSDP;
-    uint64_t kernelPhysical;
-    uint64_t kernelVirtual;
-};
+#define CHAR_WIDTH 10
+#define CHAR_HEIGHT 16
 
-extern KernelParams g_kernelParams;
+extern const uint8_t letters[95][16];
 
-void StartKernel();
+void getChar(const char in, uint8_t* out);
 
-#endif /* _KERNEL_HPP */
+bool IsCharValid(char c);
+
+void WriteCharToFrameBuffer(FrameBuffer* fb, uint64_t x, uint64_t y, Colour& fg, Colour& bg, char c);
+
+#endif /* _KERNEL_X86_64_VGA_FONT_HPP */

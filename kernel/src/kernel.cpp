@@ -16,12 +16,56 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "kernel.hpp"
-#include "debug.h"
+
+#include <stddef.h>
+
+#include <Graphics/VGA.hpp>
+
+#include <tty/backends/DebugBackend.hpp>
+#include <tty/backends/VGABackend.hpp>
+
+#include <tty/TTY.hpp>
+
+#ifdef __x86_64__
+#include <arch/x86_64/KernelSymbols.hpp>
+#endif
 
 KernelParams g_kernelParams;
 
+VGA g_KVGA;
+Colour g_KBackgroundColour;
+Colour g_KForegroundColour;
+
+TTYBackendDebug g_KDebugBackend;
+TTYBackendVGA g_KVGABackend;
+
+TTY g_KTTY;
+
 void StartKernel() {
-    debug_puts("Hello, world!\n");
+    {
+        typedef void (*ctor_fn)();
+        ctor_fn* ctors = (ctor_fn*)_ctors_start_addr;
+        uint64_t ctors_count = ((uint64_t)_ctors_end_addr - (uint64_t)_ctors_start_addr) / sizeof(ctor_fn);
+        for (uint64_t i = 0; i < ctors_count; i++)
+            ctors[i]();
+    }
+
+
+    g_KBackgroundColour = Colour(0, 0, 0);
+    g_KForegroundColour = Colour(255, 255, 255);
+
+    g_KVGA.Init(&g_kernelParams.framebuffer, g_KBackgroundColour, g_KForegroundColour);
+
+    g_KVGABackend.Init(&g_KVGA);
+
+    g_KTTY.Init();
+    g_KTTY.SetBackend(&g_KVGABackend, TTYBackendStream::OUT);
+    g_KTTY.SetBackend(&g_KVGABackend, TTYBackendStream::ERR);
+    g_KTTY.SetBackend(&g_KDebugBackend, TTYBackendStream::DEBUG);
+
+    g_CurrentTTY = &g_KTTY;
+    
+    g_CurrentTTY->WriteString("Hello, World!");
 
     while (true) {
 
