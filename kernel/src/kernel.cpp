@@ -27,6 +27,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <tty/TTY.hpp>
 
+#include <HAL/HAL.hpp>
+
 #ifdef __x86_64__
 #include <arch/x86_64/KernelSymbols.hpp>
 #endif
@@ -65,6 +67,8 @@ void StartKernel() {
     g_KTTY.SetBackend(&g_KDebugBackend, TTYBackendStream::DEBUG);
 
     g_CurrentTTY = &g_KTTY;
+
+    HAL_EarlyInit();
     
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");
