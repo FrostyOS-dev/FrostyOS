@@ -35,12 +35,28 @@ void x86_64_GDTInit(GDTSegmentDescriptor* gdt) {
 
     gdt[1].access = GDTAccess_Present | GDTAccess_ReadWrite | GDTAccess_CodeData | GDTAccess_Execute | GDTAccess_RING0;
     gdt[2].access = GDTAccess_Present | GDTAccess_ReadWrite | GDTAccess_CodeData | GDTAccess_RING0;
-    gdt[3].access = GDTAccess_Present | GDTAccess_ReadWrite | GDTAccess_CodeData | GDTAccess_Execute | GDTAccess_RING3;
     gdt[4].access = GDTAccess_Present | GDTAccess_ReadWrite | GDTAccess_CodeData | GDTAccess_RING3;
+    gdt[3].access = GDTAccess_Present | GDTAccess_ReadWrite | GDTAccess_CodeData | GDTAccess_Execute | GDTAccess_RING3;
 
     GDTR gdtr;
     gdtr.limit = sizeof(GDTSegmentDescriptor) * 5 - 1;
     gdtr.base = (uint64_t)gdt;
 
     x86_64_LoadGDT(&gdtr);
+}
+
+uint16_t x86_64_GetKernelDataSegment() {
+    return 0x10;
+}
+
+uint16_t x86_64_GetKernelCodeSegment() {
+    return 0x08;
+}
+
+uint16_t x86_64_GetUserDataSegment() {
+    return 0x18 | 3;
+}
+
+uint16_t x86_64_GetUserCodeSegment() {
+    return 0x20 | 3;
 }

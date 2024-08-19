@@ -15,13 +15,24 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifdef __x86_64__
-#include <arch/x86_64/GDT.hpp>
-#include <arch/x86_64/interrupts/IDT.hpp>
+#ifndef _ISR_HPP
+#define _ISR_HPP
 
-void HAL_EarlyInit() {
-    x86_64_GDTInit(g_GDT);
-    x86_64_IDTInit();
-}
+#include <stdint.h>
 
-#endif
+struct x86_64_ISR_Frame {
+    uint64_t DS;
+    uint64_t CR3, CR2;
+    uint64_t R15, R14, R13, R12, R11, R10, R9, R8, RDI, RSI, RBP, RBX, RDX, RCX, RAX;
+    uint64_t INT, ERR;
+    uint64_t RIP, CS, RFLAGS, RSP, SS;
+} __attribute__((packed));
+
+typedef void (*x86_64_ISRHandler_t)(x86_64_ISR_Frame* frame);
+
+void x86_64_ISRInit();
+void x86_64_ISR_RegisterHandler(uint8_t vector, x86_64_ISRHandler_t handler);
+
+extern "C" void x86_64_ISR_Handler(x86_64_ISR_Frame* frame);
+
+#endif /* _ISR_HPP */

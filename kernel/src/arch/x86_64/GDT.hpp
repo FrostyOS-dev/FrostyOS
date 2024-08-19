@@ -72,4 +72,9 @@ void x86_64_GDTInit(GDTSegmentDescriptor* gdt);
 
 extern "C" void x86_64_LoadGDT(GDTR* gdtr);
 
+uint16_t x86_64_GetKernelDataSegment();
+uint16_t x86_64_GetKernelCodeSegment();
+uint16_t x86_64_GetUserDataSegment();
+uint16_t x86_64_GetUserCodeSegment();
+
 #endif /* _x86_64_GDT_HPP */
