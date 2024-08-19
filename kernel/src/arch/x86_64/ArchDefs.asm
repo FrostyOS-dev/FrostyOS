@@ -15,11 +15,13 @@
 
 [bits 64]
 
-extern _start
+global x86_64_DisableInterrupts
+global x86_64_EnableInterrupts
 
-global __kernel_start
-__kernel_start:
-    xor rbp, rbp
-    push rbp
-    call _start
-    hlt
+x86_64_DisableInterrupts:
+    cli
+    ret
+
+x86_64_EnableInterrupts:
+    sti
+    ret

@@ -19,11 +19,15 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IDT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/ArchDefs.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/E9.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/GDT.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/GDT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/IO.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/KernelSymbols.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Panic.asm
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Panic.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Stack.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/start.asm
     )
 

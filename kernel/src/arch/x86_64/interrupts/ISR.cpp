@@ -18,7 +18,42 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "ISR.hpp"
 #include "IDT.hpp"
 
-#include <stdio.h>
+#include "../Panic.hpp"
+
+const char* g_Exceptions[32] = {
+    "Divide by zero",
+    "Debug",
+    "Non-maskable interrupt",
+    "Breakpoint",
+    "Overflow",
+    "Bound range exceeded",
+    "Invalid opcode",
+    "Device not available",
+    "Double fault",
+    "Coprocessor segment overrun",
+    "Invalid TSS",
+    "Segment not present",
+    "Stack-segment fault",
+    "General protection fault",
+    "Page fault",
+    "Reserved",
+    "x87 floating-point exception",
+    "Alignment check",
+    "Machine check",
+    "SIMD floating-point exception",
+    "Virtualization exception",
+    "Control protection exception",
+    "Reserved",
+    "Reserved",
+    "Reserved",
+    "Reserved",
+    "Reserved",
+    "Reserved",
+    "Hypervisor Injection Exception",
+    "VMM Communication Exception",
+    "Security Exception",
+    "Reserved"
+};
 
 void x86_64_ISR_SetIDTHandlers();
 
@@ -35,14 +70,52 @@ void x86_64_ISR_RegisterHandler(uint8_t vector, x86_64_ISRHandler_t handler) {
     g_ISR_Handlers[vector] = handler;
 }
 
+bool in_exception = false;
+
 extern "C" void x86_64_ISR_Handler(x86_64_ISR_Frame* frame) {
     if (g_ISR_Handlers[frame->INT] != nullptr)
         g_ISR_Handlers[frame->INT](frame);
 
-    dbgprintf("Unhandled interrupt: %d\n", frame->INT);
-    while (1) {
-        __asm__ volatile ("hlt");
+    if (in_exception) {
+        while (true) {
+            __asm__ volatile ("hlt");
+        }
     }
+
+    char const* reason = "Unhandled interrupt";
+    if (frame->INT < 32)
+        reason = g_Exceptions[frame->INT];
+
+    in_exception = true;
+
+    x86_64_Panic(reason, frame, true);
+}
+
+void x86_64_Convert_ISRRegs_To_StandardRegs(x86_64_ISR_Frame* frame, x86_64_Registers* state) {
+    if (state == nullptr || frame == nullptr)
+        return;
+    state->RAX = frame->RAX;
+    state->RBX = frame->RBX;
+    state->RCX = frame->RCX;
+    state->RDX = frame->RDX;
+    state->RSI = frame->RSI;
+    state->RDI = frame->RDI;
+    state->RSP = frame->RSP;
+    state->RBP = frame->RBP;
+    state->R8 = frame->R8;
+    state->R9 = frame->R9;
+    state->R10 = frame->R10;
+    state->R11 = frame->R11;
+    state->R12 = frame->R12;
+    state->R13 = frame->R13;
+    state->R14 = frame->R14;
+    state->R15 = frame->R15;
+    state->RIP = frame->RIP;
+    state->CS = (uint16_t)frame->CS;
+    state->DS = (uint16_t)frame->DS;
+    state->RFLAGS = frame->RFLAGS;
+    state->CR3 = frame->CR3;
+    state->_align = 0;
 }
 
 extern "C" {

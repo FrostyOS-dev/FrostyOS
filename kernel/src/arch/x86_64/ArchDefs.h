@@ -15,28 +15,45 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _ISR_HPP
-#define _ISR_HPP
+#ifndef _x86_64_ARCH_DEFINTIONS_H
+#define _x86_64_ARCH_DEFINTIONS_H
 
 #include <stdint.h>
 
-#include "../ArchDefs.h"
-
-struct x86_64_ISR_Frame {
-    uint64_t DS;
-    uint64_t CR3, CR2;
-    uint64_t R15, R14, R13, R12, R11, R10, R9, R8, RDI, RSI, RBP, RBX, RDX, RCX, RAX;
-    uint64_t INT, ERR;
-    uint64_t RIP, CS, RFLAGS, RSP, SS;
+struct x86_64_Registers {
+    uint64_t RAX;
+    uint64_t RBX;
+    uint64_t RCX;
+    uint64_t RDX;
+    uint64_t RSI;
+    uint64_t RDI;
+    uint64_t RSP;
+    uint64_t RBP;
+    uint64_t R8;
+    uint64_t R9;
+    uint64_t R10;
+    uint64_t R11;
+    uint64_t R12;
+    uint64_t R13;
+    uint64_t R14;
+    uint64_t R15;
+    uint64_t RIP;
+    uint16_t CS;
+    uint16_t DS;
+    uint64_t RFLAGS;
+    uint64_t CR3;
+    uint32_t _align; // make the struct 8 byte aligned
 } __attribute__((packed));
 
-void x86_64_Convert_ISRRegs_To_StandardRegs(x86_64_ISR_Frame* frame, x86_64_Registers* state);
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-typedef void (*x86_64_ISRHandler_t)(x86_64_ISR_Frame* frame);
+void x86_64_DisableInterrupts();
+void x86_64_EnableInterrupts();
 
-void x86_64_ISRInit();
-void x86_64_ISR_RegisterHandler(uint8_t vector, x86_64_ISRHandler_t handler);
+#ifdef __cplusplus
+}
+#endif
 
-extern "C" void x86_64_ISR_Handler(x86_64_ISR_Frame* frame);
-
-#endif /* _ISR_HPP */
+#endif /* _x86_64_ARCH_DEFINTIONS_H */

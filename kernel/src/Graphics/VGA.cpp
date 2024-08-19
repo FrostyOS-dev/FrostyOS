@@ -126,7 +126,7 @@ void VGA::PrintChar(char c) {
         WriteCharToFrameBuffer(m_framebuffer, m_cursorX, m_cursorY, m_foregroundColour, m_backgroundColour, c);
         m_cursorX += CHAR_WIDTH;
 
-        if (m_cursorX >= m_numberOfColumns)
+        if (m_cursorX >= (m_numberOfColumns * CHAR_WIDTH))
             NewLine();
         break;
     }
@@ -155,12 +155,12 @@ void VGA::NewLine() {
     m_cursorX = 0;
     m_cursorY += CHAR_HEIGHT;
 
-    if (m_cursorY >= m_numberOfRows)
+    if (m_cursorY >= (m_numberOfRows * CHAR_HEIGHT))
         Scroll(1);
 }
 
 void VGA::Scroll(uint64_t n) {
-    memcpy(m_framebuffer->BaseAddress, (void*)((uint64_t)m_framebuffer->BaseAddress + n * m_framebuffer->width * CHAR_HEIGHT), m_framebuffer->pitch * (m_framebuffer->height - n * CHAR_HEIGHT));
+    memcpy(m_framebuffer->BaseAddress, (void*)((uint64_t)m_framebuffer->BaseAddress + n * m_framebuffer->pitch * CHAR_HEIGHT), m_framebuffer->pitch * (m_framebuffer->height - n * CHAR_HEIGHT));
     DrawFilledRectangle(0, m_framebuffer->height - n * CHAR_HEIGHT, m_framebuffer->width, n * CHAR_HEIGHT, m_backgroundColour);
     m_cursorY -= n * CHAR_HEIGHT;
 }
