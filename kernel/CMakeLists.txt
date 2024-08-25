@@ -19,6 +19,7 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IDT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PagingInit.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/ArchDefs.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/E9.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/GDT.asm
@@ -41,11 +42,14 @@ endif()
 
 set(kernel_sources
     ${kernel_sources}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Data-structures/Bitmap.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Colour.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Framebuffer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGA.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGAFont.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/HAL.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PagingUtil.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PMM.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/DebugBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/VGABackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTY.cpp

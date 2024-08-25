@@ -15,16 +15,13 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifdef __x86_64__
-#include <arch/x86_64/GDT.hpp>
-#include <arch/x86_64/interrupts/IDT.hpp>
+#include "PagingInit.hpp"
 
-#include <arch/x86_64/Memory/PagingInit.hpp>
+#include <Memory/PMM.hpp>
 
-void HAL_EarlyInit(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount) {
-    x86_64_GDTInit(g_GDT);
-    x86_64_IDTInit();
-    x86_64_InitPaging(memoryMap, memoryMapEntryCount);
+PMM KPMM;
+
+void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount) {
+    KPMM.Initialise(memoryMap, memoryMapEntryCount);
+    g_PMM = &KPMM;
 }
-
-#endif

@@ -15,16 +15,24 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifdef __x86_64__
-#include <arch/x86_64/GDT.hpp>
-#include <arch/x86_64/interrupts/IDT.hpp>
+#ifndef _MEMORY_MAP_HPP
+#define _MEMORY_MAP_HPP
 
-#include <arch/x86_64/Memory/PagingInit.hpp>
+#include <stdint.h>
 
-void HAL_EarlyInit(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount) {
-    x86_64_GDTInit(g_GDT);
-    x86_64_IDTInit();
-    x86_64_InitPaging(memoryMap, memoryMapEntryCount);
-}
+#define MEMORY_MAP_USABLE 0
+#define MEMORY_MAP_RESERVED 1
+#define MEMORY_MAP_ACPI_RECLAIMABLE 2
+#define MEMORY_MAP_ACPI_NVS 3
+#define MEMORY_MAP_BAD_MEMORY 4
+#define MEMORY_MAP_BOOTLOADER_RECLAIMABLE 5
+#define MEMORY_MAP_KERNEL_AND_MODULES 6
+#define MEMORY_MAP_FRAMEBUFFER 7
 
-#endif
+struct MemoryMapEntry {
+    uint64_t base;
+    uint64_t length;
+    uint64_t type;
+} __attribute__((packed));
+
+#endif /* _MEMORY_MAP_HPP */

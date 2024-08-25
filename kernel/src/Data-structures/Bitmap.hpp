@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2022-2024  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,16 +15,33 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifdef __x86_64__
-#include <arch/x86_64/GDT.hpp>
-#include <arch/x86_64/interrupts/IDT.hpp>
+#ifndef _BITMAP_HPP
+#define _BITMAP_HPP
 
-#include <arch/x86_64/Memory/PagingInit.hpp>
+#include <stddef.h>
+#include <stdint.h>
 
-void HAL_EarlyInit(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount) {
-    x86_64_GDTInit(g_GDT);
-    x86_64_IDTInit();
-    x86_64_InitPaging(memoryMap, memoryMapEntryCount);
-}
+class Bitmap {
+public:
+    Bitmap();
+    Bitmap(uint8_t* buffer, size_t size);
+    ~Bitmap();
 
-#endif
+    bool operator[](uint64_t index) const;
+    void Set(uint64_t index, bool value);
+
+    // Set size in bytes
+    void SetSize(size_t size);
+
+    void SetBuffer(uint8_t* buffer);
+
+    // Get size in bytes
+    size_t GetSize() const;
+
+    uint8_t* GetBuffer() const;
+
+private:
+    size_t m_Size;
+    uint8_t* m_Buffer;
+};
+#endif /* _BITMAP_HPP */

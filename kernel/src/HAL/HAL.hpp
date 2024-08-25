@@ -18,6 +18,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _HAL_HPP
 #define _HAL_HPP
 
-void HAL_EarlyInit();
+#ifdef __x86_64__
+#include <arch/x86_64/Panic.hpp>
+#endif
+
+#include <Memory/MemoryMap.hpp>
+
+void HAL_EarlyInit(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount);
 
 #endif /* _HAL_HPP */

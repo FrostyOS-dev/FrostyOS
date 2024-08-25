@@ -15,16 +15,11 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifdef __x86_64__
-#include <arch/x86_64/GDT.hpp>
-#include <arch/x86_64/interrupts/IDT.hpp>
+#ifndef _x86_64_PAGING_INIT_HPP
+#define _x86_64_PAGING_INIT_HPP
 
-#include <arch/x86_64/Memory/PagingInit.hpp>
+#include <Memory/MemoryMap.hpp>
 
-void HAL_EarlyInit(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount) {
-    x86_64_GDTInit(g_GDT);
-    x86_64_IDTInit();
-    x86_64_InitPaging(memoryMap, memoryMapEntryCount);
-}
+void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount);
 
-#endif
+#endif /* _x86_64_PAGING_INIT_HPP */

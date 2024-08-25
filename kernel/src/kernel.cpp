@@ -22,12 +22,17 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Graphics/VGA.hpp>
 
+#include <Memory/PagingUtil.hpp>
+#include <Memory/PMM.hpp>
+
 #include <tty/backends/DebugBackend.hpp>
 #include <tty/backends/VGABackend.hpp>
 
 #include <tty/TTY.hpp>
 
 #include <HAL/HAL.hpp>
+
+#include <Data-structures/Bitmap.hpp>
 
 #ifdef __x86_64__
 #include <arch/x86_64/KernelSymbols.hpp>
@@ -68,7 +73,9 @@ void StartKernel() {
 
     g_CurrentTTY = &g_KTTY;
 
-    HAL_EarlyInit();
+    SetHHDMOffset(g_kernelParams.HHDMStart);
+
+    HAL_EarlyInit(g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount);
     
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");

@@ -15,27 +15,42 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _KERNEL_HPP
-#define _KERNEL_HPP
+#ifndef _PMM_HPP
+#define _PMM_HPP
 
 #include <stdint.h>
+#include <stddef.h>
+#include <spinlock.h>
 
-#include <Graphics/Framebuffer.hpp>
+#include "MemoryMap.hpp"
 
-#include <Memory/MemoryMap.hpp>
+class PMM {
+public:
+    PMM();
 
-struct KernelParams {
-    uint64_t HHDMStart;
-    FrameBuffer framebuffer;
-    MemoryMapEntry** MemoryMap;
-    uint64_t MemoryMapEntryCount;
-    void* RSDP;
-    uint64_t kernelPhysical;
-    uint64_t kernelVirtual;
+    void Initialise(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount);
+
+    void* AllocatePage();
+    void FreePage(void* page);
+
+    void* AllocatePages(uint64_t pageCount);
+    void FreePages(void* pages, uint64_t pageCount);
+
+private:
+    struct FreeListNode {
+        size_t size;
+        FreeListNode* next;
+    };
+
+    FreeListNode* m_freeListHead = nullptr;
+
+    spinlock_new(m_Lock);
+
+    uint64_t m_freeMem = 0;
+    uint64_t m_usedMem = 0;
+    uint64_t m_reservedMem = 0;
 };
 
-extern KernelParams g_kernelParams;
+extern PMM* g_PMM;
 
-void StartKernel();
-
-#endif /* _KERNEL_HPP */
+#endif /* _PMM_HPP */

@@ -24,6 +24,6 @@ extern "C" [[noreturn]] void x86_64_Panic(const char* message, void* registers, 
 
 extern "C" [[noreturn]] void x86_64_PrePanic();
 
-#define PANIC(reason) {__asm__ volatile ("movq %1, %0" : "=m" (g_panic_reason) : "p" (reason)); __asm__ volatile ("call x86_64_PrePanic"); __builtin_unreachable();}
+#define PANIC(reason) {__asm__ volatile ("movq %1, %0" : "=m" (g_x86_64_PanicReason) : "p" (reason)); __asm__ volatile ("call x86_64_PrePanic"); __builtin_unreachable();}
 
 #endif /* _PANIC_HPP */
