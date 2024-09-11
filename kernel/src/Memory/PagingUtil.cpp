@@ -27,6 +27,14 @@ void* to_HHDM(void* addr) {
     return (void*)((uint64_t)addr + g_HHDMOffset);
 }
 
+uint64_t to_HHDM(uint64_t addr) {
+    return addr + g_HHDMOffset;
+}
+
 void* HHDM_to_phys(void* addr) {
     return (void*)((uint64_t)addr - g_HHDMOffset);
+}
+
+uint64_t HHDM_to_phys(uint64_t addr) {
+    return addr - g_HHDMOffset;
 }

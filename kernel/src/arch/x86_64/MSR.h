@@ -15,16 +15,20 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _x86_64_PAGING_INIT_HPP
-#define _x86_64_PAGING_INIT_HPP
+#ifndef _x86_64_MSR_H
+#define _x86_64_MSR_H
 
-#include <Memory/MemoryMap.hpp>
+#include <stdint.h>
 
-void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, void* fb_base, uint64_t fb_size, uint64_t kernel_virtual, uint64_t kernel_physical);
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-bool x86_64_is2MiBPagesSupported();
-bool x86_64_is1GiBPagesSupported();
+uint64_t x86_64_ReadMSR(uint32_t msr);
+void x86_64_WriteMSR(uint32_t msr, uint64_t value);
 
-void MapKernel(uint64_t kernel_virtual, uint64_t kernel_physical);
+#ifdef __cplusplus
+}
+#endif
 
-#endif /* _x86_64_PAGING_INIT_HPP */
+#endif /* _x86_64_MSR_H */

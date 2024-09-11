@@ -19,13 +19,20 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IDT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PageTables.asm
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PageTables.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PagingInit.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PagingUtil.asm
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PagingUtil.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PAT.asm
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PAT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/ArchDefs.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/E9.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/GDT.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/GDT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/IO.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/KernelSymbols.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/MSR.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Panic.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Panic.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Stack.cpp
@@ -48,8 +55,11 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGA.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGAFont.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/HAL.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PageFault.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PagingUtil.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PMM.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/sanitiser/sanitiser.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/sanitiser/ubsan.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/DebugBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/VGABackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTY.cpp
@@ -64,7 +74,7 @@ set(kernel_lib_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/assert.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/icxxabi.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/math.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/stack_protector.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/stack_protector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/stdio.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/stdlib.c
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/string.c
@@ -113,6 +123,7 @@ target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-ffreestanding>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-pie>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fstack-protector>
+    # PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fsanitize=undefined>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mgeneral-regs-only>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mno-red-zone>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-O2>

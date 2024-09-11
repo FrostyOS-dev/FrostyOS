@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "kernel.hpp"
+#include "util.h"
 
 #include <stddef.h>
 #include <stdio.h>
@@ -49,6 +50,10 @@ TTYBackendVGA g_KVGABackend;
 
 TTY g_KTTY;
 
+extern "C" {
+void* g_kernelStack;
+}
+
 void StartKernel() {
     {
         typedef void (*ctor_fn)();
@@ -75,7 +80,15 @@ void StartKernel() {
 
     SetHHDMOffset(g_kernelParams.HHDMStart);
 
-    HAL_EarlyInit(g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount);
+    for (uint64_t i = 0; i < g_kernelParams.MemoryMapEntryCount; i++) {
+        printf("Memory Map Entry %d: %016llx-%016llx, Type: %d\n", i, g_kernelParams.MemoryMap[i]->base, g_kernelParams.MemoryMap[i]->base + g_kernelParams.MemoryMap[i]->length, g_kernelParams.MemoryMap[i]->type);
+    }
+
+    printf("Kernel Stack: %lx-%lx.\n", (uint64_t)g_kernelStack - KiB(64), (uint64_t)g_kernelStack);
+
+    // while (true) {}
+    
+    HAL_EarlyInit(g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.framebuffer.BaseAddress, g_kernelParams.framebuffer.pitch * g_kernelParams.framebuffer.height, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical);
     
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");

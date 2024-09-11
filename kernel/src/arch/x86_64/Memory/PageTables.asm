@@ -15,13 +15,42 @@
 
 [bits 64]
 
-extern _start
-extern g_kernelStack
+global x86_64_InvalidatePage
+global x86_64_FullTLBFlush
+global x86_64_LoadCR3
+global x86_64_GetCR3
 
-global __kernel_start
-__kernel_start:
-    mov QWORD [g_kernelStack], rsp
-    xor rbp, rbp
+x86_64_InvalidatePage:
     push rbp
-    call _start
-    hlt
+    mov rbp, rsp ; not really needed, but for extra debug support on error
+
+    invlpg [rdi]
+
+    mov rsp, rbp
+    pop rbp
+    ret
+
+x86_64_FullTLBFlush:
+    push rbp
+    mov rbp, rsp ; not really needed, but for extra debug support on error
+
+    mov rax, cr3
+    mov cr3, rax
+
+    mov rsp, rbp
+    pop rbp
+    ret
+
+x86_64_LoadCR3:
+    push rbp
+    mov rbp, rsp ; not really needed, but for extra debug support on error
+
+    mov cr3, rdi
+
+    mov rsp, rbp
+    pop rbp
+    ret
+
+x86_64_GetCR3:
+    mov rax, cr3
+    ret

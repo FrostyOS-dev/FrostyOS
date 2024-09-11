@@ -43,6 +43,9 @@ x86_64_Registers g_x86_64_PanicRegisters;
 
     stdio_force_unlock();
 
+    if (message == nullptr)
+        message = g_x86_64_PanicReason;
+
     // all to debug first
     dbgputs("KERNEL PANIC!\n");
     if (type)

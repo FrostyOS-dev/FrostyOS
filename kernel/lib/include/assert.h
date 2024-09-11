@@ -24,7 +24,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
     #define __ASSERT_FUNCTION __extension__ __PRETTY_FUNCTION__
 
-    extern __attribute__((noreturn)) void __assert_fail(const char* assertion, const char* file, unsigned int line, const char* function);
+#ifdef __cplusplus
+    extern "C" {
+#endif
+    [[noreturn]] void __assert_fail(const char* assertion, const char* file, unsigned int line, const char* function);
+#ifdef __cplusplus
+    }
+#endif
 
     #if defined __cplusplus
         #define assert(expr) (static_cast<bool>(expr)	? void (0) : __assert_fail (#expr, __FILE__, __LINE__, __ASSERT_FUNCTION))

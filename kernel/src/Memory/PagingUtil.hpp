@@ -23,7 +23,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 void SetHHDMOffset(uint64_t offset);
 
 void* to_HHDM(void* addr);
+uint64_t to_HHDM(uint64_t addr);
 
 void* HHDM_to_phys(void* addr);
+uint64_t HHDM_to_phys(uint64_t addr);
 
 #endif /* _PAGING_UTIL_HPP */

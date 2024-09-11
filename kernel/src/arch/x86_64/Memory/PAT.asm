@@ -15,13 +15,27 @@
 
 [bits 64]
 
-extern _start
-extern g_kernelStack
+global x86_64_EnsurePAT
 
-global __kernel_start
-__kernel_start:
-    mov QWORD [g_kernelStack], rsp
-    xor rbp, rbp
+x86_64_EnsurePAT:
     push rbp
-    call _start
-    hlt
+    mov rbp, rsp
+
+    push rbx
+    mov eax, 1
+    xor ecx, ecx
+    cpuid
+    pop rbx
+    and edx, 1<<16
+    test edx, edx
+    jz .fail
+    mov rax, 1
+    jmp .end
+
+.fail:
+    xor rax, rax
+
+.end:
+    mov rsp, rbp
+    pop rbp
+    ret

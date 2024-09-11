@@ -111,6 +111,7 @@ void* PMM::AllocatePage() {
             m_freeMem -= PAGE_SIZE;
             m_usedMem += PAGE_SIZE;
             spinlock_release(&m_Lock);
+            printf("Allocated page at %lp\n", page);
             return page;
         }
         previous = current;
@@ -153,12 +154,14 @@ void PMM::FreePage(void* page) {
             m_freeMem += PAGE_SIZE;
             m_usedMem -= PAGE_SIZE;
             spinlock_release(&m_Lock);
+            printf("Freed page at %lp\n", page);
             return;
         }
         previous = current;
         current = current->next;
     }
     spinlock_release(&m_Lock);
+    printf("Failed to free page at %lp\n", page);
 }
 
 void* PMM::AllocatePages(uint64_t pageCount) {
@@ -187,6 +190,7 @@ void* PMM::AllocatePages(uint64_t pageCount) {
             m_freeMem -= PAGE_SIZE * pageCount;
             m_usedMem += PAGE_SIZE * pageCount;
             spinlock_release(&m_Lock);
+            printf("Allocated %lu pages at %lp\n", pageCount, page);
             return page;
         }
         previous = current;
@@ -229,6 +233,7 @@ void PMM::FreePages(void* pages, uint64_t pageCount) {
             m_freeMem += PAGE_SIZE * pageCount;
             m_usedMem -= PAGE_SIZE * pageCount;
             spinlock_release(&m_Lock);
+            printf("Freed %lu pages at %lp\n", pageCount, pages);
             return;
         }
         previous = current;

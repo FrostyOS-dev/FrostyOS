@@ -350,7 +350,7 @@ x86_64_ISR_Common:
 
     mov r15, rsp
 
-    push QWORD [r15+168]
+    push QWORD [r15+160]
     push rbp
     mov rbp, rsp
 

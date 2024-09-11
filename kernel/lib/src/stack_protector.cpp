@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2023-2024  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,16 +15,19 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _x86_64_PAGING_INIT_HPP
-#define _x86_64_PAGING_INIT_HPP
+#include <stdint.h>
+#include <util.h>
 
-#include <Memory/MemoryMap.hpp>
+#include <HAL/HAL.hpp>
 
-void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, void* fb_base, uint64_t fb_size, uint64_t kernel_virtual, uint64_t kernel_physical);
+#define STACK_CHK_GUARD 0x595e9fbd94fda766
 
-bool x86_64_is2MiBPagesSupported();
-bool x86_64_is1GiBPagesSupported();
+extern "C" {
 
-void MapKernel(uint64_t kernel_virtual, uint64_t kernel_physical);
+uintptr_t __stack_chk_guard = STACK_CHK_GUARD;
 
-#endif /* _x86_64_PAGING_INIT_HPP */
+[[noreturn]] void __stack_chk_fail(void) {
+    PANIC("Stack smashing detected");
+}
+
+} /* extern "C" */

@@ -15,16 +15,21 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _x86_64_PAGING_INIT_HPP
-#define _x86_64_PAGING_INIT_HPP
+#ifndef _PAGE_FAULT_HPP
+#define _PAGE_FAULT_HPP
 
-#include <Memory/MemoryMap.hpp>
+#include <stdint.h>
 
-void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, void* fb_base, uint64_t fb_size, uint64_t kernel_virtual, uint64_t kernel_physical);
+#include <HAL/HAL.hpp>
 
-bool x86_64_is2MiBPagesSupported();
-bool x86_64_is1GiBPagesSupported();
+struct PageFaultError {
+    bool Present;
+    bool Write;
+    bool User;
+    bool ReservedWrite;
+    bool InstructionFetch;
+};
 
-void MapKernel(uint64_t kernel_virtual, uint64_t kernel_physical);
+void HandlePageFault(uint64_t address, PageFaultError error, CPU_Registers* regs);
 
-#endif /* _x86_64_PAGING_INIT_HPP */
+#endif /* _PAGE_FAULT_HPP */

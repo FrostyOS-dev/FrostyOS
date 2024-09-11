@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2023-2024  Frosty515
+Copyright (©) 2024  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,16 +15,17 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include <stdint.h>
-#include <util.h>
+#ifndef _SANITISER_H
+#define _SANITISER_H
 
-extern char* g_panic_reason;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#define STACK_CHK_GUARD 0x595e9fbd94fda766
+void sanitiser_panic(const char* message);
 
-uintptr_t __stack_chk_guard = STACK_CHK_GUARD;
-
-__attribute__((noreturn))
-void __stack_chk_fail(void) {
-    while (true) {}
+#ifdef __cplusplus
 }
+#endif
+
+#endif /* _SANITISER_H */

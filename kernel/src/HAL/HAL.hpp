@@ -19,11 +19,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define _HAL_HPP
 
 #ifdef __x86_64__
+#include <arch/x86_64/ArchDefs.h>
 #include <arch/x86_64/Panic.hpp>
+
+typedef x86_64_Registers CPU_Registers;
 #endif
 
 #include <Memory/MemoryMap.hpp>
 
-void HAL_EarlyInit(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount);
+void HAL_EarlyInit(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, void* fb_base, uint64_t fb_size, uint64_t kernel_virtual, uint64_t kernel_physical);
 
 #endif /* _HAL_HPP */

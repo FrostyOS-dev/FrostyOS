@@ -15,16 +15,10 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _x86_64_PAGING_INIT_HPP
-#define _x86_64_PAGING_INIT_HPP
+#include "sanitiser.h"
 
-#include <Memory/MemoryMap.hpp>
+#include <HAL/HAL.hpp>
 
-void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, void* fb_base, uint64_t fb_size, uint64_t kernel_virtual, uint64_t kernel_physical);
-
-bool x86_64_is2MiBPagesSupported();
-bool x86_64_is1GiBPagesSupported();
-
-void MapKernel(uint64_t kernel_virtual, uint64_t kernel_physical);
-
-#endif /* _x86_64_PAGING_INIT_HPP */
+extern "C" void sanitiser_panic(const char* message) {
+    PANIC(message);
+}

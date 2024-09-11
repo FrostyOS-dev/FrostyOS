@@ -19,6 +19,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "IDT.hpp"
 
 #include "../Panic.hpp"
+#include "arch/x86_64/ArchDefs.h"
+
+#include <Memory/PageFault.hpp>
 
 const char* g_Exceptions[32] = {
     "Divide by zero",
@@ -82,11 +85,23 @@ extern "C" void x86_64_ISR_Handler(x86_64_ISR_Frame* frame) {
         }
     }
 
+    in_exception = true;
+
+    if (frame->INT == 14) {
+        PageFaultError error;
+        error.Present = frame->ERR & 1;
+        error.Write = frame->ERR & 2;
+        error.User = frame->ERR & 4;
+        error.ReservedWrite = frame->ERR & 8;
+        error.InstructionFetch = frame->ERR & 16;
+        x86_64_Registers regs;
+        x86_64_Convert_ISRRegs_To_StandardRegs(frame, &regs);
+        HandlePageFault(frame->CR2, error, &regs);
+    }
+
     char const* reason = "Unhandled interrupt";
     if (frame->INT < 32)
         reason = g_Exceptions[frame->INT];
-
-    in_exception = true;
 
     x86_64_Panic(reason, frame, true);
 }

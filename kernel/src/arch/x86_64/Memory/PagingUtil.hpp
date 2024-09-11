@@ -15,16 +15,21 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _x86_64_PAGING_INIT_HPP
-#define _x86_64_PAGING_INIT_HPP
+#ifndef _x86_64_PAGING_UTIL_HPP
+#define _x86_64_PAGING_UTIL_HPP
 
-#include <Memory/MemoryMap.hpp>
+#include <stdint.h>
 
-void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, void* fb_base, uint64_t fb_size, uint64_t kernel_virtual, uint64_t kernel_physical);
+#include "PageTables.hpp"
 
-bool x86_64_is2MiBPagesSupported();
-bool x86_64_is1GiBPagesSupported();
+extern "C" {
+    bool x86_64_EnsureNX();
 
-void MapKernel(uint64_t kernel_virtual, uint64_t kernel_physical);
+    bool x86_64_Ensure2MBPages();
+    bool x86_64_Ensure1GBPages();
+}
 
-#endif /* _x86_64_PAGING_INIT_HPP */
+void x86_64_MapRegionWithLargestPages(x86_64_Level4Table* Table, uint64_t physical_base, uint64_t length, uint32_t flags);
+void x86_64_MapRegionWithLargestPages(x86_64_Level4Table* Table, uint64_t virtual_base, uint64_t physical_base, uint64_t length, uint32_t flags);
+
+#endif /* _x86_64_PAGING_UTIL_HPP */

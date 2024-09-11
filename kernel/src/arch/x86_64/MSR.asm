@@ -15,13 +15,22 @@
 
 [bits 64]
 
-extern _start
-extern g_kernelStack
+global x86_64_ReadMSR
+global x86_64_WriteMSR
 
-global __kernel_start
-__kernel_start:
-    mov QWORD [g_kernelStack], rsp
-    xor rbp, rbp
-    push rbp
-    call _start
-    hlt
+x86_64_ReadMSR:
+    mov ecx, edi
+    xor rax, rax
+    xor rdx, rdx
+    rdmsr
+    shl rdx, 32
+    or rax, rdx
+    ret
+
+x86_64_WriteMSR:
+    mov ecx, edi
+    mov rax, rsi
+    mov rdx, rax
+    shr rdx, 32
+    wrmsr
+    ret
