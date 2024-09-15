@@ -36,6 +36,8 @@ public:
     void GetCursor(uint64_t& x, uint64_t& y) override;
 
     void Seek(uint64_t pos) override;
+
+    void SwapBuffers();
 private:
     VGA* m_vga;
 };

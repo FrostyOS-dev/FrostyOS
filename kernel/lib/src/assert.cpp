@@ -23,9 +23,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <HAL/HAL.hpp>
 
 extern "C" [[noreturn]] void __assert_fail(const char* assertion, const char* file, unsigned int line, const char* function) {
-    // FIXME: change this function call so it outputs to stderr once that works properly
     char buffer[1024];
     memset(buffer, 0, 1024);
-    snprintf(buffer, 1023, "Assertion failed: \"%s\", file %s, line %u, function \"%s\"\n", assertion, file, line, function);
+    snprintf(buffer, 1023, "Assertion failed: \"%s\", file %s, line %u, function \"%s\"", assertion, file, line, function);
     PANIC(buffer);
 }

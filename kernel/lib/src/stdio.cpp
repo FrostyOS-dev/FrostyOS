@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "stdio.h"
+#include "tty/backends/VGABackend.hpp"
 
 #include <assert.h>
 #include <string.h> // just used for strlen function
@@ -102,7 +103,14 @@ extern "C" int fgetc(const fd_t file) {
 }
 
 void internal_swap_buffers(const fd_t file) {
-
+    if (g_CurrentTTY != nullptr) {
+        TTYBackendStream stream = FDToTTYBackendStream(file);
+        if (stream != TTYBackendStream::INVALID) {
+            TTYBackend* backend = g_CurrentTTY->GetBackend(stream);
+            if (backend->GetType() == TTYBackendType::VGA)
+                ((TTYBackendVGA*)backend)->SwapBuffers();
+        }
+    }
 }
 
 void internal_lock(const fd_t file) {

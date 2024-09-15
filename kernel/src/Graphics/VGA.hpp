@@ -57,8 +57,15 @@ public:
     uint64_t GetNumberOfRows();
     uint64_t GetNumberOfColumns();
 
+    void EnableDoubleBuffering(FrameBuffer* buffer);
+    void DisableDoubleBuffering();
+    bool IsDoubleBufferingEnabled();
+
+    void SwapBuffers();
+
 private:
-    FrameBuffer* m_framebuffer;
+    FrameBuffer* m_frontBuffer;
+    FrameBuffer* m_backBuffer;
     Colour m_backgroundColour;
     Colour m_foregroundColour;
 
@@ -66,6 +73,8 @@ private:
     uint64_t m_cursorY;
     uint64_t m_numberOfRows;
     uint64_t m_numberOfColumns;
+
+    bool m_doubleBufferingEnabled;
 };
 
 #endif /* _VGA_HPP */

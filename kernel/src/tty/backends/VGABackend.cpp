@@ -64,3 +64,8 @@ void TTYBackendVGA::Seek(uint64_t pos) {
         m_vga->SetCursor(div.rem * CHAR_WIDTH, div.quot * CHAR_HEIGHT);
     }
 }
+
+void TTYBackendVGA::SwapBuffers() {
+    if (m_vga != nullptr)
+        m_vga->SwapBuffers();
+}

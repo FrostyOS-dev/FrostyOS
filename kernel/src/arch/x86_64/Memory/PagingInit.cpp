@@ -22,11 +22,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../KernelSymbols.hpp"
 
-#include <assert.h>
 #include <stdint.h>
 #include <string.h>
 #include <util.h>
-#include <stdio.h>
 
 #include <Memory/MemoryMap.hpp>
 #include <Memory/PagingUtil.hpp>
@@ -46,7 +44,6 @@ bool g_1GiBPages = false;
 void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, void* fb_base, uint64_t fb_size, uint64_t kernel_virtual, uint64_t kernel_physical) {
     KPMM.Initialise(memoryMap, memoryMapEntryCount);
     g_PMM = &KPMM;
-    assert(memoryMap != nullptr);
 
     if (!x86_64_EnsureNX())
         PANIC("CPU does not support the NX bit");
@@ -79,11 +76,6 @@ void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount,
 
     // map all memory map entries above 4GiB that aren't bad memory or framebuffer when PAT is supported
     for (uint64_t i = 0; i < memoryMapEntryCount; i++) {
-        printf("Handling memory map entry %d\n", i);
-        __asm__ volatile ("nop\n\tnop" ::: "memory");
-        assert(memoryMap != nullptr);
-        __asm__ volatile ("nop\n\tnop\n\tnop" ::: "memory");
-        assert(memoryMap[i] != nullptr);
         if (memoryMap[i]->type == MEMORY_MAP_BAD_MEMORY)
             continue;
         if (x86_64_isPATSupported() && memoryMap[i]->type == MEMORY_MAP_FRAMEBUFFER)

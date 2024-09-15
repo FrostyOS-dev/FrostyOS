@@ -16,11 +16,9 @@
 [bits 64]
 
 extern _start
-extern g_kernelStack
 
 global __kernel_start
 __kernel_start:
-    mov QWORD [g_kernelStack], rsp
     xor rbp, rbp
     push rbp
     call _start

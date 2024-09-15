@@ -39,7 +39,7 @@ x86_64_EnsureNX:
 
     cpuid
     and edx, 1<<20
-    test eax, eax
+    test edx, edx
     jz .fail
 
     pop rbx
@@ -78,7 +78,7 @@ x86_64_Ensure2MBPages:
 
     cpuid
     and edx, 1<<3
-    test eax, eax
+    test edx, edx
     jz .fail
 
     pop rbx
@@ -108,11 +108,9 @@ x86_64_Ensure1GBPages:
 
     cpuid
     and edx, 1<<26
-    test eax, eax
+    test edx, edx
     jz .fail
 
-    pop rbx
-    
     mov rax, 1
     jmp .end
 
@@ -120,6 +118,7 @@ x86_64_Ensure1GBPages:
     xor rax, rax
 
 .end:
+    pop rbx
     mov rsp, rbp
     pop rbp
     ret

@@ -21,23 +21,25 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "VGAFont.hpp"
 
 #include <string.h>
+#include <util.h>
 
-VGA::VGA() : m_framebuffer(nullptr), m_backgroundColour(0, 0, 0), m_foregroundColour(255, 255, 255), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0) {
+VGA::VGA() : m_frontBuffer(nullptr), m_backBuffer(nullptr), m_backgroundColour(0, 0, 0), m_foregroundColour(255, 255, 255), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_doubleBufferingEnabled(false) {
 
 }
 
-VGA::VGA(FrameBuffer* framebuffer, Colour backgroundColour, Colour foregroundColour) : m_framebuffer(framebuffer), m_backgroundColour(backgroundColour), m_foregroundColour(foregroundColour), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0) {
-    m_numberOfRows = m_framebuffer->height / CHAR_HEIGHT;
-    m_numberOfColumns = m_framebuffer->width / CHAR_WIDTH;
+VGA::VGA(FrameBuffer* framebuffer, Colour backgroundColour, Colour foregroundColour) : m_frontBuffer(framebuffer), m_backBuffer(framebuffer), m_backgroundColour(backgroundColour), m_foregroundColour(foregroundColour), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_doubleBufferingEnabled(false) {
+    m_numberOfRows = m_backBuffer->height / CHAR_HEIGHT;
+    m_numberOfColumns = m_backBuffer->width / CHAR_WIDTH;
 }
 
 void VGA::Init(FrameBuffer* framebuffer, Colour backgroundColour, Colour foregroundColour) {
-    m_framebuffer = framebuffer;
+    m_backBuffer = framebuffer;
+    m_frontBuffer = framebuffer;
     m_backgroundColour = backgroundColour;
     m_foregroundColour = foregroundColour;
 
-    m_numberOfRows = m_framebuffer->height / CHAR_HEIGHT;
-    m_numberOfColumns = m_framebuffer->width / CHAR_WIDTH;
+    m_numberOfRows = m_backBuffer->height / CHAR_HEIGHT;
+    m_numberOfColumns = m_backBuffer->width / CHAR_WIDTH;
 
     m_cursorX = 0;
     m_cursorY = 0;
@@ -46,11 +48,11 @@ void VGA::Init(FrameBuffer* framebuffer, Colour backgroundColour, Colour foregro
 }
 
 void VGA::PlotPixel(uint64_t x, uint64_t y, Colour colour) {
-    WriteToFrameBuffer(m_framebuffer, x, y, colour);
+    WriteToFrameBuffer(m_backBuffer, x, y, colour);
 }
 
 void VGA::ClearScreen(Colour colour) {
-    ClearFrameBuffer(m_framebuffer, colour);
+    ClearFrameBuffer(m_backBuffer, colour);
 }
 
 void VGA::DrawRectangle(uint64_t x, uint64_t y, uint64_t width, uint64_t height, Colour colour) {
@@ -76,7 +78,7 @@ void VGA::DrawFilledRectangle(uint64_t x, uint64_t y, uint64_t width, uint64_t h
 }
 
 void VGA::SetFrameBuffer(FrameBuffer* framebuffer) {
-    m_framebuffer = framebuffer;
+    m_backBuffer = framebuffer;
 }
 
 void VGA::SetBackgroundColour(Colour& colour) {
@@ -88,7 +90,7 @@ void VGA::SetForegroundColour(Colour& colour) {
 }
 
 FrameBuffer* VGA::GetFrameBuffer() const {
-    return m_framebuffer;
+    return m_backBuffer;
 }
 
 Colour VGA::GetBackgroundColour() const {
@@ -123,7 +125,7 @@ void VGA::PrintChar(char c) {
         m_cursorY = 0;
         break;
     default:
-        WriteCharToFrameBuffer(m_framebuffer, m_cursorX, m_cursorY, m_foregroundColour, m_backgroundColour, c);
+        WriteCharToFrameBuffer(m_backBuffer, m_cursorX, m_cursorY, m_foregroundColour, m_backgroundColour, c);
         m_cursorX += CHAR_WIDTH;
 
         if (m_cursorX >= (m_numberOfColumns * CHAR_WIDTH))
@@ -160,8 +162,8 @@ void VGA::NewLine() {
 }
 
 void VGA::Scroll(uint64_t n) {
-    memcpy(m_framebuffer->BaseAddress, (void*)((uint64_t)m_framebuffer->BaseAddress + n * m_framebuffer->pitch * CHAR_HEIGHT), m_framebuffer->pitch * (m_framebuffer->height - n * CHAR_HEIGHT));
-    DrawFilledRectangle(0, m_framebuffer->height - n * CHAR_HEIGHT, m_framebuffer->width, n * CHAR_HEIGHT, m_backgroundColour);
+    memcpy(m_backBuffer->BaseAddress, (void*)((uint64_t)m_backBuffer->BaseAddress + n * m_backBuffer->pitch * CHAR_HEIGHT), m_backBuffer->pitch * (m_backBuffer->height - n * CHAR_HEIGHT));
+    DrawFilledRectangle(0, m_backBuffer->height - n * CHAR_HEIGHT, m_backBuffer->width, n * CHAR_HEIGHT, m_backgroundColour);
     m_cursorY -= n * CHAR_HEIGHT;
 }
 
@@ -181,4 +183,24 @@ uint64_t VGA::GetNumberOfRows() {
 
 uint64_t VGA::GetNumberOfColumns() {
     return m_numberOfColumns;
+}
+
+void VGA::EnableDoubleBuffering(FrameBuffer* buffer) {
+    m_backBuffer = buffer;
+    memcpy(m_backBuffer, m_frontBuffer, sizeof(FrameBuffer));
+    m_doubleBufferingEnabled = true;
+}
+
+void VGA::DisableDoubleBuffering() {
+    m_doubleBufferingEnabled = false;
+    m_backBuffer = m_frontBuffer;
+}
+
+bool VGA::IsDoubleBufferingEnabled() {
+    return m_doubleBufferingEnabled;
+}
+
+void VGA::SwapBuffers() {
+    if (m_doubleBufferingEnabled)
+        memcpy(m_frontBuffer->BaseAddress, m_backBuffer->BaseAddress, m_frontBuffer->pitch * m_frontBuffer->height);
 }

@@ -31,12 +31,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifdef __cplusplus
     }
 #endif
-
-    #if defined __cplusplus
-        #define assert(expr) (static_cast<bool>(expr)	? void (0) : __assert_fail (#expr, __FILE__, __LINE__, __ASSERT_FUNCTION))
-    #else
-        #define assert(expr)((void) sizeof ((expr) ? 1 : 0), __extension__ ({ if (expr); else __assert_fail (#expr, __FILE__, __LINE__, __ASSERT_FUNCTION); }))
-    #endif
+    #define assert(expr) do { if (!(expr)) __assert_fail(#expr, __FILE__, __LINE__, __ASSERT_FUNCTION); } while (0)
 #endif
 
 #endif /* _ASSERT_H */
