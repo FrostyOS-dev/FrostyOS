@@ -15,10 +15,13 @@
 
 if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
     set(kernel_sources
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/APIC/IPI.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/APIC/LAPIC.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IDT.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IDT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/PIC.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PageTables.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PageTables.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PagingInit.cpp
@@ -35,6 +38,7 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/MSR.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Panic.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Panic.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Processor.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Stack.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/start.asm
     )
@@ -54,6 +58,10 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Framebuffer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGA.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGAFont.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/Init.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/MADT.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/SDT.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/XSDT.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/HAL.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PageFault.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PagingUtil.cpp

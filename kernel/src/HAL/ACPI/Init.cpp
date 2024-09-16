@@ -15,25 +15,33 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "ACPI/Init.hpp"
+#include "Init.hpp"
+#include "XSDT.hpp"
+#include "MADT.hpp"
 
-#ifdef __x86_64__
-#include <arch/x86_64/GDT.hpp>
-#include <arch/x86_64/Processor.hpp>
+#include <assert.h>
 
-#include <arch/x86_64/interrupts/IDT.hpp>
-#include <arch/x86_64/interrupts/PIC.hpp>
+#include <Memory/PagingUtil.hpp>
 
-#include <arch/x86_64/Memory/PagingInit.hpp>
+namespace ACPI {
 
-Processor BSP(true);
+    XSDT* g_xsdt = nullptr;
 
-void HAL_EarlyInit(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, void* fb_base, uint64_t fb_size, uint64_t kernel_virtual, uint64_t kernel_physical, void* RSDP) {
-    g_BSP = &BSP;
-    g_BSP->Init(nullptr);
-    x86_64_InitPaging(memoryMap, memoryMapEntryCount, fb_base, fb_size, kernel_virtual, kernel_physical);
+    void EarlyInit(void* rsdp) {
+        XSDP* xsdp = (XSDP*)rsdp;
 
-    ACPI::EarlyInit(RSDP);
+        assert(ValidateXSDP(xsdp));
+
+        XSDT* xsdt = (XSDT*)to_HHDM((void*)(xsdp->XSDTAddress));
+
+        assert(ValidateSDT(&xsdt->Header));
+
+        g_xsdt = xsdt;
+
+        MADT* madt = (MADT*)GetSDT("APIC", g_xsdt);
+        assert(ValidateSDT(&madt->Header));
+
+        InitMADT(madt);
+    }
+
 }
-
-#endif

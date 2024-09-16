@@ -15,25 +15,13 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "ACPI/Init.hpp"
+#ifndef _ACPI_INIT_HPP
+#define _ACPI_INIT_HPP
 
-#ifdef __x86_64__
-#include <arch/x86_64/GDT.hpp>
-#include <arch/x86_64/Processor.hpp>
+namespace ACPI {
 
-#include <arch/x86_64/interrupts/IDT.hpp>
-#include <arch/x86_64/interrupts/PIC.hpp>
+    void EarlyInit(void* rsdp);
 
-#include <arch/x86_64/Memory/PagingInit.hpp>
-
-Processor BSP(true);
-
-void HAL_EarlyInit(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, void* fb_base, uint64_t fb_size, uint64_t kernel_virtual, uint64_t kernel_physical, void* RSDP) {
-    g_BSP = &BSP;
-    g_BSP->Init(nullptr);
-    x86_64_InitPaging(memoryMap, memoryMapEntryCount, fb_base, fb_size, kernel_virtual, kernel_physical);
-
-    ACPI::EarlyInit(RSDP);
 }
 
-#endif
+#endif /* _ACPI_INIT_HPP */

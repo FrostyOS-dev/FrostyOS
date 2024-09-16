@@ -15,25 +15,19 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "ACPI/Init.hpp"
+#include "SDT.hpp"
 
-#ifdef __x86_64__
-#include <arch/x86_64/GDT.hpp>
-#include <arch/x86_64/Processor.hpp>
+#include <stdint.h>
+#include <stddef.h>
 
-#include <arch/x86_64/interrupts/IDT.hpp>
-#include <arch/x86_64/interrupts/PIC.hpp>
+namespace ACPI {
 
-#include <arch/x86_64/Memory/PagingInit.hpp>
+    bool ValidateSDT(SDTHeader* sdt) {
+        uint8_t Checksum = 0;
+        for (size_t i = 0; i < sdt->Length; i++)
+            Checksum += ((uint8_t*)sdt)[i];
+        
+        return (Checksum & 0xFF) == 0;
+    }
 
-Processor BSP(true);
-
-void HAL_EarlyInit(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, void* fb_base, uint64_t fb_size, uint64_t kernel_virtual, uint64_t kernel_physical, void* RSDP) {
-    g_BSP = &BSP;
-    g_BSP->Init(nullptr);
-    x86_64_InitPaging(memoryMap, memoryMapEntryCount, fb_base, fb_size, kernel_virtual, kernel_physical);
-
-    ACPI::EarlyInit(RSDP);
 }
-
-#endif

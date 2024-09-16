@@ -75,7 +75,7 @@ void StartKernel() {
 
     SetHHDMOffset(g_kernelParams.HHDMStart);
     
-    HAL_EarlyInit(g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.framebuffer.BaseAddress, g_kernelParams.framebuffer.pitch * g_kernelParams.framebuffer.height, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical);
+    HAL_EarlyInit(g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.framebuffer.BaseAddress, g_kernelParams.framebuffer.pitch * g_kernelParams.framebuffer.height, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical, g_kernelParams.RSDP);
     
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");

@@ -19,6 +19,7 @@ global x86_64_outb
 global x86_64_inb
 global x86_64_outw
 global x86_64_inw
+global x86_64_IOWait
 
 x86_64_outb:
     mov dx, di
@@ -40,4 +41,9 @@ x86_64_outw:
 x86_64_inw:
     mov dx, di
     in ax, dx
+    ret
+
+x86_64_IOWait:
+    mov dx, 0x80
+    out dx, al
     ret

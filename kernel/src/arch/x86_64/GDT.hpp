@@ -66,8 +66,6 @@ struct GDTSystemDescriptor {
     uint32_t reserved;
 } __attribute__((packed));
 
-extern GDTSegmentDescriptor g_GDT[5]; // reserved, code, data, user code, user data
-
 void x86_64_GDTInit(GDTSegmentDescriptor* gdt);
 
 extern "C" void x86_64_LoadGDT(GDTR* gdtr);

@@ -15,25 +15,30 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "ACPI/Init.hpp"
+#ifndef _x86_64_PROCESSOR_HPP
+#define _x86_64_PROCESSOR_HPP
 
-#ifdef __x86_64__
-#include <arch/x86_64/GDT.hpp>
-#include <arch/x86_64/Processor.hpp>
+#include <stdint.h>
 
-#include <arch/x86_64/interrupts/IDT.hpp>
-#include <arch/x86_64/interrupts/PIC.hpp>
+#include "GDT.hpp"
 
-#include <arch/x86_64/Memory/PagingInit.hpp>
+#include "interrupts/APIC/LAPIC.hpp"
 
-Processor BSP(true);
+class Processor {
+public:
+    Processor(bool BSP);
+    ~Processor();
 
-void HAL_EarlyInit(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, void* fb_base, uint64_t fb_size, uint64_t kernel_virtual, uint64_t kernel_physical, void* RSDP) {
-    g_BSP = &BSP;
-    g_BSP->Init(nullptr);
-    x86_64_InitPaging(memoryMap, memoryMapEntryCount, fb_base, fb_size, kernel_virtual, kernel_physical);
+    void Init(x86_64_LAPIC* LAPIC = nullptr);
 
-    ACPI::EarlyInit(RSDP);
-}
+    void InitLAPIC(x86_64_LAPIC* LAPIC);
 
-#endif
+private:
+    bool m_BSP;
+    x86_64_LAPIC* m_LAPIC;
+    GDTSegmentDescriptor m_GDT[5];
+};
+
+extern Processor* g_BSP;
+
+#endif /* _x86_64_PROCESSOR_HPP */

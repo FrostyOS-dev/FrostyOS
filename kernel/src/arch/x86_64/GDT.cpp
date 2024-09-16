@@ -19,8 +19,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <string.h>
 
-GDTSegmentDescriptor __attribute__((aligned(0x1000))) g_GDT[5]; // reserved, code, data, user code, user data
-
 void x86_64_GDTInit(GDTSegmentDescriptor* gdt) {
     memset(gdt, 0, sizeof(GDTSegmentDescriptor) * 5);
 
