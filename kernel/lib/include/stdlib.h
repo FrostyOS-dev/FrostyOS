@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2022-2023  Frosty515
+Copyright (©) 2022-2024  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -43,14 +43,15 @@ long atol(const char* str);
 long strtol(const char* str);
 unsigned long strtoul(const char* str);
 
-
-/* Implemented in Memory/kmalloc.cpp */
 void* kcalloc(size_t num, size_t size);
 void kfree(void* ptr);
 void* kmalloc(size_t size);
 void* krealloc(void* ptr, size_t size);
-void* kcalloc_eternal(size_t num, size_t size);
-void* kmalloc_eternal(size_t size);
+
+void* kcalloc_vmm(size_t num, size_t size);
+void kfree_vmm(void* ptr);
+void* kmalloc_vmm(size_t size);
+void* krealloc_vmm(void* ptr, size_t size);
 
 unsigned int rand();
 void srand(unsigned int);

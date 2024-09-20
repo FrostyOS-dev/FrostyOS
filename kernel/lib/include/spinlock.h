@@ -18,14 +18,17 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _SPINLOCK_H
 #define _SPINLOCK_H
 
+#define SPINLOCK_DEFAULT_VALUE 0
+#define SPINLOCK_LOCKED_VALUE 1
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef unsigned long spinlock_t;
 
-#define spinlock_init(lock) (*(lock) = 0)
-#define spinlock_new(name) spinlock_t name = 0
+#define spinlock_init(lock) (*(lock) = SPINLOCK_DEFAULT_VALUE)
+#define spinlock_new(name) spinlock_t name = SPINLOCK_DEFAULT_VALUE
 
 void spinlock_acquire(spinlock_t* lock);
 void spinlock_release(spinlock_t* lock);

@@ -63,6 +63,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/SDT.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/XSDT.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/HAL.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/Heap.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PageFault.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PagingUtil.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PMM.cpp

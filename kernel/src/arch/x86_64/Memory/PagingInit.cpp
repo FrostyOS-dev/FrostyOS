@@ -26,6 +26,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <string.h>
 #include <util.h>
 
+#include <Memory/Heap.hpp>
 #include <Memory/MemoryMap.hpp>
 #include <Memory/PagingUtil.hpp>
 #include <Memory/PMM.hpp>
@@ -102,6 +103,8 @@ void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount,
     uint64_t phys_addr = x86_64_GetPhysicalAddress(g_Level4Table, (uint64_t)g_Level4Table);
     cr3.PML4 = phys_addr >> 12;
     x86_64_LoadCR3(cr3);
+
+    InitVMMHeap();
 }
 
 bool x86_64_is2MiBPagesSupported() {
