@@ -30,10 +30,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Memory/MemoryMap.hpp>
 #include <Memory/PagingUtil.hpp>
 #include <Memory/PMM.hpp>
+#include <Memory/VirtualMemoryAllocator.hpp>
 
 #include <HAL/HAL.hpp>
 
 PMM KPMM;
+
+VirtualMemoryAllocator GlobalVMA; // Global VMA for all of addressable memory
+VirtualMemoryAllocator KVMA; // Kernel VMA for general purpose kernel memory
+VirtualMemoryAllocator KExecVMA; // Kernel VMA for binary (or executable) loading kernel memory
 
 [[gnu::aligned(0x1000)]] x86_64_Level4Table KLevel4Table;
 
@@ -96,6 +101,8 @@ void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount,
         x86_64_MapRegionWithLargestPages(g_Level4Table, to_HHDM(base), base, length, 0x0800'0003); // Present, Read/Write, No Execute
     }
 
+    assert(kernel_virtual == 0xFFFFFFFF80000000UL);
+
     MapKernel(kernel_virtual, kernel_physical);
 
     x86_64_CR3 cr3;
@@ -105,6 +112,23 @@ void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount,
     x86_64_LoadCR3(cr3);
 
     InitVMMHeap();
+
+    GlobalVMA.AddRegion(nullptr, (1UL << (64 - PAGE_SIZE_SHIFT)));
+    GlobalVMA.ReservePages(nullptr, 1); // first page
+    GlobalVMA.ReservePages((void*)PAGE_SIZE, (1UL << (48 - PAGE_SIZE_SHIFT)) - 1); // user memory
+    GlobalVMA.ReservePages((void*)(1UL << 48), (0xFFFF8UL << (44 - PAGE_SIZE_SHIFT))); // non-canonical addresses
+    GlobalVMA.ReservePages((void*)(0xFFFF8UL << 44), (1UL << (46 - PAGE_SIZE_SHIFT))); // HHDM
+    GlobalVMA.ReservePages((void*)(0xFFFFCUL << 44), (0xFFFFFUL << (44 - PAGE_SIZE_SHIFT))); // general purpose kernel memory
+    GlobalVMA.ReservePages((void*)0xFFFFFFFF80000000UL, (1UL << (31 - PAGE_SIZE_SHIFT))); // binary (or executable) loading kernel memory
+
+    KVMA.AddRegion((void*)(0xFFFFCUL << 44), (0xFFFFFUL << (44 - PAGE_SIZE_SHIFT)));
+
+    KExecVMA.AddRegion((void*)0xFFFFFFFF80000000UL, (1UL << (31 - PAGE_SIZE_SHIFT)));
+    KExecVMA.ReservePages((void*)0xFFFFFFFF80000000UL, DIV_ROUNDUP((uint64_t)_kernel_end_addr - 0xFFFFFFFF80000000UL, PAGE_SIZE)); // kernel code and data
+
+    g_GlobalVMA = &GlobalVMA;
+    g_KVMA = &KVMA;
+    g_KExecVMA = &KExecVMA;
 }
 
 bool x86_64_is2MiBPagesSupported() {

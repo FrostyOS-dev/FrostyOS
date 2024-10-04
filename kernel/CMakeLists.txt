@@ -53,7 +53,9 @@ endif()
 
 set(kernel_sources
     ${kernel_sources}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Data-structures/AVLTree.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Data-structures/Bitmap.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Data-structures/LinkedList.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Colour.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Framebuffer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGA.cpp
@@ -67,6 +69,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PageFault.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PagingUtil.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PMM.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/VirtualMemoryAllocator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sanitiser/sanitiser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sanitiser/ubsan.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/DebugBackend.cpp
@@ -83,6 +86,7 @@ set(kernel_lib_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/assert.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/icxxabi.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/math.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/new.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/stack_protector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/stdio.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/stdlib.c

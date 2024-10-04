@@ -17,17 +17,26 @@
 
 global spinlock_acquire
 spinlock_acquire:
+    push rbp
+    mov rbp, rsp
+.check:
     lock bts QWORD [rdi], 0
     jc .spin_with_pause
+    mov rsp, rbp
+    pop rbp
     ret
 
 .spin_with_pause:
     pause
     test QWORD [rdi], 1
     jnz .spin_with_pause
-    jmp spinlock_acquire
+    jmp .check
 
 global spinlock_release
 spinlock_release:
+    push rbp
+    mov rbp, rsp
     mov QWORD [rdi], 0
+    mov rsp, rbp
+    pop rbp
     ret

@@ -53,6 +53,9 @@ void kfree_vmm(void* ptr);
 void* kmalloc_vmm(size_t size);
 void* krealloc_vmm(void* ptr, size_t size);
 
+void* kcalloc_eternal(size_t num, size_t size);
+void* kmalloc_eternal(size_t size);
+
 unsigned int rand();
 void srand(unsigned int);
 

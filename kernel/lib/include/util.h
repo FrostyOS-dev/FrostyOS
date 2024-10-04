@@ -69,8 +69,13 @@ extern "C" {
 #define ALIGN_ADDRESS_UP(ADDR, ALIGN) (void*)((((unsigned long)ADDR + (ALIGN - 1)) / ALIGN) * ALIGN)
 
 #define PAGE_SIZE 4096
+#define PAGE_SIZE_SHIFT 12
+
 #define LARGE_PAGE_SIZE 2097152
+#define LARGE_PAGE_SIZE_SHIFT 21
+
 #define HUGE_PAGE_SIZE 1073741824
+#define HUGE_PAGE_SIZE_SHIFT 30
 
 #define IN_BOUNDS(VALUE, LOW, HIGH) (LOW <= VALUE && VALUE <= HIGH)
 

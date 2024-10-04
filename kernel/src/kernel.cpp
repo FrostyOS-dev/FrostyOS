@@ -19,6 +19,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stddef.h>
 #include <stdio.h>
+#include <stdint.h>
+#include <util.h>
 
 #include <Graphics/VGA.hpp>
 
@@ -37,6 +39,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifdef __x86_64__
 #include <arch/x86_64/KernelSymbols.hpp>
 #endif
+
+#include <Memory/VirtualMemoryAllocator.hpp>
 
 KernelParams g_kernelParams;
 
@@ -80,7 +84,8 @@ void StartKernel() {
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");
 
-    while (true) {
 
+    while (true) {
+        __asm__ volatile("hlt");
     }
 }

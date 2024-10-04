@@ -115,6 +115,7 @@ void* Heap::allocate(size_t size) {
                         chunk->firstBlock = newBlock;
                         block->isEndOfChunk = false;
                         block->isLastBlock = false;
+                        block->size -= sizeof(BlockHeader);
                         spinlock_acquire(&m_lock);
                         m_freeMem -= sizeof(BlockHeader);
                         m_metadataMem += sizeof(BlockHeader);
@@ -366,7 +367,11 @@ void Heap::RemoveEmptyChunks() {
                 }
                 spinlock_release(&chunk->lock);
                 size_t size = chunk->size + sizeof(ChunkHeader);
-                memset(chunk, 0xDD, size);
+                spinlock_acquire(&m_lock);
+                m_totalMem -= chunk->size + sizeof(ChunkHeader);
+                m_metadataMem -= sizeof(ChunkHeader) + sizeof(BlockHeader);
+                m_freeMem -= chunk->size - sizeof(BlockHeader);
+                spinlock_release(&m_lock);
                 m_deallocator(chunk, size);
                 chunk = prevBlock->next.nextChunk;
                 spinlock_release(&prevChunk->lock);
@@ -375,12 +380,11 @@ void Heap::RemoveEmptyChunks() {
                 m_firstChunk = block->next.nextChunk;
                 spinlock_release(&chunk->lock);
                 size_t size = chunk->size + sizeof(ChunkHeader);
-                memset(chunk, 0xDD, size);
-                m_deallocator(chunk, size);
                 spinlock_acquire(&m_lock);
-                m_totalMem -= chunk->size + sizeof(ChunkHeader);
+                m_totalMem -= size;
                 m_metadataMem -= sizeof(ChunkHeader) + sizeof(BlockHeader);
                 m_freeMem -= chunk->size - sizeof(BlockHeader);
+                m_deallocator(chunk, size);
                 chunk = m_firstChunk;
                 spinlock_release(&m_lock);
             }
@@ -420,9 +424,14 @@ void Heap::Verify() {
     while (chunk != nullptr) {
         assert ((chunk->size & (1UL << 63)) == 0);
         BlockHeader* block = chunk->firstBlock;
-        assert(block != nullptr);
+        BlockHeader* prev = nullptr;
+        assert(block != nullptr && (uint64_t)block < (1UL << 48));
         while (block != nullptr) {
             assert(block >= (BlockHeader*)((uint64_t)chunk + sizeof(ChunkHeader)));
+            if (prev != nullptr) {
+                assert(((uint64_t)prev + sizeof(BlockHeader) + prev->size) <= (uint64_t)block);
+                assert(prev->next.nextBlock == block);
+            }
             assert(((uint64_t)block + block->size + sizeof(BlockHeader)) <= ((uint64_t)chunk + chunk->size + sizeof(ChunkHeader)));
             if (block->isLastBlock)
                 break;
@@ -432,6 +441,7 @@ void Heap::Verify() {
             if (block->isStartOfChunk) {
                 assert((((uint64_t)block - sizeof(ChunkHeader)) % PAGE_SIZE) == 0);
             }
+            prev = block;
             block = block->next.nextBlock;
         }
         chunk = block->next.nextChunk;
@@ -483,4 +493,49 @@ extern "C" void* kcalloc_vmm(size_t nmemb, size_t size) {
         return nullptr;
     memset(ptr, 0, nmemb * size);
     return ptr;
+}
+
+Heap g_kernelHeap;
+
+void* ExpandKernelHeap(size_t size) {
+    return nullptr;
+}
+
+void ShrinkKernelHeap(void* ptr, size_t size) {
+    return;
+}
+
+void InitKernelHeap() {
+    g_kernelHeap.SetAllocator(ExpandKernelHeap, ShrinkKernelHeap);
+}
+
+extern "C" void* kmalloc(size_t size) {
+    return g_kernelHeap.allocate(size);
+}
+
+extern "C" void kfree(void* ptr) {
+    g_kernelHeap.free(ptr);
+}
+
+extern "C" void* krealloc(void *ptr, size_t size) {
+    return g_kernelHeap.reallocate(ptr, size);
+}
+
+extern "C" void* kcalloc(size_t nmemb, size_t size) {
+    void* ptr = kmalloc(nmemb * size);
+    if (ptr == nullptr)
+        return nullptr;
+    memset(ptr, 0, nmemb * size);
+    return ptr;
+}
+
+
+// TODO: implement eternal heap
+
+extern "C" void* kmalloc_eternal(size_t size) {
+    return nullptr;
+}
+
+extern "C" void* kcalloc_eternal(size_t nmemb, size_t size) {
+    return kcalloc_vmm(nmemb, size); // TEMP
 }
