@@ -199,7 +199,7 @@ void x86_64_UnmapPage(x86_64_Level4Table* Table, uint64_t VirtualAddress) {
             return;
     }
 
-    g_PMM->FreePage((void*)PML1Table);
+    g_PMM->FreePage(HHDM_to_phys((void*)PML1Table));
     memset(&(PML2Table->entries[PML2Index]), 0, sizeof(x86_64_PML2Entry));
 
     for (uint64_t i = 0; i < 512; i++) {
@@ -207,7 +207,7 @@ void x86_64_UnmapPage(x86_64_Level4Table* Table, uint64_t VirtualAddress) {
             return;
     }
 
-    g_PMM->FreePage((void*)PML2Table);
+    g_PMM->FreePage(HHDM_to_phys((void*)PML2Table));
     memset(&(PML3Table->entries[PML3Index]), 0, sizeof(x86_64_PML3Entry));
 
     for (uint64_t i = 0; i < 512; i++) {
@@ -215,7 +215,7 @@ void x86_64_UnmapPage(x86_64_Level4Table* Table, uint64_t VirtualAddress) {
             return;
     }
 
-    g_PMM->FreePage((void*)PML3Table);
+    g_PMM->FreePage(HHDM_to_phys((void*)PML3Table));
     memset(&(Table->entries[PML4Index]), 0, sizeof(x86_64_PML4Entry));
 }
 
@@ -330,7 +330,7 @@ void x86_64_Unmap2MiBPage(x86_64_Level4Table* Table, uint64_t VirtualAddress) {
             return;
     }
 
-    g_PMM->FreePage((void*)PML2Table);
+    g_PMM->FreePage(HHDM_to_phys((void*)PML2Table));
     memset(&(PML3Table->entries[PML3Index]), 0, sizeof(x86_64_PML3Entry));
 
     for (uint64_t i = 0; i < 512; i++) {
@@ -338,7 +338,7 @@ void x86_64_Unmap2MiBPage(x86_64_Level4Table* Table, uint64_t VirtualAddress) {
             return;
     }
 
-    g_PMM->FreePage((void*)PML3Table);
+    g_PMM->FreePage(HHDM_to_phys((void*)PML3Table));
     memset(&(Table->entries[PML4Index]), 0, sizeof(x86_64_PML4Entry));
 }
 
@@ -405,6 +405,6 @@ void x86_64_Unmap1GiBPage(x86_64_Level4Table* Table, uint64_t VirtualAddress) {
             return;
     }
 
-    g_PMM->FreePage((void*)PML3Table);
+    g_PMM->FreePage(HHDM_to_phys((void*)PML3Table));
     memset(&(Table->entries[PML4Index]), 0, sizeof(x86_64_PML4Entry));
 }

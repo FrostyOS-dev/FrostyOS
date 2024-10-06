@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "PagingInit.hpp"
+#include "PageTable.hpp"
 #include "PageTables.hpp"
 #include "PagingUtil.hpp"
 #include "PAT.hpp"
@@ -28,6 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Memory/Heap.hpp>
 #include <Memory/MemoryMap.hpp>
+#include <Memory/PageTable.hpp>
 #include <Memory/PagingUtil.hpp>
 #include <Memory/PMM.hpp>
 #include <Memory/VirtualMemoryAllocator.hpp>
@@ -39,6 +41,8 @@ PMM KPMM;
 VirtualMemoryAllocator GlobalVMA; // Global VMA for all of addressable memory
 VirtualMemoryAllocator KVMA; // Kernel VMA for general purpose kernel memory
 VirtualMemoryAllocator KExecVMA; // Kernel VMA for binary (or executable) loading kernel memory
+
+x86_64_PageTable KPageTable(nullptr);
 
 [[gnu::aligned(0x1000)]] x86_64_Level4Table KLevel4Table;
 
@@ -129,6 +133,10 @@ void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount,
     g_GlobalVMA = &GlobalVMA;
     g_KVMA = &KVMA;
     g_KExecVMA = &KExecVMA;
+
+    KPageTable.SetTable(g_Level4Table);
+
+    g_KPageTable = &KPageTable;
 }
 
 bool x86_64_is2MiBPagesSupported() {

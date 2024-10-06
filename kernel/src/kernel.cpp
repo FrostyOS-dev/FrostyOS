@@ -24,8 +24,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Graphics/VGA.hpp>
 
+#include <Memory/PageManager.hpp>
+#include <Memory/PageTable.hpp>
 #include <Memory/PagingUtil.hpp>
 #include <Memory/PMM.hpp>
+#include <Memory/VirtualMemoryAllocator.hpp>
 
 #include <tty/backends/DebugBackend.hpp>
 #include <tty/backends/VGABackend.hpp>
@@ -40,7 +43,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <arch/x86_64/KernelSymbols.hpp>
 #endif
 
-#include <Memory/VirtualMemoryAllocator.hpp>
 
 KernelParams g_kernelParams;
 
@@ -52,6 +54,8 @@ TTYBackendDebug g_KDebugBackend;
 TTYBackendVGA g_KVGABackend;
 
 TTY g_KTTY;
+
+PageManager KPM;
 
 void StartKernel() {
     {
@@ -81,6 +85,9 @@ void StartKernel() {
     
     HAL_EarlyInit(g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.framebuffer.BaseAddress, g_kernelParams.framebuffer.pitch * g_kernelParams.framebuffer.height, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical, g_kernelParams.RSDP);
     
+    KPM.Initialise(g_KPageTable, g_KVMA, false);
+    g_KPM = &KPM;
+
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");
 

@@ -15,12 +15,14 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "PMM.hpp"
 #include "MemoryMap.hpp"
+#include "OOM.hpp"
 #include "PagingUtil.hpp"
+#include "PMM.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <spinlock.h>
 #include <util.h>
 
@@ -115,7 +117,8 @@ void* PMM::AllocatePage() {
         current = current->next;
     }
     spinlock_release(&m_Lock);
-    return nullptr;
+    HandleOOM(PAGE_SIZE);
+    return AllocatePage(); // try again
 }
 
 void PMM::FreePage(void* page) {
@@ -191,7 +194,8 @@ void* PMM::AllocatePages(uint64_t pageCount) {
         current = current->next;
     }
     spinlock_release(&m_Lock);
-    return nullptr;
+    HandleOOM(PAGE_SIZE * pageCount);
+    return AllocatePages(pageCount); // try again
 }
 
 void PMM::FreePages(void* pages, uint64_t pageCount) {
