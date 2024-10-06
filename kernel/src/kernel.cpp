@@ -24,6 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Graphics/VGA.hpp>
 
+#include <Memory/Heap.hpp>
 #include <Memory/PageManager.hpp>
 #include <Memory/PageTable.hpp>
 #include <Memory/PagingUtil.hpp>
@@ -87,6 +88,9 @@ void StartKernel() {
     
     KPM.Initialise(g_KPageTable, g_KVMA, false);
     g_KPM = &KPM;
+
+    InitKernelHeap();
+    InitEternalHeap();
 
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");

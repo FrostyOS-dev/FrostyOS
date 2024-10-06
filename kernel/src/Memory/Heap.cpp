@@ -16,12 +16,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "Heap.hpp"
-#include "PMM.hpp"
+#include "PageManager.hpp"
 #include "PagingUtil.hpp"
+#include "PMM.hpp"
 
 #include <assert.h>
-#include <stdlib.h>
+#include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <spinlock.h>
 #include <math.h>
 #include <util.h>
@@ -498,11 +500,12 @@ extern "C" void* kcalloc_vmm(size_t nmemb, size_t size) {
 Heap g_kernelHeap;
 
 void* ExpandKernelHeap(size_t size) {
-    return nullptr;
+    return g_KPM->AllocatePages(DIV_ROUNDUP(size, PAGE_SIZE));
 }
 
 void ShrinkKernelHeap(void* ptr, size_t size) {
-    return;
+    (void)size;
+    g_KPM->FreePages(ptr, DIV_ROUNDUP(size, PAGE_SIZE));
 }
 
 void InitKernelHeap() {
@@ -532,10 +535,32 @@ extern "C" void* kcalloc(size_t nmemb, size_t size) {
 
 // TODO: implement eternal heap
 
+size_t g_eternalHeapSize = 0;
+size_t g_eternalHeapUsed = 0;
+void* g_eternalHeap = nullptr;
+spinlock_new(g_eternalHeapLock);
+
+void InitEternalHeap() {
+    g_eternalHeapSize = 0;
+    g_eternalHeapUsed = 0;
+    g_eternalHeap = g_KPM->AllocatePages(MiB(2) / PAGE_SIZE);
+    spinlock_init(&g_eternalHeapLock);
+}
+
 extern "C" void* kmalloc_eternal(size_t size) {
-    return nullptr;
+    size = ALIGN_UP(size, 16);
+    spinlock_acquire(&g_eternalHeapLock);
+    void* addr = g_eternalHeap;
+    g_eternalHeap = (void*)((uint64_t)g_eternalHeap + size);
+    g_eternalHeapUsed += size;
+    spinlock_release(&g_eternalHeapLock);
+    return addr;
 }
 
 extern "C" void* kcalloc_eternal(size_t nmemb, size_t size) {
-    return kcalloc_vmm(nmemb, size); // TEMP
+    void* ptr = kmalloc_eternal(nmemb * size);
+    if (ptr == nullptr)
+        return nullptr;
+    memset(ptr, 0, nmemb * size);
+    return ptr;
 }

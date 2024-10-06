@@ -80,5 +80,7 @@ private:
 
 
 void InitVMMHeap();
+void InitKernelHeap();
+void InitEternalHeap();
 
 #endif /* _HEAP_HPP */
