@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "kernel.hpp"
+#include "KernelSymbols.hpp"
 
 #include <stddef.h>
 #include <stdio.h>
@@ -58,6 +59,8 @@ TTY g_KTTY;
 
 PageManager KPM;
 
+SymbolTable KSymTable;
+
 void StartKernel() {
     {
         typedef void (*ctor_fn)();
@@ -92,9 +95,11 @@ void StartKernel() {
     InitKernelHeap();
     InitEternalHeap();
 
+    KSymTable.FillFromRawStringData((const char*)g_kernelParams.symbolTable, g_kernelParams.symbolTableSize);
+    g_KSymTable = &KSymTable;
+
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");
-
 
     while (true) {
         __asm__ volatile("hlt");

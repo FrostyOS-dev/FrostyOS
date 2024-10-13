@@ -18,8 +18,8 @@
 # Exit on error
 set -e
 
-# build the host system utils
-# ./build-scripts/build_utils.sh
+# build the host system tools
+./build-scripts/build_tools.sh
 
 # We have to check if the toolchain is up to date before building the OS
 # First we check if the $TOOLCHAIN_PREFIX is set, if not set it to toolchain/local

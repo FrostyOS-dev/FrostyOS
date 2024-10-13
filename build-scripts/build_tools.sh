@@ -23,7 +23,7 @@ if [ -z "$FROSTYOS_BUILD_CONFIG" ]; then
     FROSTYOS_BUILD_CONFIG=Debug
 fi
 
-cd utils
+cd tools
 
 # Check if build directory exists
 if [ -d "build" ]; then

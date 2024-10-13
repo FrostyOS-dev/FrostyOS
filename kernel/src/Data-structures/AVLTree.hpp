@@ -107,6 +107,16 @@ namespace AVLTree {
 			return (D)node->extraData;
 		}
 
+		D findOrLower(K key, K* actual_key = nullptr) const {
+			uint64_t actualKey;
+			Node* node = findNodeOrLower(m_root, (uint64_t)key, &actualKey);
+			if (node == nullptr)
+				return (D)0;
+			if (actual_key != nullptr)
+				*actual_key = (K)actualKey;
+			return (D)node->extraData;
+		}
+
 		void clear() {
 			while (m_root != nullptr)
 				deleteNode(m_root, m_root->key, m_vmm);
@@ -150,6 +160,10 @@ namespace AVLTree {
 
 		D findOrHigher(K key, K* actual_key = nullptr) const {
 			return m_list.findOrHigher(key, actual_key);
+		}
+
+		D findOrLower(K key, K* actual_key = nullptr) const {
+			return m_list.findOrLower(key, actual_key);
 		}
 
 		void clear() {

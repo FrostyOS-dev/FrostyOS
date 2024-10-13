@@ -66,6 +66,14 @@ static volatile struct limine_kernel_address_request kernel_address_request = {
     .response = nullptr
 };
 
+static volatile struct limine_module_request module_request = {
+    .id = LIMINE_MODULE_REQUEST,
+    .revision = 0,
+    .response = nullptr,
+    .internal_module_count = 0,
+    .internal_modules = nullptr
+};
+
 void limine_request_fail(const char* request_name) {
     debug_puts("limine_request_fail: ");
     debug_puts(request_name);
@@ -84,6 +92,8 @@ void _start() {
         limine_request_fail("rsdp_request");
     if (kernel_address_request.response == nullptr)
         limine_request_fail("kernel_address_request");
+    if (module_request.response == nullptr)
+        limine_request_fail("module_request");
 
 #ifdef __x86_64__
     if (paging_mode_request.response == nullptr)
@@ -92,6 +102,9 @@ void _start() {
 
     if (framebuffer_request.response->framebuffer_count == 0)
         limine_request_fail("framebuffer_count");
+
+    if (module_request.response->module_count != 1)
+        limine_request_fail("module_count");
 
     limine_framebuffer* fb = framebuffer_request.response->framebuffers[0];
 
@@ -114,6 +127,8 @@ void _start() {
     g_kernelParams.RSDP = rsdp_request.response->address;
     g_kernelParams.kernelPhysical = kernel_address_request.response->physical_base;
     g_kernelParams.kernelVirtual = kernel_address_request.response->virtual_base;
+    g_kernelParams.symbolTable = module_request.response->modules[0]->address;
+    g_kernelParams.symbolTableSize = module_request.response->modules[0]->size;
 
     StartKernel();
     while (true) {}

@@ -23,6 +23,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdio.h>
 
+#include <KernelSymbols.hpp>
+
 char const* g_x86_64_PanicReason;
 
 x86_64_Registers g_x86_64_PanicRegisters;
@@ -70,9 +72,29 @@ x86_64_Registers g_x86_64_PanicRegisters;
     dbgprintf("CR3=%016lx\n", regs->CR3);
 
     dbgprintf("Stack Trace:\n");
-    dbgprintf("%016lx\n", regs->RIP);
+    dbgprintf("%016lx", regs->RIP);
+    if (g_KSymTable != nullptr) {
+        void* base_address = nullptr;
+        const char* symbol = g_KSymTable->FindSymbol((void*)regs->RIP, &base_address);
+        if (symbol != nullptr)
+            dbgprintf(": %s+0x%lx\n", symbol, (uint64_t)regs->RIP - (uint64_t)base_address);
+        else
+            dbgputc('\n');
+    }
+    else
+        dbgputc('\n');
     x86_64_WalkStackFrames((x86_64_StackFrame*)regs->RBP, [](x86_64_StackFrame* frame) {
-        dbgprintf("%016lx\n", frame->RIP);
+        dbgprintf("%016lx", frame->RIP);
+        if (g_KSymTable != nullptr) {
+            void* base_address = nullptr;
+            const char* symbol = g_KSymTable->FindSymbol((void*)frame->RIP, &base_address);
+            if (symbol != nullptr)
+                dbgprintf(": %s+0x%lx\n", symbol, (uint64_t)frame->RIP - (uint64_t)base_address);
+            else
+                dbgputc('\n');
+        }
+        else
+            dbgputc('\n');
     });
 
 
@@ -100,9 +122,29 @@ x86_64_Registers g_x86_64_PanicRegisters;
     printf("CR3=%016lx\n", regs->CR3);
 
     printf("Stack Trace:\n");
-    printf("%016lx\n", regs->RIP);
+    printf("%016lx", regs->RIP);
+    if (g_KSymTable != nullptr) {
+        void* base_address = nullptr;
+        const char* symbol = g_KSymTable->FindSymbol((void*)regs->RIP, &base_address);
+        if (symbol != nullptr)
+            printf(": %s+0x%lx\n", symbol, (uint64_t)regs->RIP - (uint64_t)base_address);
+        else
+            putc('\n');
+    }
+    else
+        putc('\n');
     x86_64_WalkStackFrames((x86_64_StackFrame*)regs->RBP, [](x86_64_StackFrame* frame) {
-        printf("%016lx\n", frame->RIP);
+        printf("%016lx", frame->RIP);
+        if (g_KSymTable != nullptr) {
+            void* base_address = nullptr;
+            const char* symbol = g_KSymTable->FindSymbol((void*)frame->RIP, &base_address);
+            if (symbol != nullptr)
+                printf(": %s+0x%lx\n", symbol, (uint64_t)frame->RIP - (uint64_t)base_address);
+            else
+                putc('\n');
+        }
+        else
+            putc('\n');
     });
 
 

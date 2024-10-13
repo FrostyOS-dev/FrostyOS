@@ -32,6 +32,8 @@ struct KernelParams {
     void* RSDP;
     uint64_t kernelPhysical;
     uint64_t kernelVirtual;
+    void* symbolTable;
+    uint64_t symbolTableSize;
 };
 
 extern KernelParams g_kernelParams;

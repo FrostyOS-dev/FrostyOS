@@ -13,6 +13,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+find_program(SHELL sh)
+if(NOT SHELL)
+    message(FATAL_ERROR "sh not found")
+endif()
+
 if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
     set(kernel_sources
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/APIC/IPI.cpp
@@ -83,6 +88,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTYBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/debug.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/kernel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/KernelSymbols.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/limine_entry.cpp
 )
 
@@ -166,6 +172,7 @@ if (FROSTYOS_BUILD_TARGET STREQUAL "kernel")
 
     add_custom_target(install_kernel
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS
+        COMMAND ${CMAKE_SOURCE_DIR}/build-scripts/generate_symbol_map.sh ${CMAKE_NM} ${CMAKE_SOURCE_DIR} $<TARGET_FILE:kernel>
         COMMAND ${CMAKE_STRIP} --strip-debug $<TARGET_FILE:kernel> -o ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/kernel.elf
     )
 
