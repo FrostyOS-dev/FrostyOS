@@ -49,6 +49,8 @@ public:
 
     void RemapPages(void* virtualAddress, PagePermission permission = PagePermission::READ_WRITE, PageCache cache = PageCache::DEFAULT);
 
+    void PrintRegions();
+
 private:
     void Verify();
 

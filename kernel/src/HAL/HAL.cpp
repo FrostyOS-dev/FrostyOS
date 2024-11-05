@@ -33,7 +33,14 @@ void HAL_EarlyInit(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, voi
     g_BSP->Init(nullptr);
     x86_64_InitPaging(memoryMap, memoryMapEntryCount, fb_base, fb_size, kernel_virtual, kernel_physical);
 
-    ACPI::EarlyInit(RSDP);
+    // ACPI::EarlyInit(RSDP);
+}
+
+void HAL_Stage2() {
+    ACPI::BaseInit();
+    // do timer and IRQ stuff
+
+    ACPI::FullInit();
 }
 
 #endif

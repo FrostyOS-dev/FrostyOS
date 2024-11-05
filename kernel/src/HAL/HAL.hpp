@@ -29,4 +29,6 @@ typedef x86_64_Registers CPU_Registers;
 
 void HAL_EarlyInit(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, void* fb_base, uint64_t fb_size, uint64_t kernel_virtual, uint64_t kernel_physical, void* RSDP);
 
+void HAL_Stage2();
+
 #endif /* _HAL_HPP */

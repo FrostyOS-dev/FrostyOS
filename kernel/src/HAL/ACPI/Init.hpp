@@ -21,6 +21,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace ACPI {
 
     void EarlyInit(void* rsdp);
+    void BaseInit();
+    void FullInit();
+
+    void* GetRSDP();
 
 }
 

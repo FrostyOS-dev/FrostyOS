@@ -15,19 +15,3 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "SDT.hpp"
-
-#include <stdint.h>
-#include <stddef.h>
-
-namespace ACPI {
-
-    bool ValidateSDT(SDTHeader* sdt) {
-        uint8_t Checksum = 0;
-        for (size_t i = 0; i < sdt->Length; i++)
-            Checksum += ((uint8_t*)sdt)[i];
-        
-        return (Checksum & 0xFF) == 0;
-    }
-
-}

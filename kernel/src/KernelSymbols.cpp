@@ -20,8 +20,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <spinlock.h>
 #include <string.h>
 
-#include <stdio.h> // temp
-
 SymbolTable::SymbolTable() : m_symbols(), m_lock(SPINLOCK_DEFAULT_VALUE) {
 
 }
@@ -68,7 +66,6 @@ void SymbolTable::FillFromRawStringData(const char* data, size_t size) {
                 memcpy((void*)name, current_name, current_name_length);
                 name[current_name_length] = '\0';
                 m_symbols.insert((void*)current_address, name);
-                dbgprintf("Adding Symbol: %016lx: %s\n", current_address, name);
                 stage = Stage::Address;
                 current_name = nullptr;
                 current_name_length = 0;

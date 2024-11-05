@@ -25,6 +25,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <KernelSymbols.hpp>
 
+#include <Memory/PageManager.hpp>
+
 char const* g_x86_64_PanicReason;
 
 x86_64_Registers g_x86_64_PanicRegisters;
@@ -96,6 +98,9 @@ x86_64_Registers g_x86_64_PanicRegisters;
         else
             dbgputc('\n');
     });
+
+    if (g_KPM != nullptr)
+        g_KPM->PrintRegions();
 
 
     // now to stdout

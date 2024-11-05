@@ -17,6 +17,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "PageTable.hpp"
 
+#include <HAL/HAL.hpp>
+
 PageTable::PageTable(bool user) : m_user(user) {
 }
 

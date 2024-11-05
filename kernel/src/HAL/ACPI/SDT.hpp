@@ -34,8 +34,6 @@ namespace ACPI {
         uint32_t CreatorRevision;
     } __attribute__((packed));
 
-    bool ValidateSDT(SDTHeader* sdt);
-
 }
 
 #endif /* _ACPI_SDT_HPP */

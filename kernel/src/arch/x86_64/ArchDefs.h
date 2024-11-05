@@ -52,6 +52,11 @@ extern "C" {
 void x86_64_DisableInterrupts();
 void x86_64_EnableInterrupts();
 
+uint64_t x86_64_DisableInterruptsWithSave();
+void x86_64_EnableInterruptsWithSave(uint64_t flags);
+
+uint8_t x86_64_GetLAPICID();
+
 #ifdef __cplusplus
 }
 #endif

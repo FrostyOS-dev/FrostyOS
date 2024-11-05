@@ -36,6 +36,11 @@ public:
     void* AllocatePages(uint64_t pageCount);
     void FreePages(void* pages, uint64_t pageCount);
 
+    void* Allocate32bitPage(); // allocate a page in the lower 4GiB
+
+private:
+    void Verify();
+
 private:
     struct FreeListNode {
         size_t size;
@@ -49,6 +54,7 @@ private:
     uint64_t m_freeMem = 0;
     uint64_t m_usedMem = 0;
     uint64_t m_reservedMem = 0;
+    uint64_t m_totalMem = 0;
 };
 
 extern PMM* g_PMM;

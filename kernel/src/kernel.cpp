@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stddef.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <util.h>
 
 #include <Graphics/VGA.hpp>
@@ -61,6 +62,16 @@ PageManager KPM;
 
 SymbolTable KSymTable;
 
+#define MAX_ALLOCATED (256*1024)
+
+struct AllocationData {
+    void* ptr;
+    uint64_t size;
+};
+
+AllocationData allocated[MAX_ALLOCATED];
+uint8_t allocated_bitmap_data[MAX_ALLOCATED / 8];
+
 void StartKernel() {
     {
         typedef void (*ctor_fn)();
@@ -97,6 +108,64 @@ void StartKernel() {
 
     KSymTable.FillFromRawStringData((const char*)g_kernelParams.symbolTable, g_kernelParams.symbolTableSize);
     g_KSymTable = &KSymTable;
+
+    
+
+    // HAL_Stage2();
+
+    uint64_t totalMemAllocated = 0;
+    uint64_t netMemAllocated = 0;
+
+    uint64_t allocated_count = 0;
+    bool can_allocate = true;
+    
+    memset(allocated_bitmap_data, 0, MAX_ALLOCATED / 8);
+    Bitmap allocated_bitmap = Bitmap(allocated_bitmap_data, MAX_ALLOCATED / 8);
+    for (uint64_t i = 0; i < 10'000'000; i++) {
+        if ((rand() % 100) >= 50 && can_allocate) {
+            uint64_t size = ((rand() % (1024/16)) + 1) * 16;
+            // uint64_t size = 4096;
+            uint64_t index = 0;
+            while (allocated_bitmap[index] && index < MAX_ALLOCATED)
+                index++;
+            if (index < MAX_ALLOCATED) {
+                allocated_bitmap.Set(index, true);
+                allocated[index].ptr = kmalloc(size);
+                if (allocated[index].ptr == nullptr) {
+                    dbgprintf("Failed to allocate region on iteration %lu. totalMemAllocated = %lu, netMemAllocated = %lu\n", i, totalMemAllocated, netMemAllocated);
+                    while (true) {}
+                    break;
+                }
+                memset(allocated[index].ptr, 0xCC, size);
+                allocated[index].size = size;
+                allocated_count++;
+                totalMemAllocated += size;
+                netMemAllocated += size;
+            }
+            if (allocated_count == MAX_ALLOCATED)
+                can_allocate = false;
+        }
+        else if (allocated_count > 0) {
+            // free a random block
+            bool found = false;
+            while (!found) {
+                uint64_t index = rand() % MAX_ALLOCATED;
+                if (allocated_bitmap[index]) {
+                    kfree(allocated[index].ptr);
+                    allocated_bitmap.Set(index, false);
+                    allocated_count--;
+                    found = true;
+                    can_allocate = true;
+                    netMemAllocated -= allocated[index].size;
+                }
+            }
+        }
+        // if ((i % 10'000) == 0) {
+        dbgprintf("Iteration %lu: totalMemAllocated = %lu, netMemAllocated = %lu\n", i, totalMemAllocated, netMemAllocated);
+        // }
+    }
+
+    dbgputs("test complete\n");
 
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");

@@ -44,6 +44,8 @@ void PageManager::Initialise(PageTable* table, VirtualMemoryAllocator* vma, bool
     spinlock_init(&m_lock);
 }
 
+uint64_t g_i;
+
 void* PageManager::AllocatePages(uint64_t pageCount, PagePermission permission, PageCache cache) {
     void* address = m_vma->AllocatePages(pageCount);
     if (address == nullptr)
@@ -51,8 +53,8 @@ void* PageManager::AllocatePages(uint64_t pageCount, PagePermission permission, 
     VMRegion* region = (VMRegion*)kcalloc_vmm(1, sizeof(VMRegion));
     *region = VMRegion(address, (void*)((uint64_t)address + pageCount * PAGE_SIZE), { permission, cache, true, true, false, 0 });
     m_regions.insert(address, region);
-    for (uint64_t i = 0; i < pageCount; i++)
-        m_table->Map((void*)((uint64_t)address + i * PAGE_SIZE), g_PMM->AllocatePage(), permission, cache, false);
+    for (g_i = 0; g_i < pageCount; g_i++)
+        m_table->Map((void*)((uint64_t)address + g_i * PAGE_SIZE), g_PMM->AllocatePage(), permission, cache, false);
     m_table->Flush(address, pageCount);
     return address;
 }
@@ -64,13 +66,15 @@ void* PageManager::AllocatePage(PagePermission permission, PageCache cache) {
 void PageManager::FreePages(void* address, uint64_t pageCount) {
     // for now, assume direct match
     VMRegion* region = m_regions.find(address);
-    if (region == nullptr || (pageCount > 0 && region->GetSize() != pageCount * PAGE_SIZE))
+    if (region == nullptr || (pageCount > 0 && region->GetSize() != pageCount * PAGE_SIZE)) {
+        assert(false);
         return;
+    }
     if (pageCount == 0)
         pageCount = region->GetSize() / PAGE_SIZE;
-    for (uint64_t i = 0; i < pageCount; i++) {
-        void* phys_addr = m_table->GetPhysicalAddress((void*)((uint64_t)address + i * PAGE_SIZE));
-        m_table->Unmap((void*)((uint64_t)address + i * PAGE_SIZE), false);
+    for (g_i = 0; g_i < pageCount; g_i++) {
+        void* phys_addr = m_table->GetPhysicalAddress((void*)((uint64_t)address + g_i * PAGE_SIZE));
+        // m_table->Unmap((void*)((uint64_t)address + g_i * PAGE_SIZE), false);
         g_PMM->FreePage(phys_addr);
     }
     m_vma->FreePages(address, pageCount);
@@ -151,6 +155,12 @@ void PageManager::RemapPages(void* virtualAddress, PagePermission permission, Pa
     for (uint64_t i = 0; i < pageCount; i++)
         m_table->Remap((void*)((uint64_t)virtualAddress + i * PAGE_SIZE), permission, cache, false);
     m_table->Flush(virtualAddress, pageCount);
+}
+
+void PageManager::PrintRegions() {
+    m_regions.Enumerate([](void* key, VMRegion* value, void*) {
+        dbgprintf("Region: %p - %p\n", key, value->GetEnd());
+    }, nullptr);
 }
 
 void PageManager::Verify() {

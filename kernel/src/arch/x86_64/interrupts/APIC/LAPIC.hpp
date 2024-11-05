@@ -50,10 +50,16 @@ enum class x86_64_LAPIC_Register {
 
 class x86_64_LAPIC {
 public:
-    x86_64_LAPIC(bool BSP = false);
+    x86_64_LAPIC(bool BSP = false, uint8_t ID = 0xFF);
     ~x86_64_LAPIC();
 
-    void Init();
+    void SetAddressOverride(void* address); // must be called before Init
+
+    void Init(bool started = false);
+
+    void AddNMISource(uint8_t LINT, bool activeLow, bool levelTriggered); // must be called before Init
+
+    void StartCPU();
 
     void WriteRegister(x86_64_LAPIC_Register reg, uint32_t value);
     uint32_t ReadRegister(x86_64_LAPIC_Register reg);
@@ -67,6 +73,12 @@ private:
     bool m_BSP;
     uint64_t m_LAPICBase;
     uint8_t m_LAPICID;
+    bool m_addressOverride;
+    struct NMISource {
+        uint8_t LINT;
+        bool activeLow;
+        bool levelTriggered;
+    } m_NMISources[2]; // only 2 LINTs can be used for NMI
 };
 
 extern x86_64_LAPIC* g_BSP_LAPIC;

@@ -31,6 +31,8 @@ Virtual Memory Regions:
 0xFFFFFFFF80000000 - 0xFFFFFFFFFFFFFFFF (   2GiB): Kernel executable loading space
 */
 
+extern bool canUnmap;
+
 void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, void* fb_base, uint64_t fb_size, uint64_t kernel_virtual, uint64_t kernel_physical);
 
 bool x86_64_is2MiBPagesSupported();

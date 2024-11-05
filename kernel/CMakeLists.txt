@@ -13,10 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-find_program(SHELL sh)
-if(NOT SHELL)
-    message(FATAL_ERROR "sh not found")
-endif()
+include(dependencies/uACPI/uacpi.cmake)
 
 if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
     set(kernel_sources
@@ -35,6 +32,7 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PagingUtil.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PAT.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PAT.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/APTrampoline.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/ArchDefs.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/E9.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/GDT.asm
@@ -68,8 +66,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGAFont.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/Init.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/MADT.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/SDT.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/XSDT.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/uACPI.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/HAL.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/Heap.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/OOM.cpp
@@ -90,6 +87,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/kernel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/KernelSymbols.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/limine_entry.cpp
+    ${UACPI_SOURCES}
 )
 
 set(kernel_lib_sources
@@ -117,6 +115,7 @@ set_target_properties(kernel PROPERTIES C_STANDARD_REQUIRED ON)
 target_include_directories(kernel PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_include_directories(kernel PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/headers)
 target_include_directories(kernel PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib/include)
+target_include_directories(kernel PRIVATE ${UACPI_INCLUDES})
 
 set(LINKER_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/kernel.ld)
 
@@ -131,6 +130,7 @@ target_link_options(kernel
 )
 
 target_compile_definitions(kernel PRIVATE _FROSTYOS_BUILD_TARGET=kernel)
+target_compile_definitions(kernel PRIVATE UACPI_FORMATTED_LOGGING=1)
 
 target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mcmodel=kernel>
@@ -143,11 +143,12 @@ target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-unused-parameter>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-switch>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-packed-bitfield-compat>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-format>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-nostdlib>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-ffreestanding>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-pie>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fstack-protector>
-    # PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fsanitize=undefined>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fsanitize=undefined>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mgeneral-regs-only>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mno-red-zone>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-O2>

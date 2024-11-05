@@ -16,32 +16,69 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "Init.hpp"
-#include "XSDT.hpp"
 #include "MADT.hpp"
 
-#include <assert.h>
+#include <stdio.h>
 
 #include <Memory/PagingUtil.hpp>
 
+#include <uacpi/context.h>
+#include <uacpi/event.h>
+#include <uacpi/status.h>
+#include <uacpi/tables.h>
+#include <uacpi/uacpi.h>
+
 namespace ACPI {
 
-    XSDT* g_xsdt = nullptr;
+    void* g_RSDP = nullptr;
 
     void EarlyInit(void* rsdp) {
-        XSDP* xsdp = (XSDP*)rsdp;
+        g_RSDP = rsdp;
 
-        assert(ValidateXSDP(xsdp));
+        
+    }
 
-        XSDT* xsdt = (XSDT*)to_HHDM((void*)(xsdp->XSDTAddress));
+    void BaseInit() {
+        uacpi_context_set_log_level(UACPI_LOG_TRACE);
 
-        assert(ValidateSDT(&xsdt->Header));
+        uacpi_status rc = uacpi_initialize(0);
+        if (uacpi_unlikely_error(rc)) {
+            dbgprintf("Failed to initialize uACPI: %s\n", uacpi_status_to_string(rc));
+            return;
+        }
 
-        g_xsdt = xsdt;
+        uacpi_table madt;
+        rc = uacpi_table_find_by_signature("APIC", &madt);
+        if (uacpi_unlikely_error(rc)) {
+            dbgprintf("Failed to find MADT: %s\n", uacpi_status_to_string(rc));
+            return;
+        }
 
-        MADT* madt = (MADT*)GetSDT("APIC", g_xsdt);
-        assert(ValidateSDT(&madt->Header));
+        InitMADT((MADT*)madt.hdr);
+    }
 
-        InitMADT(madt);
+    void FullInit() {
+        uacpi_status rc = uacpi_namespace_load();
+        if (uacpi_unlikely_error(rc)) {
+            dbgprintf("Failed to load ACPI namespace.\n");
+            return;
+        }
+
+        rc = uacpi_namespace_initialize();
+        if (uacpi_unlikely_error(rc)) {
+            dbgprintf("Failed to initialize ACPI namespace.\n");
+            return;
+        }
+
+        rc = uacpi_finalize_gpe_initialization();
+        if (uacpi_unlikely_error(rc)) {
+            dbgprintf("Failed to finalize GPE initialization.\n");
+            return;
+        }
+    }
+
+    void* GetRSDP() {
+        return g_RSDP;
     }
 
 }

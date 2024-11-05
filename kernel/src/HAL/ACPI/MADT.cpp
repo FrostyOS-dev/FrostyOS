@@ -16,12 +16,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "MADT.hpp"
+#include "arch/x86_64/ArchDefs.h"
 
-// #define MADT_DEBUG
+#define MADT_DEBUG
 
 #ifdef MADT_DEBUG
 #include <stdio.h>
 #endif
+
+#include <Data-structures/LinkedList.hpp>
 
 #ifdef __x86_64__
 #include <arch/x86_64/Processor.hpp>
@@ -36,13 +39,17 @@ namespace ACPI {
 
     void InitMADT(MADT* madt) {
 #ifdef __x86_64__
-        uint8_t CurrentLAPICID = g_BSP_LAPIC->GetID();
+        uint8_t CurrentLAPICID = x86_64_GetLAPICID();
 #endif
+        LinkedList::SimpleLinkedList<MADT_LocalAPIC> LAPICs;
+        LinkedList::SimpleLinkedList<MADT_IOAPIC> IOAPICs;
+        LinkedList::SimpleLinkedList<MADT_IOAPICInterruptSourceOverride> IOAPICInterruptSourceOverrides;
+        LinkedList::SimpleLinkedList<MADT_IOAPICNMI> IOAPICNMIs;
+        LinkedList::SimpleLinkedList<MADT_LocalAPICNMI> LocalAPICNMIs;
+        void* LAPICAddressOverride = nullptr;
 
-
-        uint64_t EntryCount = (madt->Header.Length - sizeof(MADT)) / sizeof(MADTEntry);
         MADTEntry* Entry = (MADTEntry*)((uint64_t)madt + sizeof(MADT));
-        for (uint64_t i = 0; i < EntryCount; i++) {
+        while (Entry < (MADTEntry*)((uint64_t)madt + madt->Header.Length)) {
             switch (Entry->Type) {
                 case 0: {
                     MADT_LocalAPIC* LocalAPIC = (MADT_LocalAPIC*)Entry;
@@ -52,12 +59,7 @@ namespace ACPI {
                     // Do something with LocalAPIC
                     if (LocalAPIC->Flags & 1) {
                         // Processor is enabled
-#ifdef __x86_64__
-                        if (CurrentLAPICID == LocalAPIC->APICID) {
-                            // This is the BSP
-                            g_BSP->InitLAPIC(g_BSP_LAPIC);
-                        }
-#endif
+                        LAPICs.insert(LocalAPIC);
                     }
                     break;
                 }
@@ -66,7 +68,7 @@ namespace ACPI {
 #ifdef MADT_DEBUG
                     dbgprintf("IOAPIC: IOAPICID=%d, Address=%x, GlobalSystemInterruptBase=%d\n", IOAPIC->IOAPICID, IOAPIC->Address, IOAPIC->GlobalSystemInterruptBase);
 #endif
-                    // Do something with IOAPIC
+                    IOAPICs.insert(IOAPIC);
                     break;
                 }
                 case 2: {
@@ -74,7 +76,7 @@ namespace ACPI {
 #ifdef MADT_DEBUG
                     dbgprintf("IOAPICInterruptSourceOverride: Bus=%d, Source=%d, GlobalSystemInterrupt=%d, Flags=%d\n", IOAPICInterruptSourceOverride->Bus, IOAPICInterruptSourceOverride->Source, IOAPICInterruptSourceOverride->GlobalSystemInterrupt, IOAPICInterruptSourceOverride->Flags);
 #endif
-                    // Do something with IOAPICInterruptSourceOverride
+                    IOAPICInterruptSourceOverrides.insert(IOAPICInterruptSourceOverride);
                     break;
                 }
                 case 3: {
@@ -82,7 +84,7 @@ namespace ACPI {
 #ifdef MADT_DEBUG
                     dbgprintf("IOAPICNMI: NMISource=%d, Flags=%d, GSI=%d\n", IOAPICNMI->NMISource, IOAPICNMI->Flags, IOAPICNMI->GSI);
 #endif
-                    // Do something with IOAPICNMI
+                    IOAPICNMIs.insert(IOAPICNMI);
                     break;
                 }
                 case 4: {
@@ -90,7 +92,7 @@ namespace ACPI {
 #ifdef MADT_DEBUG
                     dbgprintf("LocalAPICNMI: ProcessorID=%d, Flags=%d, LINT=%d\n", LocalAPICNMI->ProcessorID, LocalAPICNMI->Flags, LocalAPICNMI->LINT);
 #endif
-                    // Do something with LocalAPICNMI
+                    LocalAPICNMIs.insert(LocalAPICNMI);
                     break;
                 }
                 case 5: {
@@ -98,7 +100,7 @@ namespace ACPI {
 #ifdef MADT_DEBUG
                     dbgprintf("LocalAPICAddressOverride: Address=%x\n", LocalAPICAddressOverride->Address);
 #endif
-                    // Do something with LocalAPICAddressOverride
+                    LAPICAddressOverride = (void*)LocalAPICAddressOverride->Address;
                     break;
                 }
                 case 9: {
@@ -112,8 +114,31 @@ namespace ACPI {
             }
             Entry = (MADTEntry*)((uint64_t)Entry + Entry->Length);
         }
-    }
 
+#ifdef __x86_64__
+        for (uint64_t i = 0; i < LAPICs.getCount(); i++) {
+            MADT_LocalAPIC* lapic_table = LAPICs.get(i);
+            bool BSP = CurrentLAPICID == lapic_table->APICID;
+            x86_64_LAPIC* lapic = new x86_64_LAPIC(BSP, lapic_table->APICID);
+
+            if (LAPICAddressOverride != nullptr)
+                lapic->SetAddressOverride(LAPICAddressOverride);
+
+            for (uint64_t j = 0; j < LocalAPICNMIs.getCount(); j++) {
+                MADT_LocalAPICNMI* nmi = LocalAPICNMIs.get(j);
+                if (nmi->ProcessorID == lapic_table->ProcessorID || nmi->ProcessorID == 0xFF)
+                    lapic->AddNMISource(nmi->LINT, nmi->Flags & 1, nmi->Flags & 2);
+            }
+
+            lapic->Init(BSP);
+        }
+
+        for (uint64_t i = 0; i < IOAPICs.getCount(); i++) {
+            MADT_IOAPIC* ioapic_table = IOAPICs.get(i);
+            // Do something with IOAPIC
+        }
+#endif
+    }
 }
 
 #pragma GCC diagnostic pop

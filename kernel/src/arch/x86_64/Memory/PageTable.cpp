@@ -29,6 +29,9 @@ x86_64_PageTable::~x86_64_PageTable() {
 
 }
 
+uint64_t x86_64_totalPagesMapped = 0;
+uint64_t x86_64_currentPagesMapped = 0;
+
 void x86_64_PageTable::Map(void* virtualAddress, void* physicalAddress, PagePermission permission, PageCache cache, bool flush, PageType type) {
     uint32_t flags = DecodePageFlags(permission, cache, type);
     switch (type) {
@@ -42,6 +45,8 @@ void x86_64_PageTable::Map(void* virtualAddress, void* physicalAddress, PagePerm
         x86_64_Map1GiBPage(m_table, (uint64_t)virtualAddress, (uint64_t)physicalAddress, flags);
         break;
     }
+    x86_64_totalPagesMapped++;
+    x86_64_currentPagesMapped++;
     if (flush)
         Flush(virtualAddress, type == PageType::NORMAL ? 1 : (type == PageType::LARGE ? 512 : (512 * 512)));
 }
@@ -75,6 +80,7 @@ void x86_64_PageTable::Unmap(void* virtualAddress, bool flush, PageType type) {
         x86_64_Unmap1GiBPage(m_table, (uint64_t)virtualAddress);
         break;
     }
+    x86_64_currentPagesMapped--;
     if (flush)
         Flush(virtualAddress, type == PageType::NORMAL ? 1 : (type == PageType::LARGE ? 512 : (512 * 512)));
 }

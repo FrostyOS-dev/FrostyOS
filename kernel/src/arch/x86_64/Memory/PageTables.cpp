@@ -23,6 +23,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <assert.h>
 #include <string.h>
 
+#include <stdio.h> // temp
+
 uint64_t x86_64_GetPhysicalAddress(x86_64_Level4Table* Table, uint64_t VirtualAddress) {
     uint64_t PML4Index = (VirtualAddress >> 39) & 0x1FF;
     uint64_t PML3Index = (VirtualAddress >> 30) & 0x1FF;
@@ -199,6 +201,8 @@ void x86_64_UnmapPage(x86_64_Level4Table* Table, uint64_t VirtualAddress) {
             return;
     }
 
+    printf("Unmapping PML1Table\n");
+
     g_PMM->FreePage(HHDM_to_phys((void*)PML1Table));
     memset(&(PML2Table->entries[PML2Index]), 0, sizeof(x86_64_PML2Entry));
 
@@ -207,6 +211,8 @@ void x86_64_UnmapPage(x86_64_Level4Table* Table, uint64_t VirtualAddress) {
             return;
     }
 
+    printf("Unmapping PML2Table\n");
+
     g_PMM->FreePage(HHDM_to_phys((void*)PML2Table));
     memset(&(PML3Table->entries[PML3Index]), 0, sizeof(x86_64_PML3Entry));
 
@@ -214,6 +220,8 @@ void x86_64_UnmapPage(x86_64_Level4Table* Table, uint64_t VirtualAddress) {
         if (PML3Table->entries[i].Present)
             return;
     }
+
+    printf("Unmapping PML3Table\n");
 
     g_PMM->FreePage(HHDM_to_phys((void*)PML3Table));
     memset(&(Table->entries[PML4Index]), 0, sizeof(x86_64_PML4Entry));

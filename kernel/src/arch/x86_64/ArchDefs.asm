@@ -17,6 +17,8 @@
 
 global x86_64_DisableInterrupts
 global x86_64_EnableInterrupts
+global x86_64_DisableInterruptsWithSave
+global x86_64_EnableInterruptsWithSave
 
 x86_64_DisableInterrupts:
     cli
@@ -24,4 +26,50 @@ x86_64_DisableInterrupts:
 
 x86_64_EnableInterrupts:
     sti
+    ret
+
+x86_64_DisableInterruptsWithSave:
+    push rbp
+    mov rbp, rsp
+
+    pushf
+    pop rax
+
+    cli
+
+    mov rsp, rbp
+    pop rbp
+    ret
+
+x86_64_EnableInterruptsWithSave:
+    push rbp
+    mov rbp, rsp
+
+    push rdi
+    popf
+
+    sti
+
+    mov rsp, rbp
+    pop rbp
+    ret
+
+global x86_64_GetLAPICID
+
+x86_64_GetLAPICID:
+    push rbp
+    mov rbp, rsp
+
+    push rbx
+
+    mov eax, 0x01
+    cpuid
+
+    shr ebx, 24
+    movzx eax, bl
+
+    pop rbx
+
+    mov rsp, rbp
+    pop rbp
     ret

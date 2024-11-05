@@ -45,6 +45,7 @@ Heap::~Heap() {
 
 void* Heap::allocate(size_t size) {
     size = ALIGN_UP(size, 16);
+    Verify();
     spinlock_acquire(&m_lock);
     ChunkHeader* chunk = m_firstChunk;
     spinlock_release(&m_lock);
@@ -75,6 +76,7 @@ void* Heap::allocate(size_t size) {
             if (!current->inUse && current->size >= requiredSize) {
                 BlockHeader* block = current;
                 if (block->size > size + sizeof(BlockHeader)) {
+                    // dbgprintf("allocate case 0\n");
                     BlockHeader* newBlock = (BlockHeader*)((uint64_t)block + size + sizeof(BlockHeader));
                     newBlock->next.nextBlock = block->next.nextBlock;
                     newBlock->size = block->size - size - sizeof(BlockHeader);
@@ -107,8 +109,9 @@ void* Heap::allocate(size_t size) {
                     else if (!block->isLastBlock)
                         chunk->firstBlock = block->next.nextBlock;
                     else {
+                        // dbgprintf("allocate case 1\n");
                         BlockHeader* newBlock = (BlockHeader*)((uint64_t)block + size + sizeof(BlockHeader));
-                        newBlock->next.nextBlock = nullptr;
+                        newBlock->next.nextChunk = block->next.nextChunk;
                         newBlock->size = 0;
                         newBlock->inUse = true;
                         newBlock->isStartOfChunk = false;
@@ -131,6 +134,7 @@ void* Heap::allocate(size_t size) {
                 m_usedMem += block->size;
                 spinlock_release(&m_lock);
                 spinlock_release(&chunk->lock);
+                Verify();
                 return (void*)((uint64_t)block + sizeof(BlockHeader));
             }
             if (current->isLastBlock)
@@ -198,20 +202,25 @@ void* Heap::allocate(size_t size) {
     }
     m_totalMem += chunkSize;
     m_metadataMem += sizeof(ChunkHeader) + 2 * sizeof(BlockHeader);
-    m_freeMem += chunkSize - size - 2 * sizeof(BlockHeader) - sizeof(ChunkHeader);
-    m_usedMem += size;
+    m_freeMem += chunkSize - header->size - 2 * sizeof(BlockHeader) - sizeof(ChunkHeader);
+    m_usedMem += header->size;
     spinlock_release(&m_lock);
+    // dbgprintf("chunkSize = %lu, size = %lu, header->size = %lu\n", chunkSize, size, header->size);
+    Verify();
     return (void*)((uint64_t)header + sizeof(BlockHeader));
 }
 
 void Heap::free(void* ptr) {
     if (ptr == nullptr)
         return;
+    Verify();
     spinlock_acquire(&m_lock);
     ChunkHeader* chunk = m_firstChunk;
     spinlock_release(&m_lock);
 
     BlockHeader* header = (BlockHeader*)((uint64_t)ptr - sizeof(BlockHeader));
+
+    // dbgprintf("free: ptr = %lp, header = %lp, size = %lu\n", ptr, header, header->size);
 
     while (chunk != nullptr) {
         spinlock_acquire(&chunk->lock);
@@ -223,6 +232,8 @@ void Heap::free(void* ptr) {
             
             if (((prev != nullptr && prev < header) || (void*)chunk < (void*)header) && header < current) {
                 header->inUse = false;
+
+                uint64_t size = header->size;
 
                 if (prev != nullptr) {
                     if (!prev->inUse && (BlockHeader*)((uint64_t)prev + prev->size + sizeof(BlockHeader)) == header && !prev->isEndOfChunk) {
@@ -266,12 +277,16 @@ void Heap::free(void* ptr) {
                     header->isLastBlock = false;
                 }
                 spinlock_acquire(&m_lock);
-                m_freeMem += header->size;
-                m_usedMem -= header->size;
+                m_freeMem += size;
+                m_usedMem -= size;
                 spinlock_release(&m_lock);
 
+                // dbgprintf("free case 0\n");
+
                 spinlock_release(&chunk->lock);
+                Verify();
                 RemoveEmptyChunks();
+                Verify();
                 return;
             }
             if (current->isLastBlock) {
@@ -279,11 +294,6 @@ void Heap::free(void* ptr) {
                     if ((BlockHeader*)((uint64_t)current + current->size + sizeof(BlockHeader)) == header) {
                         size_t size = header->size;
                         current->size += header->size + sizeof(BlockHeader);
-                        spinlock_acquire(&m_lock);
-                        m_freeMem += header->size + sizeof(BlockHeader);
-                        m_usedMem -= header->size;
-                        m_metadataMem -= sizeof(BlockHeader);
-                        spinlock_release(&m_lock);
                         if (header->isEndOfChunk)
                             current->isEndOfChunk = true;
                         spinlock_release(&chunk->lock);
@@ -292,22 +302,28 @@ void Heap::free(void* ptr) {
                         m_usedMem -= size;
                         m_metadataMem -= sizeof(BlockHeader);
                         spinlock_release(&m_lock);
+                        // dbgprintf("free case 1\n");
+                        Verify();
                         RemoveEmptyChunks();
+                        Verify();
                         return;
                     }
+                    // dbgprintf("free case 2\n");
                     header->next.nextBlock = current->next.nextBlock;
                     header->isStartOfChunk = false;
                     header->isLastBlock = true;
-                    if (prev != nullptr)
-                        prev->next.nextBlock = header;
-                    else
-                        chunk->firstBlock = header;
+                    current->next.nextBlock = header;
+                    current->isLastBlock = false;
+                    current->inUse = false;
                     spinlock_acquire(&m_lock);
                     m_freeMem += header->size;
                     m_usedMem -= header->size;
                     spinlock_release(&m_lock);
                     spinlock_release(&chunk->lock);
+                    // dbgprintf("header = %lp, current = %lp, chunk = %lp\n", header, current, chunk);
+                    Verify();
                     RemoveEmptyChunks();
+                    Verify();
                     return;
                 }
                 else
@@ -321,6 +337,7 @@ void Heap::free(void* ptr) {
         spinlock_release(&chunk->lock);
         chunk = nextChunk;
     }
+    Verify();
 }
 
 void* Heap::reallocate(void* ptr, size_t new_size) {
@@ -367,12 +384,12 @@ void Heap::RemoveEmptyChunks() {
                     }
                     prevBlock->next.nextChunk = block->next.nextChunk;
                 }
-                spinlock_release(&chunk->lock);
                 size_t size = chunk->size + sizeof(ChunkHeader);
                 spinlock_acquire(&m_lock);
                 m_totalMem -= chunk->size + sizeof(ChunkHeader);
                 m_metadataMem -= sizeof(ChunkHeader) + sizeof(BlockHeader);
                 m_freeMem -= chunk->size - sizeof(BlockHeader);
+                spinlock_release(&chunk->lock);
                 spinlock_release(&m_lock);
                 m_deallocator(chunk, size);
                 chunk = prevBlock->next.nextChunk;
@@ -380,12 +397,12 @@ void Heap::RemoveEmptyChunks() {
             }
             else {
                 m_firstChunk = block->next.nextChunk;
-                spinlock_release(&chunk->lock);
                 size_t size = chunk->size + sizeof(ChunkHeader);
                 spinlock_acquire(&m_lock);
                 m_totalMem -= size;
                 m_metadataMem -= sizeof(ChunkHeader) + sizeof(BlockHeader);
                 m_freeMem -= chunk->size - sizeof(BlockHeader);
+                spinlock_release(&chunk->lock);
                 m_deallocator(chunk, size);
                 chunk = m_firstChunk;
                 spinlock_release(&m_lock);
@@ -422,32 +439,50 @@ void Heap::Print(fd_t fd) {
 
 void Heap::Verify() {
     assert((m_freeMem + m_usedMem + m_metadataMem) == m_totalMem);
+    assert((int64_t)m_freeMem >= 0);
+    assert((int64_t)m_usedMem >= 0);
+    assert((int64_t)m_metadataMem >= 0);
+    assert((int64_t)m_totalMem >= 0);
+    uint64_t current_free = 0;
     ChunkHeader* chunk = m_firstChunk;
     while (chunk != nullptr) {
         assert ((chunk->size & (1UL << 63)) == 0);
         BlockHeader* block = chunk->firstBlock;
         BlockHeader* prev = nullptr;
-        assert(block != nullptr && (uint64_t)block < (1UL << 48));
+        assert(block != nullptr && (uint64_t)block > (1UL << 48));
         while (block != nullptr) {
+            if (block->size == 0 && block->inUse) {
+                assert(block->isLastBlock);
+            }
             assert(block >= (BlockHeader*)((uint64_t)chunk + sizeof(ChunkHeader)));
             if (prev != nullptr) {
                 assert(((uint64_t)prev + sizeof(BlockHeader) + prev->size) <= (uint64_t)block);
                 assert(prev->next.nextBlock == block);
             }
-            assert(((uint64_t)block + block->size + sizeof(BlockHeader)) <= ((uint64_t)chunk + chunk->size + sizeof(ChunkHeader)));
-            if (block->isLastBlock)
-                break;
+            if (!(((uint64_t)block + block->size + sizeof(BlockHeader)) <= ((uint64_t)chunk + chunk->size + sizeof(ChunkHeader)))) {
+                dbgprintf("block = %lp, block->size = %lu, chunk = %lp, chunk->size = %lu\n", block, block->size, chunk, chunk->size);
+                assert(false);
+            }
+            current_free += block->size;
             if (block->isEndOfChunk) {
                 assert((((uint64_t)block + block->size + sizeof(BlockHeader)) % PAGE_SIZE) == 0);
             }
             if (block->isStartOfChunk) {
                 assert((((uint64_t)block - sizeof(ChunkHeader)) % PAGE_SIZE) == 0);
             }
+            if (block->isLastBlock)
+                break;
             prev = block;
             block = block->next.nextBlock;
         }
         chunk = block->next.nextChunk;
     }
+    if (current_free != m_freeMem) {
+        dbgprintf("current_free = %lu, m_freeMem = %lu\n", current_free, m_freeMem);
+        assert(false);
+    }
+    // else
+    //     dbgprintf("m_freeMem = %lu\n", m_freeMem);
 }
 
 void Heap::VerifyBlock(ChunkHeader* chunk, BlockHeader* block) {
@@ -504,7 +539,6 @@ void* ExpandKernelHeap(size_t size) {
 }
 
 void ShrinkKernelHeap(void* ptr, size_t size) {
-    (void)size;
     g_KPM->FreePages(ptr, DIV_ROUNDUP(size, PAGE_SIZE));
 }
 

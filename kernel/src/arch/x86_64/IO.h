@@ -30,6 +30,9 @@ uint8_t x86_64_inb(uint16_t port);
 void x86_64_outw(uint16_t port, uint16_t value);
 uint16_t x86_64_inw(uint16_t port);
 
+void x86_64_outd(uint16_t port, uint32_t value);
+uint32_t x86_64_ind(uint16_t port);
+
 void x86_64_IOWait();
 
 #ifdef __cplusplus

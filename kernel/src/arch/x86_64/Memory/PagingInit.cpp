@@ -51,6 +51,8 @@ x86_64_Level4Table* g_Level4Table = nullptr;
 bool g_2MiBPages = false;
 bool g_1GiBPages = false;
 
+bool canUnmap = false;
+
 void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, void* fb_base, uint64_t fb_size, uint64_t kernel_virtual, uint64_t kernel_physical) {
     KPMM.Initialise(memoryMap, memoryMapEntryCount);
     g_PMM = &KPMM;
@@ -58,8 +60,8 @@ void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount,
     if (!x86_64_EnsureNX())
         PANIC("CPU does not support the NX bit");
 
-    g_2MiBPages = x86_64_Ensure2MBPages();
-    g_1GiBPages = x86_64_Ensure1GBPages();
+    // g_2MiBPages = x86_64_Ensure2MBPages();
+    // g_1GiBPages = x86_64_Ensure1GBPages();
 
     if (x86_64_isPATSupported())
         x86_64_InitPAT();
@@ -137,6 +139,8 @@ void x86_64_InitPaging(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount,
     KPageTable.SetTable(g_Level4Table);
 
     g_KPageTable = &KPageTable;
+
+    canUnmap = true;
 }
 
 bool x86_64_is2MiBPagesSupported() {
@@ -157,7 +161,7 @@ void MapKernel(uint64_t kernel_virtual, uint64_t kernel_physical) {
     uint64_t bss_start_addr = ALIGN_DOWN(((uint64_t)_bss_start_addr), PAGE_SIZE);
     uint64_t bss_end_addr = ALIGN_UP(((uint64_t)_bss_end_addr), PAGE_SIZE);
 
-    x86_64_MapRegionWithLargestPages(g_Level4Table,   text_start_addr,   text_start_addr - kernel_virtual + kernel_physical,   text_end_addr -   text_start_addr, 0x0000'0003); // Present, Read/Write, Execute
+    x86_64_MapRegionWithLargestPages(g_Level4Table,   text_start_addr,   text_start_addr - kernel_virtual + kernel_physical,   text_end_addr -   text_start_addr, 0x0000'0001); // Present, Read, Execute
     x86_64_MapRegionWithLargestPages(g_Level4Table, rodata_start_addr, rodata_start_addr - kernel_virtual + kernel_physical, rodata_end_addr - rodata_start_addr, 0x0800'0001); // Present, Read, No Execute
     x86_64_MapRegionWithLargestPages(g_Level4Table,   data_start_addr,   data_start_addr - kernel_virtual + kernel_physical,   data_end_addr -   data_start_addr, 0x0800'0003); // Present, Read/Write, No Execute
     x86_64_MapRegionWithLargestPages(g_Level4Table,    bss_start_addr,    bss_start_addr - kernel_virtual + kernel_physical,    bss_end_addr -    bss_start_addr, 0x0800'0003); // Present, Read/Write, No Execute
