@@ -122,6 +122,7 @@ void StartKernel() {
     memset(allocated_bitmap_data, 0, MAX_ALLOCATED / 8);
     Bitmap allocated_bitmap = Bitmap(allocated_bitmap_data, MAX_ALLOCATED / 8);
     for (uint64_t i = 0; i < 10'000'000; i++) {
+        bool did_allocate = false;
         if ((rand() % 100) >= 50 && can_allocate) {
             uint64_t size = ((rand() % (1024/16)) + 1) * 16;
             // uint64_t size = 4096;
@@ -130,7 +131,7 @@ void StartKernel() {
                 index++;
             if (index < MAX_ALLOCATED) {
                 allocated_bitmap.Set(index, true);
-                allocated[index].ptr = kmalloc(size);
+                allocated[index].ptr = kcalloc(1, size);
                 if (allocated[index].ptr == nullptr) {
                     dbgprintf("Failed to allocate region on iteration %lu. totalMemAllocated = %lu, netMemAllocated = %lu\n", i, totalMemAllocated, netMemAllocated);
                     while (true) {}
@@ -141,6 +142,7 @@ void StartKernel() {
                 allocated_count++;
                 totalMemAllocated += size;
                 netMemAllocated += size;
+                did_allocate = true;
             }
             if (allocated_count == MAX_ALLOCATED)
                 can_allocate = false;
@@ -161,7 +163,7 @@ void StartKernel() {
             }
         }
         // if ((i % 10'000) == 0) {
-        dbgprintf("Iteration %lu: totalMemAllocated = %lu, netMemAllocated = %lu\n", i, totalMemAllocated, netMemAllocated);
+        dbgprintf("Iteration %lu: totalMemAllocated = %lu, netMemAllocated = %lu, did_allocate = %s\n", i, totalMemAllocated, netMemAllocated, did_allocate ? "true" : "false");
         // }
     }
 

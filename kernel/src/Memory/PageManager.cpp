@@ -47,6 +47,7 @@ void PageManager::Initialise(PageTable* table, VirtualMemoryAllocator* vma, bool
 uint64_t g_i;
 
 void* PageManager::AllocatePages(uint64_t pageCount, PagePermission permission, PageCache cache) {
+    g_PMM->Verify();
     void* address = m_vma->AllocatePages(pageCount);
     if (address == nullptr)
         return nullptr;
@@ -56,6 +57,7 @@ void* PageManager::AllocatePages(uint64_t pageCount, PagePermission permission, 
     for (g_i = 0; g_i < pageCount; g_i++)
         m_table->Map((void*)((uint64_t)address + g_i * PAGE_SIZE), g_PMM->AllocatePage(), permission, cache, false);
     m_table->Flush(address, pageCount);
+    g_PMM->Verify();
     return address;
 }
 
@@ -64,6 +66,7 @@ void* PageManager::AllocatePage(PagePermission permission, PageCache cache) {
 }
 
 void PageManager::FreePages(void* address, uint64_t pageCount) {
+    g_PMM->Verify();
     // for now, assume direct match
     VMRegion* region = m_regions.find(address);
     if (region == nullptr || (pageCount > 0 && region->GetSize() != pageCount * PAGE_SIZE)) {
@@ -74,13 +77,15 @@ void PageManager::FreePages(void* address, uint64_t pageCount) {
         pageCount = region->GetSize() / PAGE_SIZE;
     for (g_i = 0; g_i < pageCount; g_i++) {
         void* phys_addr = m_table->GetPhysicalAddress((void*)((uint64_t)address + g_i * PAGE_SIZE));
-        // m_table->Unmap((void*)((uint64_t)address + g_i * PAGE_SIZE), false);
+        m_table->Unmap((void*)((uint64_t)address + g_i * PAGE_SIZE), false);
         g_PMM->FreePage(phys_addr);
     }
     m_vma->FreePages(address, pageCount);
     m_regions.remove(address);
+    g_PMM->Verify();
     kfree_vmm(region);
     m_table->Flush(address, pageCount);
+    g_PMM->Verify();
 }
 
 void PageManager::FreePage(void* address) {

@@ -15,15 +15,20 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include <assert.h>
 #include <new.hpp>
 #include <stdlib.h>
 
 void* operator new(size_t size) {
-    return kcalloc(1, size);
+    void* mem = kcalloc(1, size);
+    assert(mem != nullptr);
+    return mem;
 }
 
 void* operator new[](size_t size) {
-    return kcalloc(1, size);
+    void* mem = kcalloc(1, size);
+    assert(mem != nullptr);
+    return mem;
 }
 
 void operator delete(void* p) {

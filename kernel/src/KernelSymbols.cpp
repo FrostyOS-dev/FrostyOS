@@ -29,6 +29,8 @@ SymbolTable::~SymbolTable() {
 }
 
 void SymbolTable::FillFromRawStringData(const char* data, size_t size) {
+    if (data == nullptr || size == 0)
+        return;
     /*
     Raw string data is formatted as each line being a symbol in the format:
     <address> <symbol name>

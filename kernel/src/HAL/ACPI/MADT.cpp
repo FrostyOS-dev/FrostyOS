@@ -118,6 +118,8 @@ namespace ACPI {
 #ifdef __x86_64__
         for (uint64_t i = 0; i < LAPICs.getCount(); i++) {
             MADT_LocalAPIC* lapic_table = LAPICs.get(i);
+            if (lapic_table == nullptr)
+                continue;
             bool BSP = CurrentLAPICID == lapic_table->APICID;
             x86_64_LAPIC* lapic = new x86_64_LAPIC(BSP, lapic_table->APICID);
 
@@ -126,6 +128,8 @@ namespace ACPI {
 
             for (uint64_t j = 0; j < LocalAPICNMIs.getCount(); j++) {
                 MADT_LocalAPICNMI* nmi = LocalAPICNMIs.get(j);
+                if (nmi == nullptr)
+                    continue;
                 if (nmi->ProcessorID == lapic_table->ProcessorID || nmi->ProcessorID == 0xFF)
                     lapic->AddNMISource(nmi->LINT, nmi->Flags & 1, nmi->Flags & 2);
             }
@@ -135,6 +139,8 @@ namespace ACPI {
 
         for (uint64_t i = 0; i < IOAPICs.getCount(); i++) {
             MADT_IOAPIC* ioapic_table = IOAPICs.get(i);
+            if (ioapic_table == nullptr)
+                continue;
             // Do something with IOAPIC
         }
 #endif

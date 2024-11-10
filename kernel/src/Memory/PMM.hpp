@@ -38,8 +38,8 @@ public:
 
     void* Allocate32bitPage(); // allocate a page in the lower 4GiB
 
-private:
     void Verify();
+private:
 
 private:
     struct FreeListNode {

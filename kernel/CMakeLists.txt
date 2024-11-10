@@ -15,6 +15,40 @@
 
 include(dependencies/uACPI/uacpi.cmake)
 
+add_library(uacpi STATIC ${UACPI_SOURCES})
+
+set_target_properties(uacpi PROPERTIES CXX_STANDARD 23)
+set_target_properties(uacpi PROPERTIES CXX_STANDARD_REQUIRED ON)
+set_target_properties(uacpi PROPERTIES CXX_EXTENSIONS OFF)
+set_target_properties(uacpi PROPERTIES C_STANDARD 23)
+set_target_properties(uacpi PROPERTIES C_EXTENSIONS OFF)
+set_target_properties(uacpi PROPERTIES C_STANDARD_REQUIRED ON)
+
+target_include_directories(uacpi PRIVATE ${UACPI_INCLUDES})
+
+target_compile_definitions(uacpi PRIVATE UACPI_FORMATTED_LOGGING=1)
+
+target_compile_options(uacpi
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mcmodel=kernel>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-g>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wall>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wextra>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-strict-aliasing>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-packed-bitfield-compat>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-nostdlib>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-ffreestanding>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-pie>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fstack-protector>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fsanitize=undefined>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mgeneral-regs-only>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mno-red-zone>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-O2>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-omit-frame-pointer>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
+)
+
+
 if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
     set(kernel_sources
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/APIC/IPI.cpp
@@ -87,7 +121,6 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/kernel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/KernelSymbols.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/limine_entry.cpp
-    ${UACPI_SOURCES}
 )
 
 set(kernel_lib_sources
@@ -137,7 +170,7 @@ target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-g>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wall>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wextra>
-    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wpedantic>
+    # PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wpedantic>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-strict-aliasing>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-pointer-arith>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-unused-parameter>
@@ -155,11 +188,12 @@ target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-omit-frame-pointer>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
+    # PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fanalyzer>
 )
 
 set_target_properties(kernel PROPERTIES LINK_DEPENDS ${LINKER_SCRIPT})
 
-target_link_libraries(kernel PRIVATE gcc)
+target_link_libraries(kernel PRIVATE uacpi gcc)
 
 target_compile_definitions(kernel PRIVATE _IS_IN_KERNEL=1)
 

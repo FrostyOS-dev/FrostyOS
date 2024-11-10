@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "PageManager.hpp"
 #include "PagingUtil.hpp"
 #include "PMM.hpp"
+#include "arch/x86_64/Memory/PageTables.hpp"
 
 #include <assert.h>
 #include <stddef.h>
@@ -513,14 +514,23 @@ void InitVMMHeap() {
 }
 
 extern "C" void* kmalloc_vmm(size_t size) {
-    return g_VMMHeap.allocate(size);
+    // return g_VMMHeap.allocate(size);
+    // dbgprintf("kmalloc_vmm: size = %lu\n", size);
+    uint64_t pageCount = DIV_ROUNDUP(size, PAGE_SIZE);
+    void* ptr = to_HHDM(g_PMM->AllocatePages(pageCount + 2));
+    if (ptr == nullptr)
+        return nullptr;
+    x86_64_UnmapPage(g_Level4Table, (uint64_t)ptr);
+    x86_64_UnmapPage(g_Level4Table, ((uint64_t)ptr + (pageCount + 1) * PAGE_SIZE));
+    return (void*)((uint64_t)ptr + PAGE_SIZE);
 }
 
 extern "C" void kfree_vmm(void* ptr) {
-    g_VMMHeap.free(ptr);
+    // g_VMMHeap.free(ptr);
 }
 
 extern "C" void* krealloc_vmm(void *ptr, size_t size) {
+    assert(false);
     return g_VMMHeap.reallocate(ptr, size);
 }
 
@@ -566,8 +576,6 @@ extern "C" void* kcalloc(size_t nmemb, size_t size) {
     return ptr;
 }
 
-
-// TODO: implement eternal heap
 
 size_t g_eternalHeapSize = 0;
 size_t g_eternalHeapUsed = 0;
