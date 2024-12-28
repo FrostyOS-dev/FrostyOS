@@ -21,11 +21,11 @@ set -e
 # Update OVMF firmware variables
 
 # Check if ovmf/x86-64/OVMF_VARS.fd exists
-if [ -f "ovmf/x86-64/OVMF_VARS.fd" ]; then
+if [ -f "ovmf/x86-64/OVMF_VARS.4m.fd" ]; then
     exit 0
 fi
 
-# Copy OVMF firmware variables from /usr/share/edk2/ovmf/OVMF_VARS.fd
+# Copy OVMF firmware variables from /usr/share/edk2/ovmf/OVMF_VARS.4m.fd
 
 mkdir -p ovmf/x86-64
-cp /usr/share/edk2/x64/OVMF_VARS.fd ovmf/x86-64
+cp /usr/share/edk2/x64/OVMF_VARS.4m.fd ovmf/x86-64

@@ -22,18 +22,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Graphics/Framebuffer.hpp>
 
-#include <Memory/MemoryMap.hpp>
-
 struct KernelParams {
     uint64_t HHDMStart;
     FrameBuffer framebuffer;
-    MemoryMapEntry** MemoryMap;
+    void** MemoryMap;
     uint64_t MemoryMapEntryCount;
     void* RSDP;
     uint64_t kernelPhysical;
     uint64_t kernelVirtual;
-    void* symbolTable;
-    uint64_t symbolTableSize;
 };
 
 extern KernelParams g_kernelParams;

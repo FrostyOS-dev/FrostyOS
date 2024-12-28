@@ -20,7 +20,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdio.h>
 #include <string.h>
 
-#include <HAL/HAL.hpp>
+// until there is a better system:
+#ifdef __x86_64__
+#include <arch/x86_64/Panic.hpp>
+#endif
 
 extern "C" [[noreturn]] void __assert_fail(const char* assertion, const char* file, unsigned int line, const char* function) {
     char buffer[1024];

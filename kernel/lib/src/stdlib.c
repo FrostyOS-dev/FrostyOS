@@ -90,3 +90,43 @@ unsigned int rand() {
     x = y; y = z; z = w;
     return w = w ^ (w >> 19) ^ t ^ (t >> 8);
 }
+
+void* kcalloc(size_t num, size_t size) {
+    return nullptr;
+}
+
+void kfree(void* ptr) {
+
+}
+
+void* kmalloc(size_t size) {
+    return nullptr;
+}
+
+void* krealloc(void* ptr, size_t size) {
+    return nullptr;
+}
+
+void* kcalloc_vmm(size_t num, size_t size) {
+    return nullptr;
+}
+
+void kfree_vmm(void* ptr) {
+
+}
+
+void* kmalloc_vmm(size_t size) {
+    return nullptr;
+}
+
+void* krealloc_vmm(void* ptr, size_t size) {
+    return nullptr;
+}
+
+void* kcalloc_eternal(size_t num, size_t size) {
+    return nullptr;
+}
+
+void* kmalloc_eternal(size_t size) {
+    return nullptr;
+}

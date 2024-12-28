@@ -16,7 +16,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "kernel.hpp"
-#include "KernelSymbols.hpp"
 
 #include <stddef.h>
 #include <stdio.h>
@@ -25,26 +24,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Graphics/VGA.hpp>
 
-#include <Memory/Heap.hpp>
-#include <Memory/PageManager.hpp>
-#include <Memory/PageTable.hpp>
-#include <Memory/PagingUtil.hpp>
-#include <Memory/PMM.hpp>
-#include <Memory/VirtualMemoryAllocator.hpp>
-
 #include <tty/backends/DebugBackend.hpp>
 #include <tty/backends/VGABackend.hpp>
 
 #include <tty/TTY.hpp>
 
-#include <HAL/HAL.hpp>
-
-#include <Data-structures/Bitmap.hpp>
-
 #ifdef __x86_64__
 #include <arch/x86_64/KernelSymbols.hpp>
 #endif
-
 
 KernelParams g_kernelParams;
 
@@ -57,9 +44,6 @@ TTYBackendVGA g_KVGABackend;
 
 TTY g_KTTY;
 
-PageManager KPM;
-
-SymbolTable KSymTable;
 
 void StartKernel() {
     {
@@ -69,7 +53,6 @@ void StartKernel() {
         for (uint64_t i = 0; i < ctors_count; i++)
             ctors[i]();
     }
-
 
     g_KBackgroundColour = Colour(0, 0, 0);
     g_KForegroundColour = Colour(255, 255, 255);
@@ -84,19 +67,6 @@ void StartKernel() {
     g_KTTY.SetBackend(&g_KDebugBackend, TTYBackendStream::DEBUG);
 
     g_CurrentTTY = &g_KTTY;
-
-    SetHHDMOffset(g_kernelParams.HHDMStart);
-    
-    HAL_EarlyInit(g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.framebuffer.BaseAddress, g_kernelParams.framebuffer.pitch * g_kernelParams.framebuffer.height, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical, g_kernelParams.RSDP);
-    
-    KPM.Initialise(g_KPageTable, g_KVMA, false);
-    g_KPM = &KPM;
-
-    InitKernelHeap();
-    InitEternalHeap();
-
-    KSymTable.FillFromRawStringData((const char*)g_kernelParams.symbolTable, g_kernelParams.symbolTableSize);
-    g_KSymTable = &KSymTable;
 
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");
