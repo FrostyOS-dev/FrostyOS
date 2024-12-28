@@ -24,6 +24,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Graphics/VGA.hpp>
 
+#include <HAL/HAL.hpp>
+
 #include <tty/backends/DebugBackend.hpp>
 #include <tty/backends/VGABackend.hpp>
 
@@ -67,6 +69,8 @@ void StartKernel() {
     g_KTTY.SetBackend(&g_KDebugBackend, TTYBackendStream::DEBUG);
 
     g_CurrentTTY = &g_KTTY;
+
+    HAL_EarlyInit();
 
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");
