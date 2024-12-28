@@ -18,8 +18,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifdef __x86_64__
 #include <arch/x86_64/GDT.hpp>
 
+#include <arch/x86_64/interrupts/IDT.hpp>
+
 void HAL_EarlyInit() {
     x86_64_InitGDT();
+    x86_64_InitIDT();
 }
 
 #else

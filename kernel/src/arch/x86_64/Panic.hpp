@@ -20,7 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 extern char const* g_x86_64_PanicReason;
 
-extern "C" [[noreturn]] void x86_64_Panic(const char* message);
+extern "C" [[noreturn]] void x86_64_Panic(const char* message, void* registers, bool type = false); // type = false for normal panic, true for interrupt panic
 
 extern "C" [[noreturn]] void x86_64_PrePanic();
 

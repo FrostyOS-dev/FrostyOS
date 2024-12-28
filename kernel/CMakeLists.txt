@@ -20,6 +20,10 @@ endif()
 
 if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
     set(kernel_sources
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IDT.asm
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IDT.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.asm
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/ArchDefs.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/E9.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/GDT.asm

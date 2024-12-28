@@ -20,6 +20,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
+#define x86_64_GDT_KERNEL_CODE_SEGMENT 0x8
+#define x86_64_GDT_KERNEL_DATA_SEGMENT 0x10
+
 enum class x86_64_GDTAccess : uint8_t {
     Accessed = 1 << 0,
     ReadWrite = 1 << 1,
