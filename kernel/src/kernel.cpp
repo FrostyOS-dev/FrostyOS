@@ -100,15 +100,18 @@ void StartKernel() {
     
     HAL_EarlyInit(g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.framebuffer.BaseAddress, g_kernelParams.framebuffer.pitch * g_kernelParams.framebuffer.height, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical, g_kernelParams.RSDP);
     
-    KPM.Initialise(g_KPageTable, g_KVMA, false);
-    g_KPM = &KPM;
+    // KPM.Initialise(g_KPageTable, g_KVMA, false);
+    // g_KPM = &KPM;
 
-    InitKernelHeap();
-    InitEternalHeap();
+    // InitKernelHeap();
+    // InitEternalHeap();
 
-    KSymTable.FillFromRawStringData((const char*)g_kernelParams.symbolTable, g_kernelParams.symbolTableSize);
-    g_KSymTable = &KSymTable;
+    // KSymTable.FillFromRawStringData((const char*)g_kernelParams.symbolTable, g_kernelParams.symbolTableSize);
+    // g_KSymTable = &KSymTable;
 
+    void* phys_region = g_PMM->AllocatePages(2048);
+
+    VirtualMemoryAllocator TestVMA(to_HHDM(phys_region), 2048);
     
 
     // HAL_Stage2();
@@ -121,17 +124,17 @@ void StartKernel() {
     
     memset(allocated_bitmap_data, 0, MAX_ALLOCATED / 8);
     Bitmap allocated_bitmap = Bitmap(allocated_bitmap_data, MAX_ALLOCATED / 8);
-    for (uint64_t i = 0; i < 10'000'000; i++) {
+    for (uint64_t i = 0; i < 1'000'000; i++) {
         bool did_allocate = false;
         if ((rand() % 100) >= 50 && can_allocate) {
-            uint64_t size = ((rand() % (1024/16)) + 1) * 16;
-            // uint64_t size = 4096;
+            // uint64_t size = ((rand() % (1024/16)) + 1) * 16;
+            uint64_t size = 4096;
             uint64_t index = 0;
             while (allocated_bitmap[index] && index < MAX_ALLOCATED)
                 index++;
             if (index < MAX_ALLOCATED) {
                 allocated_bitmap.Set(index, true);
-                allocated[index].ptr = kcalloc(1, size);
+                allocated[index].ptr = TestVMA.AllocatePage();
                 if (allocated[index].ptr == nullptr) {
                     dbgprintf("Failed to allocate region on iteration %lu. totalMemAllocated = %lu, netMemAllocated = %lu\n", i, totalMemAllocated, netMemAllocated);
                     while (true) {}
@@ -153,7 +156,7 @@ void StartKernel() {
             while (!found) {
                 uint64_t index = rand() % MAX_ALLOCATED;
                 if (allocated_bitmap[index]) {
-                    kfree(allocated[index].ptr);
+                    TestVMA.FreePage(allocated[index].ptr);
                     allocated_bitmap.Set(index, false);
                     allocated_count--;
                     found = true;
@@ -162,9 +165,9 @@ void StartKernel() {
                 }
             }
         }
-        // if ((i % 10'000) == 0) {
-        dbgprintf("Iteration %lu: totalMemAllocated = %lu, netMemAllocated = %lu, did_allocate = %s\n", i, totalMemAllocated, netMemAllocated, did_allocate ? "true" : "false");
-        // }
+        if ((i % 1'000) == 0) {
+            dbgprintf("Iteration %lu: totalMemAllocated = %lu, netMemAllocated = %lu, did_allocate = %s\n", i, totalMemAllocated, netMemAllocated, did_allocate ? "true" : "false");
+        }
     }
 
     dbgputs("test complete\n");

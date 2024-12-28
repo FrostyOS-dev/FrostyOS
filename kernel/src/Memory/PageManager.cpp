@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "PageManager.hpp"
+#include "PagingUtil.hpp"
 #include "PageTable.hpp"
 #include "PMM.hpp"
 #include "VirtualMemoryAllocator.hpp"
@@ -49,6 +50,7 @@ uint64_t g_i;
 void* PageManager::AllocatePages(uint64_t pageCount, PagePermission permission, PageCache cache) {
     g_PMM->Verify();
     void* address = m_vma->AllocatePages(pageCount);
+    // void* address = to_HHDM(g_PMM->AllocatePages(pageCount));
     if (address == nullptr)
         return nullptr;
     VMRegion* region = (VMRegion*)kcalloc_vmm(1, sizeof(VMRegion));
@@ -66,6 +68,7 @@ void* PageManager::AllocatePage(PagePermission permission, PageCache cache) {
 }
 
 void PageManager::FreePages(void* address, uint64_t pageCount) {
+    // return;
     g_PMM->Verify();
     // for now, assume direct match
     VMRegion* region = m_regions.find(address);
@@ -80,10 +83,11 @@ void PageManager::FreePages(void* address, uint64_t pageCount) {
         m_table->Unmap((void*)((uint64_t)address + g_i * PAGE_SIZE), false);
         g_PMM->FreePage(phys_addr);
     }
-    m_vma->FreePages(address, pageCount);
     m_regions.remove(address);
-    g_PMM->Verify();
+    m_vma->FreePages(address, pageCount);
+    // g_PMM->FreePages(HHDM_to_phys(address), pageCount);
     kfree_vmm(region);
+    g_PMM->Verify();
     m_table->Flush(address, pageCount);
     g_PMM->Verify();
 }
@@ -93,6 +97,7 @@ void PageManager::FreePage(void* address) {
 }
 
 void* PageManager::AllocatePages(void* address, uint64_t pageCount, PagePermission permission, PageCache cache) {
+    return nullptr;
     void* addr = m_vma->AllocatePages(address, pageCount);
     if (addr == nullptr)
         return nullptr;
@@ -110,6 +115,7 @@ void* PageManager::AllocatePage(void* address, PagePermission permission, PageCa
 }
 
 void* PageManager::MapPages(void* virtualAddress, void* physicalAddress, uint64_t pageCount, PagePermission permission, PageCache cache) {
+    return nullptr;
     void* addr = nullptr;
     if (virtualAddress == nullptr)
         addr = m_vma->AllocatePages(pageCount);
@@ -131,6 +137,7 @@ void* PageManager::MapPage(void* virtualAddress, void* physicalAddress, PagePerm
 }
 
 void PageManager::UnmapPages(void* virtualAddress, uint64_t pageCount) {
+    return;
     VMRegion* region = m_regions.find(virtualAddress);
     if (region == nullptr || (pageCount > 0 && region->GetSize() != pageCount * PAGE_SIZE))
         return;
@@ -149,6 +156,7 @@ void PageManager::UnmapPage(void* virtualAddress) {
 }
 
 void PageManager::RemapPages(void* virtualAddress, PagePermission permission, PageCache cache) {
+    return; // TODO: remove this
     VMRegion* region = m_regions.find(virtualAddress);
     if (region == nullptr)
         return;

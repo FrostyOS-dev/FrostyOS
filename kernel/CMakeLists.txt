@@ -39,7 +39,7 @@ target_compile_options(uacpi
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-ffreestanding>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-pie>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fstack-protector>
-    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fsanitize=undefined>
+    # PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fsanitize=undefined>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mgeneral-regs-only>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mno-red-zone>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-O2>
@@ -181,7 +181,7 @@ target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-ffreestanding>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-pie>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fstack-protector>
-    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fsanitize=undefined>
+    # PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fsanitize=undefined>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mgeneral-regs-only>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mno-red-zone>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-O2>

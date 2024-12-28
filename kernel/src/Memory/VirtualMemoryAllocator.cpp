@@ -38,6 +38,7 @@ VirtualMemoryAllocator::~VirtualMemoryAllocator() {
 }
 
 void* VirtualMemoryAllocator::AllocatePages(uint64_t pageCount) {
+    Verify();
     const uint64_t initialPageCount = pageCount;
     m_freeSizeTree.lock();
 
@@ -97,6 +98,8 @@ void* VirtualMemoryAllocator::AllocatePages(uint64_t pageCount) {
     m_usedPages += initialPageCount;
     m_freePages -= initialPageCount;
     spinlock_release(&m_lock);
+    Verify();
+    // dbgprintf("Allocated %lu pages at %lp\n", pageCount, address);
     return address;
 }
 
@@ -186,6 +189,8 @@ void* VirtualMemoryAllocator::AllocatePage(void* address) {
 }
 
 void VirtualMemoryAllocator::FreePages(void* address, uint64_t pageCount) {
+    // dbgprintf("Freeing %lu pages at %lp\n", pageCount, address);
+    Verify();
     const uint64_t initialPageCount = pageCount;
     m_allAddressTree.lock();
     AVLTree::Node* node = AVLTree::findNode(m_allAddressTree.GetRoot(), (uint64_t)address);
@@ -197,60 +202,61 @@ void VirtualMemoryAllocator::FreePages(void* address, uint64_t pageCount) {
     PageRegionData* data = (PageRegionData*)&(node->extraData);
     if (data->free == 1 || data->pageCount != pageCount) {
         m_allAddressTree.unlock();
+        assert(false); // temporary
         return;
     }
     data->free = 1;
 
-    struct i_PageRegion {
-        uint64_t pageCount;
-        uint64_t address;
-    } regionsForRemoval[2];
-    uint64_t regionsForRemovalCount = 0;
+    // struct i_PageRegion {
+    //     uint64_t pageCount;
+    //     uint64_t address;
+    // } regionsForRemoval[2];
+    // uint64_t regionsForRemovalCount = 0;
 
     m_freeSizeTree.lock();
-    // first find the previous region
-    uint64_t realAddress = 0;
-    AVLTree::Node* prevNode = AVLTree::findNodeOrLower(m_allAddressTree.GetRoot(), (uint64_t)address - 1, &realAddress);
-    if (prevNode != nullptr) {
-        PageRegionData* prevData = (PageRegionData*)&(prevNode->extraData);
-        if (prevData->free == 1 && prevData->reserved == 0 && ((uint64_t)realAddress + prevData->pageCount * PAGE_SIZE) == (uint64_t)address) {
-            regionsForRemoval[regionsForRemovalCount].pageCount = prevData->pageCount;
-            regionsForRemoval[regionsForRemovalCount].address = realAddress;
-            regionsForRemovalCount++;
+    // // first find the previous region
+    // uint64_t realAddress = 0;
+    // AVLTree::Node* prevNode = AVLTree::findNodeOrLower(m_allAddressTree.GetRoot(), (uint64_t)address - 1, &realAddress);
+    // if (prevNode != nullptr) {
+    //     PageRegionData* prevData = (PageRegionData*)&(prevNode->extraData);
+    //     if (prevData->free == 1 && prevData->reserved == 0 && ((uint64_t)realAddress + prevData->pageCount * PAGE_SIZE) == (uint64_t)address) {
+    //         regionsForRemoval[regionsForRemovalCount].pageCount = prevData->pageCount;
+    //         regionsForRemoval[regionsForRemovalCount].address = realAddress;
+    //         regionsForRemovalCount++;
 
-            // remove the current node from the all address tree
-            m_allAddressTree.remove(address);
+    //         // remove the current node from the all address tree
+    //         m_allAddressTree.remove(address);
 
-            // add the page count to the previous node
-            prevData->pageCount += pageCount;
+    //         // add the page count to the previous node
+    //         prevData->pageCount += pageCount;
 
-            address = (void*)realAddress;
-            pageCount = prevData->pageCount;
-            data = prevData;
-        }
-    }
+    //         address = (void*)realAddress;
+    //         pageCount = prevData->pageCount;
+    //         data = prevData;
+    //     }
+    // }
 
-    // now find the next region
-    realAddress = 0;
-    AVLTree::Node* nextNode = AVLTree::findNode(m_allAddressTree.GetRoot(), (uint64_t)address + pageCount * PAGE_SIZE);
-    if (nextNode != nullptr) {
-        PageRegionData* nextData = (PageRegionData*)&(nextNode->extraData);
-        if (nextData->free == 1 && nextData->reserved == 0) {
-            regionsForRemoval[regionsForRemovalCount].pageCount = nextData->pageCount;
-            regionsForRemoval[regionsForRemovalCount].address = (uint64_t)address + pageCount * PAGE_SIZE;
-            regionsForRemovalCount++;
+    // // now find the next region
+    // realAddress = 0;
+    // AVLTree::Node* nextNode = AVLTree::findNode(m_allAddressTree.GetRoot(), (uint64_t)address + pageCount * PAGE_SIZE);
+    // if (nextNode != nullptr) {
+    //     PageRegionData* nextData = (PageRegionData*)&(nextNode->extraData);
+    //     if (nextData->free == 1 && nextData->reserved == 0) {
+    //         regionsForRemoval[regionsForRemovalCount].pageCount = nextData->pageCount;
+    //         regionsForRemoval[regionsForRemovalCount].address = (uint64_t)address + pageCount * PAGE_SIZE;
+    //         regionsForRemovalCount++;
 
-            uint64_t nextPageCount = nextData->pageCount;
+    //         uint64_t nextPageCount = nextData->pageCount;
 
-            // remove the next node from the all address tree
-            m_allAddressTree.remove((void*)((uint64_t)address + pageCount * PAGE_SIZE));
+    //         // remove the next node from the all address tree
+    //         m_allAddressTree.remove((void*)((uint64_t)address + pageCount * PAGE_SIZE));
 
-            // add the page count to the previous node
-            data->pageCount += nextPageCount;
+    //         // add the page count to the previous node
+    //         data->pageCount += nextPageCount;
 
-            pageCount = data->pageCount;
-        }
-    }
+    //         pageCount = data->pageCount;
+    //     }
+    // }
 
     m_allAddressTree.unlock();
 
@@ -261,37 +267,38 @@ void VirtualMemoryAllocator::FreePages(void* address, uint64_t pageCount) {
     LinkedList::insertNode(root, (uint64_t)address, false, true);
     sizeNode->extraData = (uint64_t)root;
 
-    if (regionsForRemovalCount == 2 && regionsForRemoval[0].pageCount == regionsForRemoval[1].pageCount) {
-        sizeNode = AVLTree::findNode(m_freeSizeTree.GetRoot(), regionsForRemoval[0].pageCount);
-        if (sizeNode != nullptr) {
-            LinkedList::Node* root = (LinkedList::Node*)sizeNode->extraData;
-            LinkedList::deleteNode(root, regionsForRemoval[0].address, true);
-            LinkedList::deleteNode(root, regionsForRemoval[1].address, true);
-            if (root == nullptr)
-                m_freeSizeTree.remove(regionsForRemoval[0].pageCount);
-            else
-                sizeNode->extraData = (uint64_t)root;
-        }
-    }
-    else {
-        for (uint64_t i = 0; i < regionsForRemovalCount; i++) {
-            sizeNode = AVLTree::findNode(m_freeSizeTree.GetRoot(), regionsForRemoval[i].pageCount);
-            if (sizeNode != nullptr) {
-                LinkedList::Node* root = (LinkedList::Node*)sizeNode->extraData;
-                LinkedList::deleteNode(root, regionsForRemoval[i].address, true);
-                if (root == nullptr)
-                    m_freeSizeTree.remove(regionsForRemoval[i].pageCount);
-                else
-                    sizeNode->extraData = (uint64_t)root;
-            }
-        }
-    }
+    // if (regionsForRemovalCount == 2 && regionsForRemoval[0].pageCount == regionsForRemoval[1].pageCount) { // simple optimisation
+    //     sizeNode = AVLTree::findNode(m_freeSizeTree.GetRoot(), regionsForRemoval[0].pageCount);
+    //     if (sizeNode != nullptr) {
+    //         LinkedList::Node* root = (LinkedList::Node*)sizeNode->extraData;
+    //         LinkedList::deleteNode(root, regionsForRemoval[0].address, true);
+    //         LinkedList::deleteNode(root, regionsForRemoval[1].address, true);
+    //         if (root == nullptr)
+    //             m_freeSizeTree.remove(regionsForRemoval[0].pageCount);
+    //         else
+    //             sizeNode->extraData = (uint64_t)root;
+    //     }
+    // }
+    // else {
+        // for (uint64_t i = 0; i < regionsForRemovalCount; i++) {
+        //     sizeNode = AVLTree::findNode(m_freeSizeTree.GetRoot(), regionsForRemoval[i].pageCount);
+        //     if (sizeNode != nullptr) {
+        //         LinkedList::Node* root = (LinkedList::Node*)sizeNode->extraData;
+        //         LinkedList::deleteNode(root, regionsForRemoval[i].address, true);
+        //         if (root == nullptr)
+        //             m_freeSizeTree.remove(regionsForRemoval[i].pageCount);
+        //         else
+        //             sizeNode->extraData = (uint64_t)root;
+        //     }
+        // }
+    // }
     m_freeSizeTree.unlock();
 
     spinlock_acquire(&m_lock);
     m_usedPages -= initialPageCount;
     m_freePages += initialPageCount;
     spinlock_release(&m_lock);
+    Verify();
 }
 
 void VirtualMemoryAllocator::FreePage(void* address) {
@@ -517,60 +524,60 @@ void VirtualMemoryAllocator::Verify() {
     //     uint64_t address;
     // };
     // LinkedList::SimpleLinkedList<i_PageRegion> regions(true, true);
-    // struct Data {
-    //     LinkedList::SimpleLinkedList<i_PageRegion>* regions;
-    //     VirtualMemoryAllocator* vma;
-    // } data = {&regions, this};
-    // m_freeSizeTree.Enumerate([](uint64_t key, LinkedList::Node* root, void* data) -> void {
-    //     Data* d = (Data*)data;
-    //     VirtualMemoryAllocator* vma = d->vma;
-    //     LinkedList::SimpleLinkedList<i_PageRegion>* regions = d->regions;
-    //     while (root != nullptr) {
-    //         void* address = (void*)root->data;
-    //         for (uint64_t i = 0; i < regions->getCount(); i++) {
-    //             i_PageRegion* region = regions->get(i);
-    //             if (region->address == (uint64_t)address) {
-    //                 dbgprintf("Free size tree: address %lp already exists in regions list\n", address);
-    //                 assert(false);
-    //                 return;
-    //             }
-    //             if (!((region->address < (uint64_t)address && (region->address + region->pageCount * PAGE_SIZE) <= (uint64_t)address) || ((uint64_t)address < region->address && ((uint64_t)address + key * PAGE_SIZE) <= region->address))) {
-    //                 dbgprintf("Free size tree: address %lp, size %lu overlaps with region: address %lp, size %lp\n", address, key, region->address, region->pageCount);
-    //                 assert(false);
-    //                 return;
-    //             }
-    //         }
-    //         {
-    //             i_PageRegion* region = (i_PageRegion*)kcalloc_vmm(1, sizeof(i_PageRegion));
-    //             region->pageCount = key;
-    //             region->address = (uint64_t)address;
-    //             regions->insert(region);
-    //         }
-    //         AVLTree::Node* node = AVLTree::findNode(vma->m_allAddressTree.GetRoot(), (uint64_t)address);
-    //         if (node == nullptr) {
-    //             dbgprintf("Free size tree: address %lp not found in all address tree\n", address);
-    //             assert(false);
-    //             return;
-    //         }
-    //         PageRegionData* data = (PageRegionData*)&(node->extraData);
-    //         if (data->free == 0) {
-    //             dbgprintf("Free size tree: address %lp is not free\nEnumerating all address tree:\n", address);
-    //             vma->m_allAddressTree.Enumerate([](void* address, uint64_t extraData, void*) {
-    //                 PageRegionData* data = (PageRegionData*)&extraData;
-    //                 dbgprintf("address: %lp, pageCount: %lu, free: %d, reserved: %d\n", address, data->pageCount, data->free, data->reserved);
-    //             }, nullptr);
-    //             dbgprintf("\n");
-    //             assert(false);
-    //             return;
-    //         }
-    //         if (data->pageCount != key) {
-    //             dbgprintf("Free size tree: address %lp has pageCount %lu, expected %lu\n", address, data->pageCount, key);
-    //             assert(false);
-    //             return;
-    //         }
-    //         root = root->next;
-    //     }
-    // }, &data);
+    struct Data {
+        // LinkedList::SimpleLinkedList<i_PageRegion>* regions;
+        VirtualMemoryAllocator* vma;
+    } data = {/*&regions,*/ this};
+    m_freeSizeTree.Enumerate([](uint64_t key, LinkedList::Node* root, void* data) -> void {
+        Data* d = (Data*)data;
+        VirtualMemoryAllocator* vma = d->vma;
+        // LinkedList::SimpleLinkedList<i_PageRegion>* regions = d->regions;
+        while (root != nullptr) {
+            void* address = (void*)root->data;
+            // for (uint64_t i = 0; i < regions->getCount(); i++) {
+            //     i_PageRegion* region = regions->get(i);
+            //     if (region->address == (uint64_t)address) {
+            //         dbgprintf("Free size tree: address %lp already exists in regions list\n", address);
+            //         assert(false);
+            //         return;
+            //     }
+            //     if (!((region->address < (uint64_t)address && (region->address + region->pageCount * PAGE_SIZE) <= (uint64_t)address) || ((uint64_t)address < region->address && ((uint64_t)address + key * PAGE_SIZE) <= region->address))) {
+            //         dbgprintf("Free size tree: address %lp, size %lu overlaps with region: address %lp, size %lp\n", address, key, region->address, region->pageCount);
+            //         assert(false);
+            //         return;
+            //     }
+            // }
+            // {
+            //     i_PageRegion* region = (i_PageRegion*)kcalloc_vmm(1, sizeof(i_PageRegion));
+            //     region->pageCount = key;
+            //     region->address = (uint64_t)address;
+            //     regions->insert(region);
+            // }
+            AVLTree::Node* node = AVLTree::findNode(vma->m_allAddressTree.GetRoot(), (uint64_t)address);
+            if (node == nullptr) {
+                dbgprintf("Free size tree: address %lp not found in all address tree\n", address);
+                assert(false);
+                return;
+            }
+            PageRegionData* data = (PageRegionData*)&(node->extraData);
+            if (data->free == 0) {
+                dbgprintf("Free size tree: address %lp is not free\nEnumerating all address tree:\n", address);
+                vma->m_allAddressTree.Enumerate([](void* address, uint64_t extraData, void*) {
+                    PageRegionData* data = (PageRegionData*)&extraData;
+                    dbgprintf("address: %lp, pageCount: %lu, free: %d, reserved: %d\n", address, data->pageCount, data->free, data->reserved);
+                }, nullptr);
+                dbgprintf("\n");
+                assert(false);
+                return;
+            }
+            if (data->pageCount != key) {
+                dbgprintf("Free size tree: address %lp has pageCount %lu, expected %lu\n", address, data->pageCount, key);
+                assert(false);
+                return;
+            }
+            root = root->next;
+        }
+    }, &data);
     // {
     //     uint64_t count = regions.getCount();
     //     for (uint64_t i = 0; i < count; i++) {

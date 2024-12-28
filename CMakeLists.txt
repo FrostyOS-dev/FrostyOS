@@ -74,18 +74,18 @@ add_dependencies(build_iso build_boot build_mkgpt update_ovmf)
 
 if(FROSTYOS_BUILD_CONFIG STREQUAL "Debug")
 	add_custom_target(run-qemu
-		COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/hdimage.bin,index=0,media=disk -m 24G -debugcon stdio  -M q35 -cpu qemu64 -no-reboot -no-shutdown -s -smp 2 # -machine accel=kvm
+		COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/hdimage.bin,index=0,media=disk -m 24G -debugcon stdio  -M q35 -cpu qemu64 -no-reboot -no-shutdown -s -smp 2 # -machine accel=kvm
 		USES_TERMINAL
 	)
 else()
 	if(FROSTYOS_BUILD_CONFIG STREQUAL "Release")
 		add_custom_target(run-qemu
-			COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/hdimage.bin,index=0,media=disk -m 256M -machine accel=kvm -M q35 -cpu qemu64
+			COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/hdimage.bin,index=0,media=disk -m 256M -machine accel=kvm -M q35 -cpu qemu64
 			USES_TERMINAL
 		)
 	else() # Default is Debug
 		add_custom_target(run-qemu
-			COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/hdimage.bin,index=0,media=disk -m 256M -debugcon stdio -machine accel=kvm -M q35 -cpu qemu64
+			COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/hdimage.bin,index=0,media=disk -m 256M -debugcon stdio -machine accel=kvm -M q35 -cpu qemu64
 			USES_TERMINAL
 		)
 	endif()

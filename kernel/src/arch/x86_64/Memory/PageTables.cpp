@@ -173,6 +173,7 @@ void x86_64_RemapPage(x86_64_Level4Table* Table, uint64_t VirtualAddress, uint32
 }
 
 void x86_64_UnmapPage(x86_64_Level4Table* Table, uint64_t VirtualAddress) {
+    return; // temp
     uint64_t PML4Index = (VirtualAddress >> 39) & 0x1FF;
     uint64_t PML3Index = (VirtualAddress >> 30) & 0x1FF;
     uint64_t PML2Index = (VirtualAddress >> 21) & 0x1FF;
@@ -195,6 +196,8 @@ void x86_64_UnmapPage(x86_64_Level4Table* Table, uint64_t VirtualAddress) {
 
     x86_64_Level1Table* PML1Table = (x86_64_Level1Table*)to_HHDM((void*)(PML2Table->entries[PML2Index].Base << 12));
     memset(&(PML1Table->entries[PML1Index]), 0, sizeof(x86_64_PML1Entry));
+
+    return; // temp
 
     for (uint64_t i = 0; i < 512; i++) {
         if (PML1Table->entries[i].Present)

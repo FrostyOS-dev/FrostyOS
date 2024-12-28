@@ -514,19 +514,19 @@ void InitVMMHeap() {
 }
 
 extern "C" void* kmalloc_vmm(size_t size) {
-    // return g_VMMHeap.allocate(size);
+    return g_VMMHeap.allocate(size);
     // dbgprintf("kmalloc_vmm: size = %lu\n", size);
-    uint64_t pageCount = DIV_ROUNDUP(size, PAGE_SIZE);
-    void* ptr = to_HHDM(g_PMM->AllocatePages(pageCount + 2));
-    if (ptr == nullptr)
-        return nullptr;
-    x86_64_UnmapPage(g_Level4Table, (uint64_t)ptr);
-    x86_64_UnmapPage(g_Level4Table, ((uint64_t)ptr + (pageCount + 1) * PAGE_SIZE));
-    return (void*)((uint64_t)ptr + PAGE_SIZE);
+    // uint64_t pageCount = DIV_ROUNDUP(size, PAGE_SIZE);
+    // void* ptr = to_HHDM(g_PMM->AllocatePages(pageCount + 2));
+    // if (ptr == nullptr)
+    //     return nullptr;
+    // x86_64_UnmapPage(g_Level4Table, (uint64_t)ptr);
+    // x86_64_UnmapPage(g_Level4Table, ((uint64_t)ptr + (pageCount + 1) * PAGE_SIZE));
+    // return (void*)((uint64_t)ptr + PAGE_SIZE);
 }
 
 extern "C" void kfree_vmm(void* ptr) {
-    // g_VMMHeap.free(ptr);
+    g_VMMHeap.free(ptr);
 }
 
 extern "C" void* krealloc_vmm(void *ptr, size_t size) {
