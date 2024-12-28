@@ -75,8 +75,6 @@ void StartKernel() {
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");
 
-    __asm__ volatile("ud2");
-
     while (true) {
         __asm__ volatile("hlt");
     }
