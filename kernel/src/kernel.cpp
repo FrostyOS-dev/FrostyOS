@@ -70,7 +70,7 @@ void StartKernel() {
 
     g_CurrentTTY = &g_KTTY;
 
-    HAL_EarlyInit();
+    HAL_EarlyInit(g_kernelParams.HHDMStart, g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount);
 
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");

@@ -18,10 +18,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _KERNEL_HAL_HPP
 #define _KERNEL_HAL_HPP
 
+#include <stdint.h>
+
+#include <Memory/MemoryMap.hpp>
+
 #ifdef __x86_64__
 #include <arch/x86_64/Panic.hpp>
 #endif
 
-void HAL_EarlyInit();
+void HAL_EarlyInit(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount);
 
 #endif /* _KERNEL_HAL_HPP */

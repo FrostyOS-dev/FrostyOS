@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2022-2024  Frosty515
+Copyright (©) 2024  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,16 +15,16 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include <assert.h>
+#include "PagingInit.hpp"
 
-#include <stdio.h>
-#include <string.h>
+#include <Memory/PagingUtil.hpp>
+#include <Memory/PMM.hpp>
 
-#include <HAL/HAL.hpp>
+PMM KPMM;
 
-extern "C" [[noreturn]] void __assert_fail(const char* assertion, const char* file, unsigned int line, const char* function) {
-    char buffer[1024];
-    memset(buffer, 0, 1024);
-    snprintf(buffer, 1023, "Assertion failed: \"%s\", file %s, line %u, function \"%s\"", assertion, file, line, function);
-    PANIC(buffer);
+void x86_64_InitPaging(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount) {
+    SetHHDMOffset(HHDMOffset);
+    
+    KPMM.Init(memoryMap, memoryMapEntryCount);
+    g_PMM = &KPMM;
 }

@@ -24,6 +24,7 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IDT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PagingInit.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/ArchDefs.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/E9.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/GDT.asm
@@ -51,6 +52,8 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGA.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGAFont.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/HAL.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PagingUtil.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PMM.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/kernel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/limine_entry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/DebugBackend.cpp
@@ -61,6 +64,7 @@ set(kernel_sources
 
 set(kernel_lib_sources
     ${kernel_lib_sources}
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/DataStructures/Bitmap.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/assert.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/icxxabi.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/math.c

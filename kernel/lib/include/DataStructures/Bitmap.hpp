@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2022-2024  Frosty515
+Copyright (©) 2024  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,16 +15,29 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include <assert.h>
+#ifndef _BITMAP_HPP
+#define _BITMAP_HPP
 
-#include <stdio.h>
-#include <string.h>
+#include <stdint.h>
 
-#include <HAL/HAL.hpp>
+// A simple bitmap class where the data buffer needs to be provided by the user.
+class RawBitmap {
+public:
+    RawBitmap();
+    RawBitmap(uint8_t* buffer, uint64_t size); // size is in bytes
 
-extern "C" [[noreturn]] void __assert_fail(const char* assertion, const char* file, unsigned int line, const char* function) {
-    char buffer[1024];
-    memset(buffer, 0, 1024);
-    snprintf(buffer, 1023, "Assertion failed: \"%s\", file %s, line %u, function \"%s\"", assertion, file, line, function);
-    PANIC(buffer);
-}
+    void Set(uint64_t index, bool value);
+    bool Get(uint64_t index) const;
+
+    uint8_t* GetBuffer() const;
+    uint64_t GetSize() const; // in bytes
+
+    void SetBuffer(uint8_t* buffer);
+    void SetSize(uint64_t size); // in bytes
+
+private:
+    uint8_t* m_Buffer;
+    uint64_t m_Size; // in bytes
+};
+
+#endif /* _BITMAP_HPP */

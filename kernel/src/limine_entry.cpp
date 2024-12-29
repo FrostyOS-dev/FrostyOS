@@ -19,9 +19,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "debug.h"
 #include "kernel.hpp"
 
+#include <Memory/MemoryMap.hpp>
+
 extern "C" {
 
-LIMINE_BASE_REVISION(2)
+LIMINE_BASE_REVISION(3)
 
 static volatile struct limine_hhdm_request hhdm_request = {
     .id = LIMINE_HHDM_REQUEST,
@@ -107,7 +109,7 @@ void _start() {
         (uint8_t)((1 << fb->blue_mask_size) - 1),
         fb->blue_mask_shift
     };
-    g_kernelParams.MemoryMap = (void**)memmap_request.response->entries;
+    g_kernelParams.MemoryMap = (MemoryMapEntry**)memmap_request.response->entries;
     g_kernelParams.MemoryMapEntryCount = memmap_request.response->entry_count;
     g_kernelParams.RSDP = rsdp_request.response->address;
     g_kernelParams.kernelPhysical = kernel_address_request.response->physical_base;

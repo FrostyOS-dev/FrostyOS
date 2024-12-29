@@ -18,10 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdint.h>
 #include <util.h>
 
-// until there is a better system:
-#ifdef __x86_64__
-#include <arch/x86_64/Panic.hpp>
-#endif
+#include <HAL/HAL.hpp>
 
 #define STACK_CHK_GUARD 0x595e9fbd94fda766
 
