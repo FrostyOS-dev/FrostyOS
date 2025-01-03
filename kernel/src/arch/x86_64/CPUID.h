@@ -1,8 +1,5 @@
-# FrostyOS
-
-## COPYING
-
-Copyright (©) 2022-2025  Frosty515
+/*
+Copyright (©) 2024  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,7 +13,28 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
 
-## Status
+#ifndef _x86_64_CPUID_H
+#define _x86_64_CPUID_H
 
-This is the 3rd of iteration of FrostyOS.
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct x86_64_CPUIDResult {
+    uint32_t EAX;
+    uint32_t EBX;
+    uint32_t ECX;
+    uint32_t EDX;
+};
+
+struct x86_64_CPUIDResult x86_64_CPUID(uint32_t EAX, uint32_t ECX);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _x86_64_CPUID_H */

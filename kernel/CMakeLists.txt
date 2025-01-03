@@ -1,4 +1,4 @@
-# Copyright (©) 2024  Frosty515
+# Copyright (©) 2024-2025  Frosty515
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -24,13 +24,19 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IDT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PageTables.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PagingInit.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PagingUtil.asm
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PagingUtil.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PAT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/ArchDefs.asm
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/CPUID.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/E9.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/GDT.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/GDT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/IO.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/KernelSymbols.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/MSR.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Panic.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Panic.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/start.asm

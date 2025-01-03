@@ -1,8 +1,5 @@
-# FrostyOS
-
-## COPYING
-
-Copyright (©) 2022-2025  Frosty515
+/*
+Copyright (©) 2025  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,7 +13,22 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
 
-## Status
+#ifndef _x86_64_MSR_H
+#define _x86_64_MSR_H
 
-This is the 3rd of iteration of FrostyOS.
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+uint64_t x86_64_ReadMSR(uint32_t msr);
+void x86_64_WriteMSR(uint32_t msr, uint64_t value);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _x86_64_MSR_H */

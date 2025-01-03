@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2025  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -46,6 +46,7 @@ TTYBackendVGA g_KVGABackend;
 
 TTY g_KTTY;
 
+#define TEST_ADDR 0xFF10'0000'0000'0000
 
 void StartKernel() {
     {
@@ -70,7 +71,7 @@ void StartKernel() {
 
     g_CurrentTTY = &g_KTTY;
 
-    HAL_EarlyInit(g_kernelParams.HHDMStart, g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount);
+    HAL_EarlyInit(g_kernelParams.HHDMStart, g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.pagingMode, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical);
 
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");

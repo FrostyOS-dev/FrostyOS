@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2025  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -58,9 +58,8 @@ extern "C" [[noreturn]] void x86_64_Panic(const char* message, void* registers, 
     if (type /* interrupt */) {
         dbgprintf("  SS=%04x\n", isrFrame->SS);
         dbgprintf("INT=%016lx  ERR=%016lx\n", isrFrame->INT, isrFrame->ERR);
-        if (isrFrame->INT == 14) {
+        if (isrFrame->INT == 13 || isrFrame->INT == 14)
             dbgprintf("CR2=%016lx  ", isrFrame->CR2);
-        }
     }
     else
         dbgputc('\n');
@@ -82,9 +81,8 @@ extern "C" [[noreturn]] void x86_64_Panic(const char* message, void* registers, 
     if (type /* interrupt */) {
         printf("  SS=%04x\n", isrFrame->SS);
         printf("INT=%016lx  ERR=%016lx\n", isrFrame->INT, isrFrame->ERR);
-        if (isrFrame->INT == 14) {
+        if (isrFrame->INT == 13 || isrFrame->INT == 14)
             printf("CR2=%016lx  ", isrFrame->CR2);
-        }
     }
     else
         putchar('\n');

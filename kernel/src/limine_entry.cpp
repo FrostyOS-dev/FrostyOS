@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2025  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -42,8 +42,8 @@ static volatile struct limine_paging_mode_request paging_mode_request = {
     .id = LIMINE_PAGING_MODE_REQUEST,
     .revision = 1,
     .response = nullptr,
-    .mode = LIMINE_PAGING_MODE_X86_64_4LVL,
-    .max_mode = LIMINE_PAGING_MODE_X86_64_4LVL,
+    .mode = LIMINE_PAGING_MODE_X86_64_5LVL,
+    .max_mode = LIMINE_PAGING_MODE_X86_64_5LVL,
     .min_mode = LIMINE_PAGING_MODE_X86_64_4LVL
 };
 #endif
@@ -114,6 +114,18 @@ void _start() {
     g_kernelParams.RSDP = rsdp_request.response->address;
     g_kernelParams.kernelPhysical = kernel_address_request.response->physical_base;
     g_kernelParams.kernelVirtual = kernel_address_request.response->virtual_base;
+    switch (paging_mode_request.response->mode) {
+#ifdef __x86_64__
+        case LIMINE_PAGING_MODE_X86_64_4LVL:
+            g_kernelParams.pagingMode = PagingMode::_4LVL;
+            break;
+        case LIMINE_PAGING_MODE_X86_64_5LVL:
+            g_kernelParams.pagingMode = PagingMode::_5LVL;
+            break;
+#endif
+        default:
+            limine_request_fail("paging_mode");
+    }
 
     StartKernel();
     while (true) {}
