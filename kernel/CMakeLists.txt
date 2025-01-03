@@ -22,8 +22,10 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
     set(kernel_sources
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IDT.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IDT.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IRQ.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/PIC.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PageTables.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PagingInit.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PagingUtil.asm
@@ -39,6 +41,7 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/MSR.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Panic.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Panic.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/PIT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/start.asm
     )
 

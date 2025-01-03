@@ -101,7 +101,7 @@ bool in_exception = false;
 
 extern "C" void x86_64_ISR_Handler(x86_64_ISR_Frame* frame) {
     if (g_ISR_Handlers[frame->INT] != nullptr)
-        g_ISR_Handlers[frame->INT](frame);
+        return g_ISR_Handlers[frame->INT](frame);
 
     if (in_exception) {
         while (true) {

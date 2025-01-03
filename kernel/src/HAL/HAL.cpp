@@ -19,14 +19,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #ifdef __x86_64__
 #include <arch/x86_64/GDT.hpp>
+#include <arch/x86_64/PIT.hpp>
 
 #include <arch/x86_64/interrupts/IDT.hpp>
+#include <arch/x86_64/interrupts/IRQ.hpp>
 
 #include <arch/x86_64/Memory/PagingInit.hpp>
 
 void HAL_EarlyInit(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical) {
     x86_64_InitGDT();
     x86_64_InitIDT();
+    x86_64_IRQ_Init();
+    x86_64_PIT_Init();
     x86_64_InitPaging(HHDMOffset, memoryMap, memoryMapEntryCount, pagingMode, kernelVirtual, kernelPhysical);
 }
 
