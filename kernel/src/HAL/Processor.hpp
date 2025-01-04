@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024-2025  Frosty515
+Copyright (©) 2025  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,22 +15,27 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#ifndef _HAL_PROCESSOR_HPP
+#define _HAL_PROCESSOR_HPP
+
 #include "HAL.hpp"
-#include "Processor.hpp"
 
-#ifdef __x86_64__
-#include <arch/x86_64/GDT.hpp>
-#include <arch/x86_64/PIT.hpp>
+#include <stdint.h>
 
-#include <arch/x86_64/interrupts/IDT.hpp>
-#include <arch/x86_64/interrupts/IRQ.hpp>
+#include <Memory/MemoryMap.hpp>
 
-#include <arch/x86_64/Memory/PagingInit.hpp>
+// to be implemented by arch specific code
+class Processor {
+public:
+    virtual ~Processor() {};
 
-void HAL_EarlyInit(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical) {
-    g_BSP->Init(HHDMOffset, memoryMap, memoryMapEntryCount, pagingMode, kernelVirtual, kernelPhysical);
-}
+    virtual void Init() = 0;
+    virtual void Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical) = 0;
 
-#else
-#error "HAL: Unsupported architecture"
-#endif
+protected:
+    bool m_BSP;
+};
+
+extern Processor* g_BSP;
+
+#endif /* _HAL_PROCESSOR_HPP */

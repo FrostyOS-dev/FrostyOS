@@ -42,6 +42,7 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Panic.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Panic.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/PIT.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Processor.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/start.asm
     )
 
