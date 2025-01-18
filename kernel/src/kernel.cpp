@@ -46,8 +46,6 @@ TTYBackendVGA g_KVGABackend;
 
 TTY g_KTTY;
 
-#define TEST_ADDR 0xFF10'0000'0000'0000
-
 void StartKernel() {
     {
         typedef void (*ctor_fn)();
