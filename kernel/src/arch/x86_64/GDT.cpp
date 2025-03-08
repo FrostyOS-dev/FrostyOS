@@ -19,7 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <string.h>
 
-x86_64_GDTEntry g_x86_64_GDT[3];
+x86_64_GDTEntry g_x86_64_GDT[5];
 
 void x86_64_InitGDT() {
     memset(g_x86_64_GDT, 0, sizeof(g_x86_64_GDT));
@@ -39,6 +39,22 @@ void x86_64_InitGDT() {
     g_x86_64_GDT[2].Limit1 = 0xF;
     g_x86_64_GDT[2].Flags = (uint8_t)x86_64_GDTFlags::LongMode | (uint8_t)x86_64_GDTFlags::Granularity;
     g_x86_64_GDT[2].Base2 = 0;
+
+    g_x86_64_GDT[3].Limit0 = 0xFFFF;
+    g_x86_64_GDT[3].Base0 = 0;
+    g_x86_64_GDT[3].Base1 = 0;
+    g_x86_64_GDT[3].Access = (uint8_t)x86_64_GDTAccess::Accessed | (uint8_t)x86_64_GDTAccess::ReadWrite | (uint8_t)x86_64_GDTAccess::Execute | (uint8_t)x86_64_GDTAccess::NonSystem | (uint8_t)x86_64_GDTAccess::Privilege3 | (uint8_t)x86_64_GDTAccess::Present;
+    g_x86_64_GDT[3].Limit1 = 0xF;
+    g_x86_64_GDT[3].Flags = (uint8_t)x86_64_GDTFlags::LongMode | (uint8_t)x86_64_GDTFlags::Granularity;
+    g_x86_64_GDT[3].Base2 = 0;
+
+    g_x86_64_GDT[4].Limit0 = 0xFFFF;
+    g_x86_64_GDT[4].Base0 = 0;
+    g_x86_64_GDT[4].Base1 = 0;
+    g_x86_64_GDT[4].Access = (uint8_t)x86_64_GDTAccess::Accessed | (uint8_t)x86_64_GDTAccess::ReadWrite | (uint8_t)x86_64_GDTAccess::NonSystem | (uint8_t)x86_64_GDTAccess::Privilege3 | (uint8_t)x86_64_GDTAccess::Present;
+    g_x86_64_GDT[4].Limit1 = 0xF;
+    g_x86_64_GDT[4].Flags = (uint8_t)x86_64_GDTFlags::LongMode | (uint8_t)x86_64_GDTFlags::Granularity;
+    g_x86_64_GDT[4].Base2 = 0;
 
     x86_64_GDTPointer gdtPointer;
     gdtPointer.Limit = sizeof(g_x86_64_GDT) - 1;

@@ -15,29 +15,12 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _HAL_PROCESSOR_HPP
-#define _HAL_PROCESSOR_HPP
-
-#include "HAL.hpp"
+#ifndef _HAL_TIME_HPP
+#define _HAL_TIME_HPP
 
 #include <stdint.h>
 
-#include <Memory/MemoryMap.hpp>
+void HAL_InitTime();
+void HAL_TimerTick(uint64_t ticks, void* data);
 
-// to be implemented by arch specific code
-class Processor {
-public:
-    virtual ~Processor() {};
-
-    virtual void Init() = 0;
-    virtual void Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical) = 0;
-
-    virtual void InitTime() = 0;
-
-protected:
-    bool m_BSP;
-};
-
-extern Processor* g_BSP;
-
-#endif /* _HAL_PROCESSOR_HPP */
+#endif /* _HAL_TIME_HPP */

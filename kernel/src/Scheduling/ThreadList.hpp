@@ -15,29 +15,44 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _HAL_PROCESSOR_HPP
-#define _HAL_PROCESSOR_HPP
-
-#include "HAL.hpp"
+#ifndef _THREAD_LIST_HPP
+#define _THREAD_LIST_HPP
 
 #include <stdint.h>
 
-#include <Memory/MemoryMap.hpp>
+#include <spinlock.h>
 
-// to be implemented by arch specific code
-class Processor {
-public:
-    virtual ~Processor() {};
+class Thread;
 
-    virtual void Init() = 0;
-    virtual void Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical) = 0;
-
-    virtual void InitTime() = 0;
-
-protected:
-    bool m_BSP;
+struct ThreadListItemInternalData {
+    Thread* previous;
+    Thread* next;
 };
 
-extern Processor* g_BSP;
+class [[gnu::packed]] ThreadList {
+public:
+    ThreadList();
+    ~ThreadList();
 
-#endif /* _HAL_PROCESSOR_HPP */
+    void pushBack(Thread* thread);
+    Thread* popFront();
+
+    void remove(Thread* thread);
+
+    Thread* getHead() const;
+    Thread* getTail() const;
+
+    uint64_t getCount() const;
+
+    void lock() const;
+    void unlock() const;
+
+private:
+    Thread* m_Head;
+    Thread* m_Tail;
+    uint64_t m_Count;
+    mutable spinlock_t m_Lock;
+};
+
+
+#endif /* _THREAD_LIST_HPP */

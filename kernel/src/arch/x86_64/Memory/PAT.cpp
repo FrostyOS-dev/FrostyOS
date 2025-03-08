@@ -31,7 +31,7 @@ void x86_64_InitPAT() {
     PAT |= ((uint64_t)x86_64_PATEncoding::WriteBack << 48); // set the default
     PAT |= ((uint64_t)x86_64_PATEncoding::WriteBack << 56); // set the default
 
-    x86_64_WriteMSR(0x277, PAT);
+    x86_64_WriteMSR(MSR_PAT, PAT);
 }
 
 bool x86_64_IsPATSupported() {

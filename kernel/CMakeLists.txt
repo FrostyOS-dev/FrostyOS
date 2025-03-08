@@ -18,6 +18,8 @@ if(NOT SHELL)
     message(FATAL_ERROR "sh not found")
 endif()
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/dependencies/uACPI/uacpi.cmake)
+
 if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
     set(kernel_sources
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IDT.asm
@@ -31,6 +33,8 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PagingUtil.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PagingUtil.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PAT.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Scheduling/Task.asm
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Scheduling/TaskUtil.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/ArchDefs.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/CPUID.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/E9.cpp
@@ -42,6 +46,7 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Panic.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Panic.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/PIT.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Processor.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Processor.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/start.asm
     )
@@ -61,20 +66,29 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Framebuffer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGA.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGAFont.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/Init.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/uACPIAPI.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/HAL.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/Time.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PagingUtil.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PMM.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Process.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Scheduler.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Thread.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/ThreadList.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/kernel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/limine_entry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/DebugBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/VGABackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTYBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTY.cpp
+    ${UACPI_SOURCES}
 )
 
 set(kernel_lib_sources
     ${kernel_lib_sources}
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/DataStructures/Bitmap.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/DataStructures/LinkedList.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/assert.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/icxxabi.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/math.c
@@ -97,6 +111,7 @@ set_target_properties(kernel PROPERTIES C_STANDARD_REQUIRED ON)
 
 target_include_directories(kernel PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_include_directories(kernel PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib/include)
+target_include_directories(kernel PRIVATE ${UACPI_INCLUDES})
 
 set(LINKER_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/kernel.ld)
 
@@ -112,6 +127,9 @@ target_link_options(kernel
 
 target_compile_definitions(kernel PRIVATE _FROSTYOS_BUILD_TARGET=kernel)
 
+target_compile_definitions(kernel PRIVATE UACPI_BAREBONES_MODE=1)
+target_compile_definitions(kernel PRIVATE UACPI_FORMATTED_LOGGING=1)
+
 target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mcmodel=kernel>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-g>
@@ -123,6 +141,7 @@ target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-unused-parameter>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-switch>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-packed-bitfield-compat>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-address-of-packed-member>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-nostdlib>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-ffreestanding>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-pie>

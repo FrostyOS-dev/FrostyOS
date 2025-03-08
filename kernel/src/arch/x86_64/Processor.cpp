@@ -22,11 +22,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "interrupts/IDT.hpp"
 #include "interrupts/IRQ.hpp"
+#include "interrupts/PIC.hpp"
 
 #include "Memory/PagingInit.hpp"
 
+#include "Scheduling/TaskUtil.hpp"
+
 #include <HAL/HAL.hpp>
 #include <HAL/Processor.hpp>
+
+#include <Scheduling/Scheduler.hpp>
 
 x86_64_Processor g_x86_64_BSP(true);
 Processor* g_BSP = &g_x86_64_BSP;
@@ -53,6 +58,13 @@ void x86_64_Processor::Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uin
     x86_64_InitGDT();
     x86_64_InitIDT();
     x86_64_IRQ_Init();
-    x86_64_PIT_Init();
     x86_64_InitPaging(HHDMOffset, memoryMap, memoryMapEntryCount, pagingMode, kernelVirtual, kernelPhysical);
+    
+    Scheduler::InitBSPState();
+    x86_64_SetGSBases(0, (uint64_t)&Scheduler::g_BSPState);
+}
+
+void x86_64_Processor::InitTime() {
+    x86_64_PIT_Init();
+    x86_64_PIC_UnmaskIRQ(0);
 }

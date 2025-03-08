@@ -40,4 +40,10 @@ private:
     uint64_t m_Size; // in bytes
 };
 
+class [[gnu::packed]] RawPackedBitmap : public RawBitmap {
+public:
+    RawPackedBitmap() : RawBitmap() {}
+    RawPackedBitmap(uint8_t* buffer, uint64_t size) : RawBitmap(buffer, size) {} // size is in bytes
+};
+
 #endif /* _BITMAP_HPP */

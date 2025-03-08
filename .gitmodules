@@ -1,0 +1,4 @@
+[submodule "kernel/dependencies/uACPI"]
+	path = kernel/dependencies/uACPI
+	url = https://github.com/uACPI/uACPI.git
+	branch = barebones-mode

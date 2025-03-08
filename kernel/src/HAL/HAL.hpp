@@ -25,11 +25,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifdef __x86_64__
 #include <arch/x86_64/Memory/PagingUtil.hpp>
 
+#include <arch/x86_64/ArchDefs.h>
 #include <arch/x86_64/Panic.hpp>
 
 typedef x86_64_PagingMode PagingMode;
+typedef x86_64_Registers CPU_Registers;
 #endif
 
-void HAL_EarlyInit(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical);
+void HAL_EarlyInit(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical, void* RSDP);
 
 #endif /* _KERNEL_HAL_HPP */

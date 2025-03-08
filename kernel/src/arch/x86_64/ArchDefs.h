@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2025  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -38,10 +38,10 @@ struct x86_64_Registers {
     uint64_t R14;
     uint64_t R15;
     uint64_t RIP;
-    uint16_t CS;
-    uint16_t DS;
     uint64_t RFLAGS;
     uint64_t CR3;
+    uint16_t CS;
+    uint16_t DS;
     uint32_t _align; // make the struct 8 byte aligned
 } __attribute__((packed));
 

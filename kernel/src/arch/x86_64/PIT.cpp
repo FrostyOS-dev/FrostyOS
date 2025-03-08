@@ -21,6 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "interrupts/IRQ.hpp"
 #include "interrupts/ISR.hpp"
 
+#include <HAL/Time.hpp>
+
 #define PIT_CHANNEL0 0x40
 #define PIT_COMMAND 0x43
 
@@ -45,6 +47,7 @@ uint64_t g_x86_64_PITTicks = 0; // in ms
 
 void x86_64_PIT_Handler(x86_64_ISR_Frame* frame, uint8_t irq) {
     g_x86_64_PITTicks += 5;
+    HAL_TimerTick(5, frame);
 }
 
 void x86_64_PIT_Init() {

@@ -17,20 +17,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "HAL.hpp"
 #include "Processor.hpp"
+#include "Time.hpp"
 
-#ifdef __x86_64__
-#include <arch/x86_64/GDT.hpp>
-#include <arch/x86_64/PIT.hpp>
+#include "ACPI/Init.hpp"
 
-#include <arch/x86_64/interrupts/IDT.hpp>
-#include <arch/x86_64/interrupts/IRQ.hpp>
-
-#include <arch/x86_64/Memory/PagingInit.hpp>
-
-void HAL_EarlyInit(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical) {
+void HAL_EarlyInit(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical, void* RSDP) {
     g_BSP->Init(HHDMOffset, memoryMap, memoryMapEntryCount, pagingMode, kernelVirtual, kernelPhysical);
+    ACPI::EarlyInit(RSDP);
+    HAL_InitTime();
 }
-
-#else
-#error "HAL: Unsupported architecture"
-#endif

@@ -40,5 +40,6 @@ struct KernelParams {
 extern KernelParams g_kernelParams;
 
 void StartKernel();
+void Kernel_Stage2(void*);
 
 #endif /* _KERNEL_HPP */

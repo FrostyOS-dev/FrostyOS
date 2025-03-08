@@ -22,9 +22,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdint.h>
 #include <util.h>
 
+#include <DataStructures/LinkedList.hpp>
+
 #include <Graphics/VGA.hpp>
 
 #include <HAL/HAL.hpp>
+
+#include <Scheduling/Process.hpp>
+#include <Scheduling/Scheduler.hpp>
+#include <Scheduling/Thread.hpp>
 
 #include <tty/backends/DebugBackend.hpp>
 #include <tty/backends/VGABackend.hpp>
@@ -46,7 +52,10 @@ TTYBackendVGA g_KVGABackend;
 
 TTY g_KTTY;
 
-#define TEST_ADDR 0xFF10'0000'0000'0000
+char Stage2Stack[KERNEL_STACK_SIZE];
+
+Process KProcess(ProcessMode::KERNEL, NICE_LEVELS - 1);
+Thread KThread;
 
 void StartKernel() {
     {
@@ -71,8 +80,25 @@ void StartKernel() {
 
     g_CurrentTTY = &g_KTTY;
 
-    HAL_EarlyInit(g_kernelParams.HHDMStart, g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.pagingMode, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical);
+    HAL_EarlyInit(g_kernelParams.HHDMStart, g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.pagingMode, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical, g_kernelParams.RSDP);
 
+    LinkedList::NodePool_Init();
+
+    Scheduler::AddProcess(&KProcess);
+
+    KThread.Init({Kernel_Stage2, nullptr}, &KProcess);
+    KThread.SetStack((uint64_t)Stage2Stack + KERNEL_STACK_SIZE);
+
+    KProcess.SetMainThread(&KThread);
+
+    Scheduler::ScheduleThread(&KThread);
+
+    Scheduler::Start();
+
+    PANIC("Scheduler returned");
+}
+
+void Kernel_Stage2(void*) {
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");
 

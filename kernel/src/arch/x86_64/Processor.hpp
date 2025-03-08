@@ -25,6 +25,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Memory/MemoryMap.hpp>
 
+#include <Scheduling/Scheduler.hpp>
+
 class x86_64_Processor final : public Processor {
 public:
     x86_64_Processor(bool BSP);
@@ -32,8 +34,13 @@ public:
 
     void Init() override;
     void Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical) override;
+
+    void InitTime() override;
 };
 
 extern x86_64_Processor g_x86_64_BSP;
+
+extern "C" Processor* GetCurrentProcessor();
+extern "C" Scheduler::ProcessorState* GetCurrentProcessorState();
 
 #endif /* _x86_64_PROCESSOR_HPP */

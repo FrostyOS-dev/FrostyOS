@@ -342,19 +342,36 @@ x86_64_ISR_Common:
     mov ax, ds
     push rax
 
+    ; save (kernel) GS base
+    test QWORD [rsp+168], 3
+    jz .noswap
+    swapgs
+.noswap:
+    mov ecx, 0xC0000101
+    rdmsr ; not safe to read gs:0 as an interrupt can occur at any time
+    shl rdx, 32
+    or rax, rdx
+
+    mov r15, rax ; save it for later
+
+    ; switch segments
     mov ax, 0x10
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
 
-    mov r15, rsp
+    ; restore GS base
+    mov eax, r15d
+    mov rdx, r15
+    shr rdx, 32
+    wrmsr ; ecx still contains MSR number
 
-    push QWORD [r15+160]
+    mov rdi, rsp
+
+    push QWORD [rdi+160]
     push rbp
     mov rbp, rsp
-
-    lea rdi, QWORD [rsp+16]
 
     call x86_64_ISR_Handler
 
@@ -365,6 +382,17 @@ x86_64_ISR_Common:
     mov es, ax
     mov fs, ax
     mov gs, ax
+
+    ; restore GS base
+    mov eax, r15d
+    mov rdx, r15
+    shr rdx, 32
+    wrmsr ; ecx still contains MSR number
+
+    test QWORD [rsp+136], 3
+    jz .noswap2
+    swapgs
+.noswap2:
 
     pop rax
     mov cr3, rax

@@ -15,29 +15,13 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _HAL_PROCESSOR_HPP
-#define _HAL_PROCESSOR_HPP
+#ifndef _ACPI_INIT_HPP
+#define _ACPI_INIT_HPP
 
-#include "HAL.hpp"
+namespace ACPI {
+    void EarlyInit(void* RSDP);
 
-#include <stdint.h>
+    void* GetRSDP();
+}
 
-#include <Memory/MemoryMap.hpp>
-
-// to be implemented by arch specific code
-class Processor {
-public:
-    virtual ~Processor() {};
-
-    virtual void Init() = 0;
-    virtual void Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical) = 0;
-
-    virtual void InitTime() = 0;
-
-protected:
-    bool m_BSP;
-};
-
-extern Processor* g_BSP;
-
-#endif /* _HAL_PROCESSOR_HPP */
+#endif /* _ACPI_INIT_HPP */

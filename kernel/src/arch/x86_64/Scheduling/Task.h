@@ -15,29 +15,22 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _HAL_PROCESSOR_HPP
-#define _HAL_PROCESSOR_HPP
+#ifndef _x86_64_TASK_H
+#define _x86_64_TASK_H
 
-#include "HAL.hpp"
+#include "../ArchDefs.h"
 
 #include <stdint.h>
 
-#include <Memory/MemoryMap.hpp>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-// to be implemented by arch specific code
-class Processor {
-public:
-    virtual ~Processor() {};
+// Switch kernel task. Does not save anything or return to the caller.
+[[noreturn]] void x86_64_KernelSwitchTask(const struct x86_64_Registers* regs);
 
-    virtual void Init() = 0;
-    virtual void Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical) = 0;
+#ifdef __cplusplus
+}
+#endif
 
-    virtual void InitTime() = 0;
-
-protected:
-    bool m_BSP;
-};
-
-extern Processor* g_BSP;
-
-#endif /* _HAL_PROCESSOR_HPP */
+#endif /* _x86_64_TASK_H */
