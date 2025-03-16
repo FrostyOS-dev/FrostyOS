@@ -54,15 +54,12 @@ extern "C" [[noreturn]] void x86_64_Panic(const char* message, void* registers, 
     dbgprintf("R8 =%016lx  R9 =%016lx  R10=%016lx  R11=%016lx\n", regs->R8 , regs->R9 , regs->R10, regs->R11);
     dbgprintf("R12=%016lx  R13=%016lx  R14=%016lx  R15=%016lx\n", regs->R12, regs->R13, regs->R14, regs->R15);
     dbgprintf("RIP=%016lx  RFL=%016lx\n", regs->RIP, regs->RFLAGS);
-    dbgprintf("CS=%04x  DS=%04x", regs->CS, regs->DS);
+    dbgprintf("CS=%04x  SS=%04x\n", regs->CS, regs->SS);
     if (type /* interrupt */) {
-        dbgprintf("  SS=%04x\n", isrFrame->SS);
         dbgprintf("INT=%016lx  ERR=%016lx\n", isrFrame->INT, isrFrame->ERR);
         if (isrFrame->INT == 13 || isrFrame->INT == 14)
             dbgprintf("CR2=%016lx  ", isrFrame->CR2);
     }
-    else
-        dbgputc('\n');
     dbgprintf("CR3=%016lx\n", regs->CR3);
     
     
@@ -77,15 +74,12 @@ extern "C" [[noreturn]] void x86_64_Panic(const char* message, void* registers, 
     printf("R8 =%016lx  R9 =%016lx  R10=%016lx  R11=%016lx\n", regs->R8 , regs->R9 , regs->R10, regs->R11);
     printf("R12=%016lx  R13=%016lx  R14=%016lx  R15=%016lx\n", regs->R12, regs->R13, regs->R14, regs->R15);
     printf("RIP=%016lx  RFL=%016lx\n", regs->RIP, regs->RFLAGS);
-    printf("CS=%04x  DS=%04x", regs->CS, regs->DS);
+    printf("CS=%04x  SS=%04x\n", regs->CS, regs->SS);
     if (type /* interrupt */) {
-        printf("  SS=%04x\n", isrFrame->SS);
         printf("INT=%016lx  ERR=%016lx\n", isrFrame->INT, isrFrame->ERR);
         if (isrFrame->INT == 13 || isrFrame->INT == 14)
             printf("CR2=%016lx  ", isrFrame->CR2);
     }
-    else
-        putchar('\n');
     printf("CR3=%016lx\n", regs->CR3);
 
     while (true) {

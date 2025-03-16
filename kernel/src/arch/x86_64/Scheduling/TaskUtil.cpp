@@ -42,8 +42,7 @@ void x86_64_CopyToISRFrame(const x86_64_Registers* regs, x86_64_ISR_Frame* frame
     frame->RIP = regs->RIP;
     frame->RFLAGS = regs->RFLAGS;
     frame->CS = regs->CS;
-    frame->DS = regs->DS;
-    frame->SS = regs->DS;
+    frame->SS = regs->SS;
     frame->CR2 = 0;
     frame->CR3 = regs->CR3;
     // INT and ERR get discarded anyway, so no need to clear them
@@ -69,7 +68,7 @@ void x86_64_CopyFromISRFrame(const x86_64_ISR_Frame* frame, x86_64_Registers* re
     regs->RIP = frame->RIP;
     regs->RFLAGS = frame->RFLAGS;
     regs->CS = frame->CS;
-    regs->DS = frame->DS;
+    regs->SS = frame->SS;
     regs->CR3 = frame->CR3;
 }
 
@@ -81,7 +80,7 @@ void x86_64_SetThreadRegisters(x86_64_Registers* regs, uint64_t stack, ThreadEnt
     regs->RIP = (uint64_t)entryPoint.EntryPoint;
     regs->RFLAGS = 0x202;
     regs->CS = mode == ProcessMode::KERNEL ? x86_64_GDT_KERNEL_CODE_SEGMENT : x86_64_GDT_USER_CODE_SEGMENT;
-    regs->DS = mode == ProcessMode::KERNEL ? x86_64_GDT_KERNEL_DATA_SEGMENT : x86_64_GDT_USER_DATA_SEGMENT;
+    regs->SS = mode == ProcessMode::KERNEL ? x86_64_GDT_KERNEL_DATA_SEGMENT : x86_64_GDT_USER_DATA_SEGMENT;
     regs->CR3 = (uint64_t)pageMap;
 }
 

@@ -41,7 +41,7 @@ struct x86_64_Registers {
     uint64_t RFLAGS;
     uint64_t CR3;
     uint16_t CS;
-    uint16_t DS;
+    uint16_t SS;
     uint32_t _align; // make the struct 8 byte aligned
 } __attribute__((packed));
 

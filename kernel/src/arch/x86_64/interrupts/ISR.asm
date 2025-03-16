@@ -1,4 +1,4 @@
-; Copyright (©) 2024  Frosty515
+; Copyright (©) 2024-2025  Frosty515
 
 ; This program is free software: you can redistribute it and/or modify
 ; it under the terms of the GNU General Public License as published by
@@ -338,61 +338,15 @@ x86_64_ISR_Common:
     mov rax, cr3
     push rax
 
-    xor rax, rax
-    mov ax, ds
-    push rax
-
-    ; save (kernel) GS base
-    test QWORD [rsp+168], 3
-    jz .noswap
-    swapgs
-.noswap:
-    mov ecx, 0xC0000101
-    rdmsr ; not safe to read gs:0 as an interrupt can occur at any time
-    shl rdx, 32
-    or rax, rdx
-
-    mov r15, rax ; save it for later
-
-    ; switch segments
-    mov ax, 0x10
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-
-    ; restore GS base
-    mov eax, r15d
-    mov rdx, r15
-    shr rdx, 32
-    wrmsr ; ecx still contains MSR number
-
     mov rdi, rsp
 
-    push QWORD [rdi+160]
+    push QWORD [rdi+152]
     push rbp
     mov rbp, rsp
 
     call x86_64_ISR_Handler
 
     add rsp, 16
-
-    pop rax
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-
-    ; restore GS base
-    mov eax, r15d
-    mov rdx, r15
-    shr rdx, 32
-    wrmsr ; ecx still contains MSR number
-
-    test QWORD [rsp+136], 3
-    jz .noswap2
-    swapgs
-.noswap2:
 
     pop rax
     mov cr3, rax

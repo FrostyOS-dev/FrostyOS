@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2025  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -80,7 +80,7 @@ void x86_64_Convert_ISRRegs_To_StandardRegs(x86_64_ISR_Frame* frame, x86_64_Regi
     state->R15 = frame->R15;
     state->RIP = frame->RIP;
     state->CS = (uint16_t)frame->CS;
-    state->DS = (uint16_t)frame->DS;
+    state->SS = (uint16_t)frame->SS;
     state->RFLAGS = frame->RFLAGS;
     state->CR3 = frame->CR3;
     state->_align = 0;
