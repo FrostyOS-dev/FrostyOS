@@ -15,14 +15,16 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _ACPI_INIT_HPP
-#define _ACPI_INIT_HPP
+#ifndef _x86_64_STACK_HPP
+#define _x86_64_STACK_HPP
 
-namespace ACPI {
-    void EarlyInit(void* RSDP);
-    void Stage2Init();
+#include <stdint.h>
 
-    void* GetRSDP();
-}
+struct x86_64_StackFrame {
+    uint64_t RBP;
+    uint64_t RIP;
+};
 
-#endif /* _ACPI_INIT_HPP */
+void x86_64_WalkStackFrames(uint64_t RBP, void (*callback)(x86_64_StackFrame* frame));
+
+#endif /* _x86_64_STACK_HPP */

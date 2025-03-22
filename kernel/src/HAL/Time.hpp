@@ -23,4 +23,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 void HAL_InitTime();
 void HAL_TimerTick(uint64_t ticks, void* data);
 
+uint64_t HAL_GetTicks();
+
 #endif /* _HAL_TIME_HPP */

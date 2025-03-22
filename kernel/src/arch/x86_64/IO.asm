@@ -1,4 +1,4 @@
-; Copyright (©) 2024  Frosty515
+; Copyright (©) 2024-2025  Frosty515
 
 ; This program is free software: you can redistribute it and/or modify
 ; it under the terms of the GNU General Public License as published by
@@ -19,6 +19,8 @@ global x86_64_outb
 global x86_64_inb
 global x86_64_outw
 global x86_64_inw
+global x86_64_outd
+global x86_64_ind
 global x86_64_IOWait
 
 x86_64_outb:
@@ -41,6 +43,17 @@ x86_64_outw:
 x86_64_inw:
     mov dx, di
     in ax, dx
+    ret
+
+x86_64_outd:
+    mov dx, di
+    mov eax, esi
+    out dx, eax
+    ret
+
+x86_64_ind:
+    mov dx, di
+    in eax, dx
     ret
 
 x86_64_IOWait:

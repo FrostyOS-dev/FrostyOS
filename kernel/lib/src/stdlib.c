@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2022-2023  Frosty515
+Copyright (©) 2022-2025  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -104,22 +104,6 @@ void* kmalloc(size_t size) {
 }
 
 void* krealloc(void* ptr, size_t size) {
-    return nullptr;
-}
-
-void* kcalloc_vmm(size_t num, size_t size) {
-    return nullptr;
-}
-
-void kfree_vmm(void* ptr) {
-
-}
-
-void* kmalloc_vmm(size_t size) {
-    return nullptr;
-}
-
-void* krealloc_vmm(void* ptr, size_t size) {
     return nullptr;
 }
 

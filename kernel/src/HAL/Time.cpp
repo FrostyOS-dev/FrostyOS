@@ -20,10 +20,17 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Scheduling/Scheduler.hpp>
 
+uint64_t g_HALTimerTicks = 0; // in ms
+
 void HAL_InitTime() {
     g_BSP->InitTime();
 }
 
 void HAL_TimerTick(uint64_t ticks, void *data) {
+    g_HALTimerTicks += ticks;
     Scheduler::TimerTick(ticks, data);
+}
+
+uint64_t HAL_GetTicks() {
+    return g_HALTimerTicks;
 }

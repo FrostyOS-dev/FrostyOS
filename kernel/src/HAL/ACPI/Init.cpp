@@ -19,11 +19,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../HAL.hpp"
 
+
 #include <stdio.h>
 #include <util.h>
 
-#include <uacpi/status.h>
+#include <uacpi/context.h>
 #include <uacpi/uacpi.h>
+#include <uacpi/status.h>
 
 #include <Memory/PagingUtil.hpp>
 #include <Memory/PMM.hpp>
@@ -34,13 +36,44 @@ namespace ACPI {
     void EarlyInit(void* RSDP) {
         g_RSDP = from_HHDM(RSDP);
 
+#ifdef UACPI_BAREBONES_MODE
+        
+        uacpi_context_set_log_level(UACPI_LOG_INFO);
+
         uacpi_status rc = uacpi_setup_early_table_access(to_HHDM(g_PMM->AllocatePage()), PAGE_SIZE);
         if (uacpi_unlikely_error(rc)) {
             dbgprintf("Failed to setup early table access: %d\n", rc);
             PANIC("ACPI: Failed to setup early table access");
         }
 
+#else
+
+        uacpi_status rc = uacpi_initialize(0);
+        if (uacpi_unlikely_error(rc)) {
+            dbgprintf("Failed to initialize uACPI: %d\n", rc);
+            PANIC("ACPI: Failed to initialize uACPI");
+        }
+
         dbgprintf("ACPI: Early init complete\n");
+#endif
+    }
+
+    void Stage2Init() {
+#ifndef UACPI_BAREBONES_MODE
+        uacpi_status rc = uacpi_namespace_load();
+        if (uacpi_unlikely_error(rc)) {
+            dbgprintf("Failed to load ACPI namespace: %d\n", rc);
+            PANIC("ACPI: Failed to load ACPI namespace");
+        }
+
+        rc = uacpi_namespace_initialize();
+        if (uacpi_unlikely_error(rc)) {
+            dbgprintf("Failed to initialize ACPI namespace: %d\n", rc);
+            PANIC("ACPI: Failed to initialize ACPI namespace");
+        }
+
+        dbgprintf("ACPI: Stage 2 init complete\n");
+#endif
     }
 
     void* GetRSDP() {

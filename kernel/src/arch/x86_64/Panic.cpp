@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "Panic.hpp"
 #include "ArchDefs.h"
+#include "Stack.hpp"
 
 #include "interrupts/ISR.hpp"
 
@@ -61,6 +62,10 @@ extern "C" [[noreturn]] void x86_64_Panic(const char* message, void* registers, 
             dbgprintf("CR2=%016lx  ", isrFrame->CR2);
     }
     dbgprintf("CR3=%016lx\n", regs->CR3);
+    dbgprintf("Stack trace:\n%016lx\n", regs->RIP);
+    x86_64_WalkStackFrames(regs->RBP, [](x86_64_StackFrame* frame) {
+        dbgprintf("%016lx\n", frame->RIP);
+    });
     
     
     // now to stdout
@@ -81,6 +86,10 @@ extern "C" [[noreturn]] void x86_64_Panic(const char* message, void* registers, 
             printf("CR2=%016lx  ", isrFrame->CR2);
     }
     printf("CR3=%016lx\n", regs->CR3);
+    printf("Stack trace:\n%016lx\n", regs->RIP);
+    x86_64_WalkStackFrames(regs->RBP, [](x86_64_StackFrame* frame) {
+        printf("%016lx\n", frame->RIP);
+    });
 
     while (true) {
         __asm__ volatile ("hlt");

@@ -1,4 +1,4 @@
-; Copyright (©) 2023-2024  Frosty515
+; Copyright (©) 2023-2025  Frosty515
 ; 
 ; This program is free software: you can redistribute it and/or modify
 ; it under the terms of the GNU General Public License as published by
@@ -19,6 +19,8 @@ global memset
 memset:
     push rbp
     mov rbp, rsp
+
+    push rdi
 
     mov r8b, dl ; save low byte of dl for later
 
@@ -68,6 +70,7 @@ memset:
 
 ; cleanup
 .end:
+    pop rax
     mov rsp, rbp
     pop rbp
     ret
@@ -76,6 +79,8 @@ global memcpy
 memcpy:
     push rbp
     mov rbp, rsp
+
+    push rdi
 
     mov r8b, dl ; save low byte of dl for later
 
@@ -112,6 +117,7 @@ memcpy:
 
 ; cleanup
 .end:
+    pop rax
     mov rsp, rbp
     pop rbp
     ret

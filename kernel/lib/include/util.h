@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2022-2024  Frosty515
+Copyright (©) 2022-2025  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -56,17 +56,17 @@ extern "C" {
 
 #define BCD_TO_BINARY(x) (((x & 0xF0) >> 1) + ((x & 0xF0) >> 3) + (x & 0xF))
 
-#define DIV_ROUNDUP(VALUE, DIV) (VALUE + (DIV - 1)) / DIV
+#define DIV_ROUNDUP(VALUE, DIV) ((VALUE) + ((DIV) - 1)) / (DIV)
 
-#define DIV_ROUNDUP_ADDRESS(ADDR, DIV) (void*)(((unsigned long)ADDR + (DIV - 1)) / DIV)
+#define DIV_ROUNDUP_ADDRESS(ADDR, DIV) (void*)(((unsigned long)(ADDR) + ((DIV) - 1)) / (DIV))
 
-#define ALIGN_UP(VALUE, ALIGN) DIV_ROUNDUP(VALUE, ALIGN) * ALIGN
+#define ALIGN_UP(VALUE, ALIGN) DIV_ROUNDUP((VALUE), (ALIGN)) * (ALIGN)
 
-#define ALIGN_DOWN(VALUE, ALIGN) (VALUE / ALIGN) * ALIGN
+#define ALIGN_DOWN(VALUE, ALIGN) ((VALUE) / (ALIGN)) * (ALIGN)
 
-#define ALIGN_ADDRESS_DOWN(ADDR, ALIGN) (void*)(((unsigned long)ADDR / ALIGN) * ALIGN)
+#define ALIGN_ADDRESS_DOWN(ADDR, ALIGN) (void*)(((unsigned long)(ADDR) / (ALIGN)) * (ALIGN))
 
-#define ALIGN_ADDRESS_UP(ADDR, ALIGN) (void*)((((unsigned long)ADDR + (ALIGN - 1)) / ALIGN) * ALIGN)
+#define ALIGN_ADDRESS_UP(ADDR, ALIGN) (void*)((((unsigned long)(ADDR) + ((ALIGN) - 1)) / (ALIGN)) * (ALIGN))
 
 #define PAGE_SIZE 4096
 #define PAGE_SIZE_SHIFT 12

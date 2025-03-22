@@ -74,18 +74,26 @@ void x86_64_InitPaging(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t
     x86_64_MapRegionWithLargestPages(g_KernelRootPageTable, to_HHDM(memoryMap[frameBufferEntryIndex]->Base), memoryMap[frameBufferEntryIndex]->Base, memoryMap[frameBufferEntryIndex]->Length, 0x0800'0003 | x86_64_PAT_GetPageMappingFlags(x86_64_PATOffset::WriteCombining)); // read-write, present, no-execute
 
     // next map the kernel's different sections
+    uint64_t aligned_text_start = ALIGN_DOWN((uint64_t)_text_start_addr, PAGE_SIZE);
+    uint64_t aligned_text_end = ALIGN_UP((uint64_t)_text_end_addr, PAGE_SIZE);
+    uint64_t aligned_rodata_start = ALIGN_DOWN((uint64_t)_rodata_start_addr, PAGE_SIZE);
+    uint64_t aligned_rodata_end = ALIGN_UP((uint64_t)_rodata_end_addr, PAGE_SIZE);
+    uint64_t aligned_data_start = ALIGN_DOWN((uint64_t)_data_start_addr, PAGE_SIZE);
+    uint64_t aligned_data_end = ALIGN_UP((uint64_t)_data_end_addr, PAGE_SIZE);
+    uint64_t aligned_bss_start = ALIGN_DOWN((uint64_t)_bss_start_addr, PAGE_SIZE);
+    uint64_t aligned_bss_end = ALIGN_UP((uint64_t)_bss_end_addr, PAGE_SIZE);
 
     // first is the .text, mapped as read-only, execute
-    x86_64_MapRegionWithLargestPages(g_KernelRootPageTable, (uint64_t)_text_start_addr, (uint64_t)_text_start_addr - kernelVirtual + kernelPhysical, (uint64_t)_text_end_addr - (uint64_t)_text_start_addr, 0x0000'0001); // read-only, present, execute
+    x86_64_MapRegionWithLargestPages(g_KernelRootPageTable, (uint64_t)aligned_text_start, (uint64_t)aligned_text_start - kernelVirtual + kernelPhysical, (uint64_t)aligned_text_end - (uint64_t)aligned_text_start, 0x0000'0001); // read-only, present, execute
 
     // next is the .rodata, mapped as read-only
-    x86_64_MapRegionWithLargestPages(g_KernelRootPageTable, (uint64_t)_rodata_start_addr, (uint64_t)_rodata_start_addr - kernelVirtual + kernelPhysical, (uint64_t)_rodata_end_addr - (uint64_t)_rodata_start_addr, 0x0800'0001); // read-only, present, no-execute
+    x86_64_MapRegionWithLargestPages(g_KernelRootPageTable, (uint64_t)aligned_rodata_start, (uint64_t)aligned_rodata_start - kernelVirtual + kernelPhysical, (uint64_t)aligned_rodata_end - (uint64_t)aligned_rodata_start, 0x0800'0001); // read-only, present, no-execute
 
     // next is the .data, mapped as read-write
-    x86_64_MapRegionWithLargestPages(g_KernelRootPageTable, (uint64_t)_data_start_addr, (uint64_t)_data_start_addr - kernelVirtual + kernelPhysical, (uint64_t)_data_end_addr - (uint64_t)_data_start_addr, 0x0800'0003); // read-write, present, no-execute
+    x86_64_MapRegionWithLargestPages(g_KernelRootPageTable, (uint64_t)aligned_data_start, (uint64_t)aligned_data_start - kernelVirtual + kernelPhysical, (uint64_t)aligned_data_end - (uint64_t)aligned_data_start, 0x0800'0003); // read-write, present, no-execute
 
     // finally, .bss, mapped as read-write
-    x86_64_MapRegionWithLargestPages(g_KernelRootPageTable, (uint64_t)_bss_start_addr, (uint64_t)_bss_start_addr - kernelVirtual + kernelPhysical, (uint64_t)_bss_end_addr - (uint64_t)_bss_start_addr, 0x0800'0003); // read-write, present, no-execute
+    x86_64_MapRegionWithLargestPages(g_KernelRootPageTable, (uint64_t)aligned_bss_start, (uint64_t)aligned_bss_start - kernelVirtual + kernelPhysical, (uint64_t)aligned_bss_end - (uint64_t)aligned_bss_start, 0x0800'0003); // read-write, present, no-execute
 
     // now load the page table
     x86_64_LoadCR3((uint64_t)from_HHDM(g_KernelRootPageTable));

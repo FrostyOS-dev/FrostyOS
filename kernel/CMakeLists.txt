@@ -48,6 +48,7 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/PIT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Processor.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Processor.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Stack.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/start.asm
     )
 
@@ -70,6 +71,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/uACPIAPI.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/HAL.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/Time.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/Heap.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PagingUtil.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PMM.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Process.cpp
@@ -129,6 +131,7 @@ target_compile_definitions(kernel PRIVATE _FROSTYOS_BUILD_TARGET=kernel)
 
 target_compile_definitions(kernel PRIVATE UACPI_BAREBONES_MODE=1)
 target_compile_definitions(kernel PRIVATE UACPI_FORMATTED_LOGGING=1)
+# target_compile_definitions(kernel PRIVATE UACPI_NATIVE_ALLOC_ZEROED=1)
 
 target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mcmodel=kernel>
@@ -150,6 +153,7 @@ target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mno-red-zone>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-O2>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-omit-frame-pointer>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-asynchronous-unwind-tables>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
 )

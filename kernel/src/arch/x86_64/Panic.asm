@@ -1,4 +1,4 @@
-; Copyright (©) 2024  Frosty515
+; Copyright (©) 2024-2025  Frosty515
 
 ; This program is free software: you can redistribute it and/or modify
 ; it under the terms of the GNU General Public License as published by
@@ -24,14 +24,13 @@ x86_64_PrePanic:
     pushf
     cli
     push rax
-    mov rax, cr3
-    sub rsp, 4 ; fix alignment for later
-    push rax
-    push QWORD [rbp-8] ; RFLAGS
-    sub rsp, 2
-    mov WORD [rsp], ds
+    sub rsp, 6 
+    mov WORD [rsp], ss
     sub rsp, 2
     mov WORD [rsp], cs
+    mov rax, cr3
+    push rax
+    push QWORD [rbp-8] ; RFLAGS
     push QWORD [rbp+8] ; RIP
     push r15
     push r14
