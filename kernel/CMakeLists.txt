@@ -89,6 +89,7 @@ set(kernel_sources
 
 set(kernel_lib_sources
     ${kernel_lib_sources}
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/DataStructures/AVLTree.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/DataStructures/Bitmap.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/DataStructures/LinkedList.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/assert.cpp
