@@ -74,6 +74,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/Heap.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PagingUtil.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PMM.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/VMRegionAllocator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Process.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Scheduler.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Thread.cpp
@@ -93,6 +94,7 @@ set(kernel_lib_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/DataStructures/Bitmap.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/DataStructures/LinkedList.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/assert.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/errno.c
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/icxxabi.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/math.c
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/src/new.cpp

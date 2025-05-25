@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2022-2024  Frosty515
+Copyright (©) 2022-2025  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -508,8 +508,7 @@ extern "C" int vfprintf(fd_t file, const char* format, va_list args) {
                         floating = false;
                         break;
                     case 'p': // pointer address
-                        if (len == (int)PRINTF_LENGTH::L_NORMAL)
-                            len = (int)PRINTF_LENGTH::L_LONG;
+                        len = (int)PRINTF_LENGTH::L_LONG;
                         radix = 16;
                         number = true;
                         sign = false;
@@ -1095,8 +1094,7 @@ extern "C" int vsnprintf(char* s, size_t n, const char* format, va_list args) {
                         floating = false;
                         break;
                     case 'p': // pointer address
-                        if (len == (int)PRINTF_LENGTH::L_NORMAL)
-                            len = (int)PRINTF_LENGTH::L_LONG;
+                        len = (int)PRINTF_LENGTH::L_LONG;
                         radix = 16;
                         number = true;
                         sign = false;

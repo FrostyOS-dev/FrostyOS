@@ -68,8 +68,6 @@ void* HeapAllocator::Allocate(size_t size) {
                 m_FreeMemory -= block->size;
                 m_UsedMemory += block->size;
 
-                Verify();
-
                 spinlock_release(&m_Lock);
                 return reinterpret_cast<void*>(reinterpret_cast<uint64_t>(block) + sizeof(HeapBlock));
             }
@@ -126,8 +124,6 @@ void* HeapAllocator::Allocate(size_t size) {
 
 
     m_Head = section;
-
-    Verify();
 
     spinlock_release(&m_Lock);
 
@@ -262,10 +258,7 @@ void HeapAllocator::Free(void* ptr) {
 
 void HeapAllocator::Verify() {
     assert(m_UsedMemory + m_FreeMemory + m_MetadataMemory == m_TotalMemory);
-    if(!(static_cast<int64_t>(m_UsedMemory) >= 0)) {
-        dbgprintf("Used Memory: %d\n", m_UsedMemory);
-        assert(false);
-    }
+    assert(static_cast<int64_t>(m_UsedMemory) >= 0);
     assert(static_cast<int64_t>(m_FreeMemory) >= 0);
     assert(static_cast<int64_t>(m_MetadataMemory) >= 0);
     assert(static_cast<int64_t>(m_TotalMemory) >= 0);

@@ -15,6 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include <stdlib.h>
 #include <stdio.h>
 
 #include <util.h>
@@ -99,11 +100,13 @@ namespace LinkedList {
         return count;
     }
 
-    Node* newNode(uint64_t data, bool usePool) {
+    Node* newNode(uint64_t data, bool vmm, bool usePool) {
         Node* node;
 
         if (usePool)
             node = NodePool_AllocateNode();
+        else if (vmm)
+            node = (Node*)kcalloc_vmm(1, sizeof(Node));
         else
             node = new Node();
 
@@ -113,10 +116,10 @@ namespace LinkedList {
         return node;
     }
 
-    void insertNode(Node*& head, uint64_t data, bool usePool) {
+    void insertNode(Node*& head, uint64_t data, bool vmm, bool usePool) {
         // check if head is NULL
         if (head == nullptr) {
-            head = newNode(data, usePool);
+            head = newNode(data, vmm, usePool);
             return;
         }
 
@@ -129,7 +132,7 @@ namespace LinkedList {
         }
 
         // get new node and set last node's next to it
-        current->next = newNode(data, usePool);
+        current->next = newNode(data, vmm, usePool);
 
         // update newly created node's previous to the last node
         current->next->previous = current;
@@ -148,7 +151,7 @@ namespace LinkedList {
         return nullptr;
     }
 
-    void deleteNode(Node*& head, uint64_t key) {
+    void deleteNode(Node*& head, uint64_t key, bool vmm, bool usePool) {
         Node* temp = head;
         if (temp != nullptr && temp->data == key) {
             head = temp->next;
@@ -157,8 +160,10 @@ namespace LinkedList {
                 if (head->next != nullptr)
                     head->next->previous = head;
             }
-            if (NodePool_IsInPool(temp))
+            if (usePool && NodePool_IsInPool(temp))
                 NodePool_FreeNode(temp);
+            else if (vmm)
+                kfree_vmm(temp);
             else
                 delete temp;
             return;
@@ -174,13 +179,15 @@ namespace LinkedList {
             temp->next->previous = temp->previous;
         if (temp->previous != nullptr)
             temp->previous->next = temp->next;
-        if (NodePool_IsInPool(temp))
+        if (usePool && NodePool_IsInPool(temp))
             NodePool_FreeNode(temp);
+        else if (vmm)
+            kfree_vmm(temp);
         else
             delete temp;
     }
 
-    void deleteNode(Node*& head, Node* node) {
+    void deleteNode(Node*& head, Node* node, bool vmm, bool usePool) {
         if (node == nullptr || head == nullptr)
             return;
         if (node->next != nullptr)
@@ -189,8 +196,10 @@ namespace LinkedList {
             node->previous->next = node->next;
         if (head == node)
             head = node->next;
-        if (NodePool_IsInPool(node))
+        if (usePool && NodePool_IsInPool(node))
             NodePool_FreeNode(node);
+        else if (vmm)
+            kfree_vmm(node);
         else
             delete node;
     }

@@ -1,19 +1,33 @@
+/*
+Copyright (©) 2025  Frosty515
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 #ifndef _AVLTREE_HPP
 #define _AVLTREE_HPP
 
+#include <cassert>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #include "tree.h"
 #pragma GCC diagnostic pop
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <stddef.h>
-
-#ifndef _IS_IN_KERNEL
-#define kcalloc_vmm calloc
-#define kfree_vmm free
-#endif
 
 /*
 This AVL tree implementation is based on the FreeBSD wAVL tree implementation.
@@ -23,7 +37,6 @@ The majority of the code for this is in the tree.h file in this directly, along 
 namespace AVLTree {
     struct wAVLTreeNode {
         RB_ENTRY(wAVLTreeNode) rb_node;
-        RB_ENTRY(wAVLTreeNode) pc_rb_node;
         uint64_t key;
         uint64_t value;
     };
@@ -37,15 +50,21 @@ namespace AVLTree {
     template <typename K, typename D>
     class wAVLTree { // NOTE: No allocations of K (key) or D (data) are performed by this class. 
     public:
-        wAVLTree() {
+        wAVLTree(bool vmm = false) : m_vmm(vmm) {
             RB_INIT(&m_tree);
         }
 
-        void Insert(K key, D data) {
-            wAVLTreeNode* node = (wAVLTreeNode*)kcalloc_vmm(1, sizeof(wAVLTreeNode));
+        wAVLTreeNode* Insert(K key, D data) {
+            wAVLTreeNode* node;
+            if (m_vmm)
+                node = (wAVLTreeNode*)kcalloc_vmm(1, sizeof(wAVLTreeNode));
+            else
+                node = (wAVLTreeNode*)kcalloc(1, sizeof(wAVLTreeNode));
             node->key = (uint64_t)key;
             node->value = (uint64_t)data;
             RB_INSERT(raw_wAVLTree, &m_tree, node);
+
+            return node;
         }
 
         void Remove(K key) {
@@ -54,7 +73,20 @@ namespace AVLTree {
             wAVLTreeNode* found_node = RB_FIND(raw_wAVLTree, &m_tree, &node);
             if (found_node != nullptr) {
                 RB_REMOVE(raw_wAVLTree, &m_tree, found_node);
-                kfree_vmm(found_node);
+                if (m_vmm)
+                    kfree_vmm(found_node);
+                else
+                    kfree(found_node);
+            }
+        }
+
+        void RemoveNode(wAVLTreeNode* node) {
+            if (node != nullptr) {
+                RB_REMOVE(raw_wAVLTree, &m_tree, node);
+                if (m_vmm)
+                    kfree_vmm(node);
+                else
+                    kfree(node);
             }
         }
 
@@ -74,6 +106,29 @@ namespace AVLTree {
             return RB_FIND(raw_wAVLTree, &m_tree, &node);
         }
 
+        wAVLTreeNode* FindNodeOrHigher(K key) {
+            wAVLTreeNode node;
+            node.key = (uint64_t)key;
+            return RB_NFIND(raw_wAVLTree, &m_tree, &node);
+        }
+
+        wAVLTreeNode* FindNodeOrLower(K key) {
+            wAVLTreeNode node;
+            node.key = (uint64_t)key;
+            wAVLTreeNode* new_node = RB_NFIND(raw_wAVLTree, &m_tree, &node);
+            if (node.key != (uint64_t)key)
+                return RB_PREV(raw_wAVLTree, &m_tree, new_node);
+            return new_node;
+        }
+
+        wAVLTreeNode* PreviousNode(wAVLTreeNode* node) const {
+            return RB_PREV(raw_wAVLTree, &m_tree, node);
+        }
+
+        wAVLTreeNode* NextNode(wAVLTreeNode* node) const {
+            return RB_NEXT(raw_wAVLTree, &m_tree, node);
+        }
+
         void forEach(void (*callback)(void*, K, D), void* data = nullptr) {
             wAVLTreeNode* node;
             RB_FOREACH(node, raw_wAVLTree, &m_tree) {
@@ -89,9 +144,16 @@ namespace AVLTree {
             }
         }
 
-        ;
+        void forEach(void (*callback)(void*, wAVLTreeNode*), void* data = nullptr) {
+            wAVLTreeNode* node;
+            RB_FOREACH(node, raw_wAVLTree, &m_tree) {
+                callback(data, node);
+            }
+        }
+
     private:
         raw_wAVLTree m_tree;
+        bool m_vmm;
     };
 }
 

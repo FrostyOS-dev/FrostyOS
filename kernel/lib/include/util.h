@@ -58,6 +58,8 @@ extern "C" {
 
 #define DIV_ROUNDUP(VALUE, DIV) ((VALUE) + ((DIV) - 1)) / (DIV)
 
+#define SHR_ROUNDUP(VALUE, DIV) ((VALUE) + ((DIV) - 1)) >> (DIV)
+
 #define DIV_ROUNDUP_ADDRESS(ADDR, DIV) (void*)(((unsigned long)(ADDR) + ((DIV) - 1)) / (DIV))
 
 #define ALIGN_UP(VALUE, ALIGN) DIV_ROUNDUP((VALUE), (ALIGN)) * (ALIGN)

@@ -45,19 +45,19 @@ namespace LinkedList {
     uint64_t length(Node* head);
 
     // Helper function that allocates a new node with the given data and NULL previous and next pointers.
-    Node* newNode(uint64_t data, bool usePool = false);
+    Node* newNode(uint64_t data, bool vmm = false, bool usePool = false);
 
     // Recursive function to insert a node in the list with given data and returns the head node
-    void insertNode(Node*& head, uint64_t data, bool usePool = false);
+    void insertNode(Node*& head, uint64_t data, bool vmm = false, bool usePool = false);
 
     // Get a pointer to a node from its data
     Node* findNode(Node* head, uint64_t data);
 
     // Delete a node
-    void deleteNode(Node*& head, uint64_t key);
+    void deleteNode(Node*& head, uint64_t key, bool vmm = false, bool usePool = false);
 
     // Delete a specific node
-    void deleteNode(Node*& head, Node* node);
+    void deleteNode(Node*& head, Node* node, bool vmm = false, bool usePool = false);
 
     // print the Linked list
     void fprint(fd_t file, Node* head);
@@ -67,8 +67,8 @@ namespace LinkedList {
     template<typename T>
     class SimpleLinkedList {
     public:
-        SimpleLinkedList(bool usePool = false)
-            : m_count(0), m_start(nullptr), m_usePool(usePool) {}
+        SimpleLinkedList(bool vmm = false, bool usePool = false)
+            : m_count(0), m_start(nullptr), m_vmm(vmm), m_usePool(usePool) {}
         ~SimpleLinkedList() {
             for (uint64_t i = 0; i < m_count; i++)
                 remove((uint64_t)0);
@@ -77,14 +77,14 @@ namespace LinkedList {
         void insert(const T* obj) {
             // if (findNode(m_start, (uint64_t)&obj) != nullptr)
             // 	return; // object already exists
-            insertNode(m_start, (uint64_t)obj, m_usePool);
+            insertNode(m_start, (uint64_t)obj, m_vmm, m_usePool);
             m_count++;
         }
         void insertAt(uint64_t index, const T* obj) {
             if (index >= m_count)
                 return;
             if (index == 0) {
-                Node* node = newNode(reinterpret_cast<uint64_t>(obj));
+                Node* node = newNode(reinterpret_cast<uint64_t>(obj), m_vmm, m_usePool);
                 node->next = m_start;
                 if (m_start != nullptr)
                     m_start->previous = node;
@@ -102,7 +102,7 @@ namespace LinkedList {
                 previous = temp;
                 temp = temp->next;
             }
-            Node* node = newNode(reinterpret_cast<uint64_t>(obj), m_usePool);
+            Node* node = newNode(reinterpret_cast<uint64_t>(obj), m_vmm, m_usePool);
             // node needs to slot in between temp and temp->next
             if (temp == nullptr) {
                 // empty list
@@ -151,11 +151,11 @@ namespace LinkedList {
             return UINT64_MAX;
         }
         void remove(uint64_t index) {
-            deleteNode(m_start, (uint64_t)get(index));
+            deleteNode(m_start, (uint64_t)get(index), m_vmm, m_usePool);
             m_count--;
         }
         void remove(const T* obj) {
-            deleteNode(m_start, (uint64_t)obj);
+            deleteNode(m_start, (uint64_t)obj, m_vmm, m_usePool);
             m_count--;
         }
         void rotateLeft() {
@@ -220,6 +220,7 @@ namespace LinkedList {
     private:
         uint64_t m_count;
         Node* m_start;
+        bool m_vmm;
         bool m_usePool;
     };
 
