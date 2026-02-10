@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2022-2025  Frosty515
+Copyright (©) 2022-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -83,7 +83,7 @@ extern "C" {
 
 #define TODO() __assert_fail("TODO", __FILE__, __LINE__, __ASSERT_FUNCTION)
 
-void* memset(void* dst, const uint8_t value, const size_t n);
+void* memset(void* dst, const int value, const size_t n);
 void* memcpy(void* dst, const void* src, const size_t n);
 void* memmove(void* dst, const void* src, const size_t n);
 

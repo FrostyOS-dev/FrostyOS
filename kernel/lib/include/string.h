@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2022-2024  Frosty515
+Copyright (©) 2022-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@ extern "C" {
 #define NULL ((void*)0)
 #endif
 
-void* memset(void* dst, const uint8_t value, const size_t n);
+void* memset(void* dst, const int value, const size_t n);
 void* memcpy(void* dst, const void* src, const size_t n);
 void* memmove(void* dst, const void* src, const size_t n);
 int memcmp(const void* s1, const void* s2, const size_t n);
