@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
-Process::Process(ProcessMode mode, uint8_t nice) : m_Mode(mode), m_Nice(nice), m_PID(UINT64_MAX), m_PPID(UINT64_MAX), m_nextTID(0), m_MainThread(nullptr), m_Threads(true) {
+Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), m_VMM(vmm), m_Nice(nice), m_PID(UINT64_MAX), m_PPID(UINT64_MAX), m_nextTID(0), m_MainThread(nullptr), m_Threads(true) {
 
 }
 
@@ -101,4 +101,12 @@ void Process::SetPPID(uint64_t ppid) {
 
 uint64_t Process::GetPPID() const {
     return m_PPID;
+}
+
+void Process::SetVMM(VMM::VMM* vmm) {
+    m_VMM = vmm;
+}
+
+VMM::VMM* Process::GetVMM() const {
+    return m_VMM;
 }

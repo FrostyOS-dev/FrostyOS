@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024-2025  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,6 +19,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "IDT.hpp"
 
 #include "../Panic.hpp"
+
+#include "../Memory/PageFault.hpp"
 
 const char* g_Exceptions[32] = {
     "Divide by zero",
@@ -102,6 +104,9 @@ bool in_exception = false;
 extern "C" void x86_64_ISR_Handler(x86_64_ISR_Frame* frame) {
     if (g_ISR_Handlers[frame->INT] != nullptr)
         return g_ISR_Handlers[frame->INT](frame);
+
+    if (frame->INT == 0xE)
+        return x86_64_PageFaultHandler(frame);
 
     if (in_exception) {
         while (true) {

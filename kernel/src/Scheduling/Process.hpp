@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,6 +22,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <DataStructures/LinkedList.hpp>
 
+#include <Memory/VMM.hpp>
+
 #include "Thread.hpp"
 
 enum class ProcessMode {
@@ -31,7 +33,7 @@ enum class ProcessMode {
 
 class Process {
 public:
-    Process(ProcessMode mode, uint8_t nice);
+    Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice);
     ~Process();
 
     void CreateMainThread(ThreadEntryPoint entryPoint);
@@ -53,8 +55,12 @@ public:
     void SetPPID(uint64_t ppid);
     uint64_t GetPPID() const;
 
+    void SetVMM(VMM::VMM* vmm);
+    VMM::VMM* GetVMM() const;
+
 private:
     ProcessMode m_Mode;
+    VMM::VMM* m_VMM;
     uint8_t m_Nice;
     uint64_t m_PID;
     uint64_t m_PPID;

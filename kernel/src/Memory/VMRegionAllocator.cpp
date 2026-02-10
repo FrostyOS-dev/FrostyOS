@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -222,11 +222,19 @@ void VMRegionAllocator::FreePages(void* ptr, uint64_t numPages) {
 }
 
 void VMRegionAllocator::ReservePages(void* ptr, uint64_t numPages) {
-
+    // TODO
 }
 
 void VMRegionAllocator::UnreservePages(void* ptr, uint64_t numPages) {
+    // TODO
+}
 
+uint64_t VMRegionAllocator::GetStart() const {
+    return m_start;
+}
+
+uint64_t VMRegionAllocator::GetEnd() const {
+    return m_end;
 }
 
 AVLTree::wAVLTreeNode* VMRegionAllocator::SplitAPTNode(AVLTree::wAVLTreeNode* node, uint64_t numPages) {

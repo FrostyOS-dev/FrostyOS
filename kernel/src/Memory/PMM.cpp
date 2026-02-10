@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -305,8 +305,9 @@ void PMM::Verify() {
     uint64_t pageCount = 0;
     for (uint64_t i = 0; i < m_FreeListNodeCount; i++) {
         assert(current != nullptr);
-        if (previous != nullptr)
-            assert(previous + previous->PageCount <= current);
+        if (previous != nullptr) {
+            assert((uint64_t)previous + previous->PageCount * PAGE_SIZE <= (uint64_t)current);
+        }
         pageCount += current->PageCount;
         previous = current;
         current = current->Next;

@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -71,6 +71,8 @@ namespace Scheduler {
     void InitBSPState();
 
     [[noreturn]] void Start();
+
+    bool isRunning();
     
 } // namespace Scheduler
 

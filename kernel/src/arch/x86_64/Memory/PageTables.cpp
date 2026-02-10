@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024-2025  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -156,10 +156,11 @@ void x86_64_RemapPage(void* pageTable, uint64_t virtualAddress, uint32_t flags) 
 }
 
 void x86_64_UnmapPage(void* pageTable, uint64_t virtualAddress) {
-    uint64_t i = x86_64_Is5LevelPagingSupported() ? 5 : 4;
+    uint64_t count = x86_64_Is5LevelPagingSupported() ? 5 : 4;
     uint64_t entryStack[4]; // highest level minus 1
+    memset(entryStack, 0, sizeof(entryStack));
 
-    while (pageTable != nullptr) {
+    for (int i = count; pageTable != nullptr; i--) {
         if (i < 1)
             return;
         uint64_t pageTableEntry = (uint64_t)pageTable + ((virtualAddress >> (12 + (i - 1) * 9)) & 0x1FF) * 8;
@@ -173,11 +174,10 @@ void x86_64_UnmapPage(void* pageTable, uint64_t virtualAddress) {
         if (newPageTable == nullptr)
             return;
         pageTable = to_HHDM(newPageTable);
-        i--;
     }
 
     // loop through the stack and delete any empty page tables
-    for (uint64_t i = 0; i < 4; i++) {
+    for (uint64_t i = 0; i < count; i++) {
         uint64_t* entry = (uint64_t*)entryStack[i];
         if (entry == nullptr)
             return;

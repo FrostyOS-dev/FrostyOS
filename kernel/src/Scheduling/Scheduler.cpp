@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -39,6 +39,7 @@ namespace Scheduler {
     LinkedList::LockableLinkedList<Process> g_Processes(true);
     uint64_t g_LastPID = 0;
     spinlock_t g_PIDLock;
+    uint64_t g_isRunning = 0;
 
     // private functions
 
@@ -272,8 +273,13 @@ namespace Scheduler {
         assert(state != nullptr);
 
         state->startAllowed = 1;
+        g_isRunning = 1;
 
         RunThread(state->currentThread);
+    }
+
+    bool isRunning() {
+        return g_isRunning > 0;
     }
 
 } // namespace Scheduler

@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024-2025  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,6 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "PageMapper.hpp"
 #include "PagingInit.hpp"
 #include "PagingUtil.hpp"
 #include "PAT.hpp"
@@ -25,10 +26,21 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <HAL/HAL.hpp>
 
+#include <Memory/Pager.hpp>
 #include <Memory/PagingUtil.hpp>
 #include <Memory/PMM.hpp>
+#include <Memory/VMM.hpp>
+#include <Memory/VMRegionAllocator.hpp>
 
 PMM KPMM;
+VMM::VMM KVMM;
+VMM::DefaultPager DefaultPager;
+VMRegionAllocator KVMRegionAllocator;
+x86_64_PageMapper KPageMapper;
+
+namespace VMM {
+    VMM* g_KVMM = nullptr;
+}
 
 void* g_KernelRootPageTable = nullptr;
 
@@ -55,6 +67,15 @@ void x86_64_InitPaging(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t
 
     x86_64_InitPAT();
 
+    // prepare the new HHDM offset as there is no guarantee for what it will be
+    uint64_t newHHDMOffset;
+    if (pagingMode == x86_64_PagingMode::_4LVL)
+        newHHDMOffset = 0xFFFF800000000000;
+    else // 5 level
+        newHHDMOffset = 0xFF00000000000000;
+
+#define to_newHHDM(addr) ((addr) + newHHDMOffset)
+
     uint64_t frameBufferEntryIndex = 0;
 
     // HHDM map any usable, bootloader reclaimable, kernel and modules memory as read-write with default cache policy
@@ -67,11 +88,11 @@ void x86_64_InitPaging(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t
         if (memoryMap[i]->Type != MEMORY_MAP_ENTRY_USABLE && memoryMap[i]->Type != MEMORY_MAP_ENTRY_BOOTLOADER_RECLAIMABLE && memoryMap[i]->Type != MEMORY_MAP_ENTRY_KERNEL_AND_MODULES)
             continue;
 
-        x86_64_MapRegionWithLargestPages(g_KernelRootPageTable, to_HHDM(memoryMap[i]->Base), memoryMap[i]->Base, memoryMap[i]->Length, 0x0800'0003); // read-write, present, no-execute
+        x86_64_MapRegionWithLargestPages(g_KernelRootPageTable, to_newHHDM(memoryMap[i]->Base), memoryMap[i]->Base, memoryMap[i]->Length, 0x0800'0003); // read-write, present, no-execute
     }
 
     // HHDM map the framebuffer as read-write with write-combining cache policy
-    x86_64_MapRegionWithLargestPages(g_KernelRootPageTable, to_HHDM(memoryMap[frameBufferEntryIndex]->Base), memoryMap[frameBufferEntryIndex]->Base, memoryMap[frameBufferEntryIndex]->Length, 0x0800'0003 | x86_64_PAT_GetPageMappingFlags(x86_64_PATOffset::WriteCombining)); // read-write, present, no-execute
+    x86_64_MapRegionWithLargestPages(g_KernelRootPageTable, to_newHHDM(memoryMap[frameBufferEntryIndex]->Base), memoryMap[frameBufferEntryIndex]->Base, memoryMap[frameBufferEntryIndex]->Length, 0x0800'0003 | x86_64_PAT_GetPageMappingFlags(x86_64_PATOffset::WriteCombining)); // read-write, present, no-execute
 
     // next map the kernel's different sections
     uint64_t aligned_text_start = ALIGN_DOWN((uint64_t)_text_start_addr, PAGE_SIZE);
@@ -97,4 +118,20 @@ void x86_64_InitPaging(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t
 
     // now load the page table
     x86_64_LoadCR3((uint64_t)from_HHDM(g_KernelRootPageTable));
+
+#undef to_newHHDM
+    // Set the new HHDM offset
+    SetHHDMOffset(newHHDMOffset);
+
+    // Init the VMM
+    if (pagingMode == x86_64_PagingMode::_4LVL)
+        KVMRegionAllocator.Init(0xFFFFC00000000000, 0xFFFFF00000000000);
+    else // 5 level
+        KVMRegionAllocator.Init(0xFF80000000000000, 0xFFC0000000000000);
+
+    KPageMapper.SetPageTable(g_KernelRootPageTable);
+
+    KVMM.Init(&KPageMapper, &KVMRegionAllocator);
+    VMM::g_KVMM = &KVMM;
+    VMM::g_defaultPager = &DefaultPager;
 }

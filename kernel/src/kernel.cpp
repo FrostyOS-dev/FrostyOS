@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024-2025  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -28,6 +28,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <HAL/HAL.hpp>
 
+#include <Memory/VMM.hpp>
+
 #include <Scheduling/Process.hpp>
 #include <Scheduling/Scheduler.hpp>
 #include <Scheduling/Thread.hpp>
@@ -54,7 +56,7 @@ TTY g_KTTY;
 
 char Stage2Stack[KERNEL_STACK_SIZE];
 
-Process KProcess(ProcessMode::KERNEL, NICE_LEVELS - 1);
+Process KProcess(ProcessMode::KERNEL, nullptr, NICE_LEVELS - 1);
 Thread KThread;
 
 void StartKernel() {
@@ -90,6 +92,7 @@ void StartKernel() {
     KThread.SetStack((uint64_t)Stage2Stack + KERNEL_STACK_SIZE);
 
     KProcess.SetMainThread(&KThread);
+    KProcess.SetVMM(VMM::g_KVMM);
 
     Scheduler::ScheduleThread(&KThread);
 

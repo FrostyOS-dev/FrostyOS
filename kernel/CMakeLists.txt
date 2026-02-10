@@ -28,6 +28,8 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/PIC.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PageFault.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PageMapper.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PageTables.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PagingInit.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PagingUtil.asm
@@ -72,8 +74,10 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/HAL.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/Time.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/Heap.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/Pager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PagingUtil.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PMM.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/VMM.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/VMRegionAllocator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Process.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Scheduler.cpp

@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -34,6 +34,9 @@ public:
 
     void ReservePages(void* ptr, uint64_t numPages);
     void UnreservePages(void* ptr, uint64_t numPages);
+
+    uint64_t GetStart() const;
+    uint64_t GetEnd() const;
 
 private:
     // Split a node in the allPagesTree, returning the new node for the upper half. numPage is the number of pages to split at into the old node.
