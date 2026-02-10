@@ -1,4 +1,4 @@
-# Copyright (©) 2024  Frosty515
+# Copyright (©) 2024-2026  Frosty515
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,5 +15,5 @@
 
 include(${ROOT_SOURCE_DIR}/build-scripts/utils.cmake)
 
-download_file("https://raw.githubusercontent.com/limine-bootloader/limine/v8.x-binary/BOOTX64.EFI" ${ROOT_SOURCE_DIR}/dist/boot/EFI/BOOT/BOOTX64.EFI)
+download_file("https://raw.githubusercontent.com/limine-bootloader/limine/v10.x-binary/BOOTX64.EFI" ${ROOT_SOURCE_DIR}/dist/boot/EFI/BOOT/BOOTX64.EFI)
 download_file("https://raw.githubusercontent.com/FrostyOS-dev/various-scripts/master/FrostyOS/boot/limine.cfg" ${ROOT_SOURCE_DIR}/dist/boot/limine.cfg)

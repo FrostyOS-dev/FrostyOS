@@ -1,4 +1,4 @@
-# Copyright (©) 2024  Frosty515
+# Copyright (©) 2024-2026  Frosty515
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,4 +15,4 @@
 
 include(${ROOT_SOURCE_DIR}/build-scripts/utils.cmake)
 
-download_file("https://raw.githubusercontent.com/limine-bootloader/limine/v8.x-binary/limine.h" ${ROOT_SOURCE_DIR}/kernel/src/limine.h)
+download_file("https://raw.githubusercontent.com/limine-bootloader/limine-protocol/refs/heads/trunk/include/limine.h" ${ROOT_SOURCE_DIR}/kernel/src/limine.h)

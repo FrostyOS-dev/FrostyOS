@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024-2025  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -23,23 +23,23 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 extern "C" {
 
-LIMINE_BASE_REVISION(3)
+volatile uint64_t limine_base_revision[] = LIMINE_BASE_REVISION(3);
 
 static volatile struct limine_hhdm_request hhdm_request = {
-    .id = LIMINE_HHDM_REQUEST,
+    .id = LIMINE_HHDM_REQUEST_ID,
     .revision = 0,
     .response = nullptr
 };
 
 static volatile struct limine_framebuffer_request framebuffer_request = {
-    .id = LIMINE_FRAMEBUFFER_REQUEST,
+    .id = LIMINE_FRAMEBUFFER_REQUEST_ID,
     .revision = 1,
     .response = nullptr
 };
 
 #ifdef __x86_64__
 static volatile struct limine_paging_mode_request paging_mode_request = {
-    .id = LIMINE_PAGING_MODE_REQUEST,
+    .id = LIMINE_PAGING_MODE_REQUEST_ID,
     .revision = 1,
     .response = nullptr,
     .mode = LIMINE_PAGING_MODE_X86_64_5LVL,
@@ -49,19 +49,19 @@ static volatile struct limine_paging_mode_request paging_mode_request = {
 #endif
 
 static volatile struct limine_memmap_request memmap_request = {
-    .id = LIMINE_MEMMAP_REQUEST,
+    .id = LIMINE_MEMMAP_REQUEST_ID,
     .revision = 0,
     .response = nullptr
 };
 
 static volatile struct limine_rsdp_request rsdp_request = {
-    .id = LIMINE_RSDP_REQUEST,
+    .id = LIMINE_RSDP_REQUEST_ID,
     .revision = 0,
     .response = nullptr
 };
 
-static volatile struct limine_kernel_address_request kernel_address_request = {
-    .id = LIMINE_KERNEL_ADDRESS_REQUEST,
+static volatile struct limine_executable_address_request executable_address_request = {
+    .id = LIMINE_EXECUTABLE_ADDRESS_REQUEST_ID,
     .revision = 0,
     .response = nullptr
 };
@@ -82,8 +82,8 @@ void _start() {
         limine_request_fail("memmap_request");
     if (rsdp_request.response == nullptr)
         limine_request_fail("rsdp_request");
-    if (kernel_address_request.response == nullptr)
-        limine_request_fail("kernel_address_request");
+    if (executable_address_request.response == nullptr)
+        limine_request_fail("executable_address_request");
 
 #ifdef __x86_64__
     if (paging_mode_request.response == nullptr)
@@ -112,8 +112,8 @@ void _start() {
     g_kernelParams.MemoryMap = (MemoryMapEntry**)memmap_request.response->entries;
     g_kernelParams.MemoryMapEntryCount = memmap_request.response->entry_count;
     g_kernelParams.RSDP = rsdp_request.response->address;
-    g_kernelParams.kernelPhysical = kernel_address_request.response->physical_base;
-    g_kernelParams.kernelVirtual = kernel_address_request.response->virtual_base;
+    g_kernelParams.kernelPhysical = executable_address_request.response->physical_base;
+    g_kernelParams.kernelVirtual = executable_address_request.response->virtual_base;
     switch (paging_mode_request.response->mode) {
 #ifdef __x86_64__
         case LIMINE_PAGING_MODE_X86_64_4LVL:
