@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "tree.h"
 #pragma GCC diagnostic pop
 
+#include <spinlock.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -50,7 +51,7 @@ namespace AVLTree {
     template <typename K, typename D>
     class wAVLTree { // NOTE: No allocations of K (key) or D (data) are performed by this class. 
     public:
-        wAVLTree(bool vmm = false) : m_vmm(vmm) {
+        wAVLTree(bool vmm = false) : m_vmm(vmm), m_lock(SPINLOCK_DEFAULT_VALUE) {
             RB_INIT(&m_tree);
         }
 
@@ -116,7 +117,9 @@ namespace AVLTree {
             wAVLTreeNode node;
             node.key = (uint64_t)key;
             wAVLTreeNode* new_node = RB_NFIND(raw_wAVLTree, &m_tree, &node);
-            if (node.key != (uint64_t)key)
+            if (new_node == nullptr)
+                return RB_MAX(raw_wAVLTree, &m_tree);
+            if (new_node->key > (uint64_t)key)
                 return RB_PREV(raw_wAVLTree, &m_tree, new_node);
             return new_node;
         }
@@ -151,9 +154,18 @@ namespace AVLTree {
             }
         }
 
+        void lock() const {
+            spinlock_acquire(&m_lock);
+        }
+
+        void unlock() const {
+            spinlock_release(&m_lock);
+        }
+
     private:
         raw_wAVLTree m_tree;
         bool m_vmm;
+        mutable spinlock_t m_lock;
     };
 }
 
