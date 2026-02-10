@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Heap.hpp"
 #include "PagingUtil.hpp"
 #include "PMM.hpp"
+#include "VMM.hpp"
 
 #include <assert.h>
 #include <stdio.h>
@@ -25,6 +26,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stddef.h>
 #include <stdint.h>
 #include <util.h>
+
+#include <HAL/HAL.hpp>
 
 HeapAllocator::HeapAllocator() : m_Head(nullptr), m_SectionAllocator(nullptr), m_Lock(SPINLOCK_DEFAULT_VALUE), m_UsedMemory(0), m_FreeMemory(0), m_MetadataMemory(0), m_TotalMemory(0) {
 }
@@ -256,6 +259,14 @@ void HeapAllocator::Free(void* ptr) {
     spinlock_release(&m_Lock);
 }
 
+size_t HeapAllocator::GetSize(void* ptr) const {
+    if (ptr == nullptr)
+        return 0;
+
+    HeapBlock* block = reinterpret_cast<HeapBlock*>(reinterpret_cast<uint64_t>(ptr) - sizeof(HeapBlock));
+    return block->size;
+}
+
 void HeapAllocator::Verify() {
     assert(m_UsedMemory + m_FreeMemory + m_MetadataMemory == m_TotalMemory);
     assert(static_cast<int64_t>(m_UsedMemory) >= 0);
@@ -271,7 +282,16 @@ HeapSectionAllocator g_VMMHeapSectionAllocator = {[](size_t size) -> void* {
     g_PMM->FreePages(from_HHDM(ptr), DIV_ROUNDUP(size, PAGE_SIZE));
 }};
 
+HeapSectionAllocator g_KHeapSectionAllocator = {[](size_t size) -> void* {
+    return VMM::g_KVMM->AllocatePages(DIV_ROUNDUP(size, PAGE_SIZE));
+}, [](void* ptr, size_t) {
+    if (!VMM::g_KVMM->FreePages(ptr)) {
+        PANIC("Kernel heap failed to free section");
+    }
+}};
+
 HeapAllocator g_VMMHeapAllocator(&g_VMMHeapSectionAllocator);
+HeapAllocator g_KHeapAllocator(&g_KHeapSectionAllocator);
 
 extern "C" void* kcalloc_vmm(size_t num, size_t size) {
     void* ptr = g_VMMHeapAllocator.Allocate(num * size);
@@ -292,4 +312,45 @@ extern "C" void* kmalloc_vmm(size_t size) {
 extern "C" void* krealloc_vmm(void* ptr, size_t size) {
     assert(false);
     return nullptr;
+}
+
+extern "C" void* kcalloc(size_t num, size_t size) {
+    void* ptr = g_KHeapAllocator.Allocate(num * size);
+    if (ptr == nullptr)
+        return nullptr;
+    memset(ptr, 0, num * size);
+    return ptr;
+}
+
+extern "C" void kfree(void* ptr) {
+    g_KHeapAllocator.Free(ptr);
+}
+
+extern "C" void* kmalloc(size_t size) {
+    return g_KHeapAllocator.Allocate(size);
+}
+
+extern "C" void* krealloc(void* ptr, size_t size) {
+    if (ptr == nullptr)
+        return g_KHeapAllocator.Allocate(size);
+    if (size == 0) {
+        g_KHeapAllocator.Free(ptr);
+        return nullptr;
+    }
+
+    size_t oldSize = g_KHeapAllocator.GetSize(ptr);
+    if (oldSize == 0)
+        return nullptr;
+
+    if (oldSize >= size)
+        return ptr;
+
+    void* newBuf = g_KHeapAllocator.Allocate(size);
+    if (newBuf == nullptr)
+        return nullptr;
+
+    memcpy(newBuf, ptr, oldSize);
+
+    g_KHeapAllocator.Free(ptr);
+    return newBuf;
 }

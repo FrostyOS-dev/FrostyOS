@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2022-2025  Frosty515
+Copyright (©) 2022-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -89,22 +89,6 @@ unsigned int rand() {
     t = x ^ (x << 11);
     x = y; y = z; z = w;
     return w = w ^ (w >> 19) ^ t ^ (t >> 8);
-}
-
-void* kcalloc(size_t num, size_t size) {
-    return nullptr;
-}
-
-void kfree(void* ptr) {
-
-}
-
-void* kmalloc(size_t size) {
-    return nullptr;
-}
-
-void* krealloc(void* ptr, size_t size) {
-    return nullptr;
 }
 
 void* kcalloc_eternal(size_t num, size_t size) {
