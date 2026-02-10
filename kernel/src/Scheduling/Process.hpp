@@ -69,5 +69,7 @@ private:
     LinkedList::LockableLinkedList<Thread> m_Threads;
 };
 
+extern Process* g_KProcess;
+
 
 #endif /* _PROCESS_HPP */

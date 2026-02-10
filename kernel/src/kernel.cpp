@@ -82,6 +82,8 @@ void StartKernel() {
 
     g_CurrentTTY = &g_KTTY;
 
+    g_KProcess = &KProcess;
+
     HAL_EarlyInit(g_kernelParams.HHDMStart, g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.pagingMode, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical, g_kernelParams.RSDP);
 
     LinkedList::NodePool_Init();
@@ -92,7 +94,6 @@ void StartKernel() {
     KThread.SetStack((uint64_t)Stage2Stack + KERNEL_STACK_SIZE);
 
     KProcess.SetMainThread(&KThread);
-    KProcess.SetVMM(VMM::g_KVMM);
 
     Scheduler::ScheduleThread(&KThread);
 

@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdio.h>
 
+#include <Scheduling/Process.hpp>
 #include <Scheduling/Scheduler.hpp>
 
 #include "../Panic.hpp"
@@ -33,15 +34,20 @@ void x86_64_PageFaultHandler(x86_64_ISR_Frame* frame) {
     code.reservedWrite = (frame->ERR & 8) > 0;
     code.execute = (frame->ERR & 16) > 0;
 
-    if (!code.reservedWrite && Scheduler::isRunning()) {
-        Scheduler::ProcessorState* currentState = GetCurrentProcessorState();
-        if (currentState != nullptr && currentState->currentThread != nullptr) {
-            Process* process = currentState->currentThread->GetParent();
-            if (process != nullptr) {
-                VMM::VMM* vmm = process->GetVMM();
-                if (vmm != nullptr && vmm->HandlePageFault({code.present, code.write, code.user, code.execute}, frame->CR2))
-                    return;
-            }
+    if (!code.reservedWrite) {
+        Process* process = nullptr;
+        if (Scheduler::isRunning()) {
+            Scheduler::ProcessorState* currentState = GetCurrentProcessorState();
+            if (currentState != nullptr && currentState->currentThread != nullptr)
+                process = currentState->currentThread->GetParent();
+        }
+        else
+            process = g_KProcess;
+
+        if (process != nullptr) {
+            VMM::VMM* vmm = process->GetVMM();
+            if (vmm != nullptr && vmm->HandlePageFault({code.present, code.write, code.user, code.execute}, frame->CR2))
+                return;
         }
     }
 

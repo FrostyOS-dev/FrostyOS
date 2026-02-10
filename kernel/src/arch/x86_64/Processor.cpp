@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -31,6 +31,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <HAL/HAL.hpp>
 #include <HAL/Processor.hpp>
 
+#include <Memory/VMM.hpp>
+
+#include <Scheduling/Process.hpp>
 #include <Scheduling/Scheduler.hpp>
 
 x86_64_Processor g_x86_64_BSP(true);
@@ -59,6 +62,7 @@ void x86_64_Processor::Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uin
     x86_64_InitIDT();
     x86_64_IRQ_Init();
     x86_64_InitPaging(HHDMOffset, memoryMap, memoryMapEntryCount, pagingMode, kernelVirtual, kernelPhysical);
+    g_KProcess->SetVMM(VMM::g_KVMM);
     
     Scheduler::InitBSPState();
     x86_64_SetGSBases(0, (uint64_t)&Scheduler::g_BSPState);

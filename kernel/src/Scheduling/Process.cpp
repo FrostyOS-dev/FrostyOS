@@ -110,3 +110,5 @@ void Process::SetVMM(VMM::VMM* vmm) {
 VMM::VMM* Process::GetVMM() const {
     return m_VMM;
 }
+
+Process* g_KProcess = nullptr;

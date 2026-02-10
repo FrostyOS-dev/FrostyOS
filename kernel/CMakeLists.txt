@@ -136,7 +136,7 @@ target_link_options(kernel
 
 target_compile_definitions(kernel PRIVATE _FROSTYOS_BUILD_TARGET=kernel)
 
-target_compile_definitions(kernel PRIVATE UACPI_BAREBONES_MODE=1)
+# target_compile_definitions(kernel PRIVATE UACPI_BAREBONES_MODE=1)
 target_compile_definitions(kernel PRIVATE UACPI_FORMATTED_LOGGING=1)
 # target_compile_definitions(kernel PRIVATE UACPI_NATIVE_ALLOC_ZEROED=1)
 

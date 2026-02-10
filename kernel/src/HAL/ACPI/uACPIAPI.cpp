@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -129,7 +129,7 @@ struct uACPIAPI_IOHandle {
 };
 
 uacpi_status uacpi_kernel_io_map(uacpi_io_addr start, size_t length, uacpi_handle* out_handle) {
-    uACPIAPI_IOHandle* handle = (uACPIAPI_IOHandle*)kcalloc_vmm(1, sizeof(uACPIAPI_IOHandle));
+    uACPIAPI_IOHandle* handle = (uACPIAPI_IOHandle*)kcalloc(1, sizeof(uACPIAPI_IOHandle));
     handle->start = start;
     handle->length = length;
     *out_handle = handle;
@@ -137,7 +137,7 @@ uacpi_status uacpi_kernel_io_map(uacpi_io_addr start, size_t length, uacpi_handl
 }
 
 void uacpi_kernel_io_unmap(uacpi_handle handle) {
-    kfree_vmm(handle);
+    kfree(handle);
 }
 
 uacpi_status uacpi_kernel_io_read8(uacpi_handle handle, size_t offset, uacpi_u8* data) {
@@ -183,19 +183,19 @@ uacpi_status uacpi_kernel_io_write32(uacpi_handle handle, size_t offset, uacpi_u
 }
 
 void* uacpi_kernel_alloc(uacpi_size size) {
-    return kmalloc_vmm(size);
+    return kmalloc(size);
 }
 
 #ifdef UACPI_NATIVE_ALLOC_ZEROED
 
 void* uacpi_kernel_alloc_zeroed(uacpi_size size) {
-    return kcalloc_vmm(1, size);
+    return kcalloc(1, size);
 }
 
 #endif /* UACPI_NATIVE_ALLOC_ZEROED */
 
 void uacpi_kernel_free(void* mem) {
-    kfree_vmm(mem);
+    kfree(mem);
 }
 
 uacpi_u64 uacpi_kernel_get_nanoseconds_since_boot(void) {
@@ -214,19 +214,19 @@ void uacpi_kernel_sleep(uacpi_u64 msec) {
 }
 
 uacpi_handle uacpi_kernel_create_mutex(void) {
-    return kcalloc_vmm(1, 8);
+    return kcalloc(1, 8);
 }
 
 void uacpi_kernel_free_mutex(uacpi_handle handle) {
-    kfree_vmm(handle);
+    kfree(handle);
 }
 
 uacpi_handle uacpi_kernel_create_event() {
-    return kcalloc_vmm(1, 8);
+    return kcalloc(1, 8);
 }
 
 void uacpi_kernel_free_event(uacpi_handle handle) {
-    kfree_vmm(handle);
+    kfree(handle);
 }
 
 uacpi_thread_id uacpi_kernel_get_thread_id() {
@@ -254,22 +254,22 @@ uacpi_status uacpi_kernel_handle_firmware_request(uacpi_firmware_request*) {
     return UACPI_STATUS_UNIMPLEMENTED;
 }
 
-uacpi_status uacpi_kernel_install_interrupt_handler(uacpi_u32, uacpi_interrupt_handler, uacpi_handle, uacpi_handle*) {
+uacpi_status uacpi_kernel_install_interrupt_handler(uacpi_u32 irq, uacpi_interrupt_handler handler, uacpi_handle ctx, uacpi_handle* out_irq_handle) {
     return UACPI_STATUS_UNIMPLEMENTED;
 }
 
-uacpi_status uacpi_kernel_uninstall_interrupt_handler(uacpi_interrupt_handler, uacpi_handle) {
+uacpi_status uacpi_kernel_uninstall_interrupt_handler(uacpi_interrupt_handler handler, uacpi_handle irq_handle) {
     return UACPI_STATUS_UNIMPLEMENTED;
 }
 
 uacpi_handle uacpi_kernel_create_spinlock(void) {
-    spinlock_t* lock = (spinlock_t*)kmalloc_vmm(sizeof(spinlock_t));
+    spinlock_t* lock = (spinlock_t*)kmalloc(sizeof(spinlock_t));
     *lock = SPINLOCK_DEFAULT_VALUE;
     return lock;
 }
 
 void uacpi_kernel_free_spinlock(uacpi_handle lock) {
-    kfree_vmm(lock);
+    kfree(lock);
 }
 
 uacpi_cpu_flags uacpi_kernel_lock_spinlock(uacpi_handle lock) {
