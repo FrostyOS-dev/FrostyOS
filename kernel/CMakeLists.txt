@@ -1,4 +1,4 @@
-# Copyright (©) 2024-2025  Frosty515
+# Copyright (©) 2024-2026  Frosty515
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -138,7 +138,7 @@ target_compile_definitions(kernel PRIVATE UACPI_FORMATTED_LOGGING=1)
 
 target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mcmodel=kernel>
-    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-g>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C,ASM_NASM>:-g>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wall>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wextra>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wpedantic>
