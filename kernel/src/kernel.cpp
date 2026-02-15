@@ -59,6 +59,8 @@ char Stage2Stack[KERNEL_STACK_SIZE];
 Process KProcess(ProcessMode::KERNEL, nullptr, NICE_LEVELS - 1);
 Thread KThread;
 
+FrameBuffer g_KFramebuffer;
+
 void StartKernel() {
     {
         typedef void (*ctor_fn)();
@@ -85,6 +87,10 @@ void StartKernel() {
     g_KProcess = &KProcess;
 
     HAL_EarlyInit(g_kernelParams.HHDMStart, g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.pagingMode, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical, g_kernelParams.RSDP);
+
+    memcpy(&g_KFramebuffer, &g_kernelParams.framebuffer, sizeof(FrameBuffer));
+    g_KFramebuffer.BaseAddress = VMM::g_KVMM->AllocatePages(DIV_ROUNDUP(g_KFramebuffer.pitch * g_KFramebuffer.height, PAGE_SIZE));
+    g_KVGA.EnableDoubleBuffering(&g_KFramebuffer);
 
     LinkedList::NodePool_Init();
 
