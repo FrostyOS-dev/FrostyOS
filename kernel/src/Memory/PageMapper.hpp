@@ -36,4 +36,6 @@ public:
     virtual void InvalidatePages(uint64_t virt, size_t count) = 0;
 };
 
+extern PageMapper* g_KPageMapper;
+
 #endif /* _PAGE_MAPPER_HPP */

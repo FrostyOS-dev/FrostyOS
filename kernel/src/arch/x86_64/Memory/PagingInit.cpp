@@ -37,6 +37,7 @@ VMM::VMM KVMM;
 VMM::DefaultPager DefaultPager;
 VMRegionAllocator KVMRegionAllocator;
 x86_64_PageMapper KPageMapper;
+PageMapper* g_KPageMapper = nullptr; // declared in the Memory/PageMapper.hpp
 
 namespace VMM {
     VMM* g_KVMM = nullptr;
@@ -134,4 +135,5 @@ void x86_64_InitPaging(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t
     KVMM.Init(&KPageMapper, &KVMRegionAllocator);
     VMM::g_KVMM = &KVMM;
     VMM::g_defaultPager = &DefaultPager;
+    g_KPageMapper = &KPageMapper;
 }
