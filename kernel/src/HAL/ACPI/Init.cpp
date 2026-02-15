@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "Init.hpp"
 #include "MADT.hpp"
+#include "MCFG.hpp"
 
 #include "../HAL.hpp"
 
@@ -62,6 +63,11 @@ namespace ACPI {
         if (!InitMADT()) {
             dbgprintf("MADT init failed.\n");
             PANIC("Failed to initialise MADT table");
+        }
+
+        if (!InitMCFG()) {
+            dbgprintf("MCFG init failed.\n");
+            PANIC("Failed to initialise MCFG table");
         }
 
         dbgprintf("ACPI: Early init complete\n");

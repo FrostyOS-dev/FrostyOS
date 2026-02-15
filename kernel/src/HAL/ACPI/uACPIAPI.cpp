@@ -15,9 +15,11 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "HAL/ACPI/MCFG.hpp"
 #include "Init.hpp"
 
 #include "../HAL.hpp"
+#include "uacpi/types.h"
 
 #include <spinlock.h>
 #include <stdlib.h>
@@ -100,35 +102,46 @@ void uacpi_kernel_vlog(uacpi_log_level level, const uacpi_char* format, uacpi_va
 
 #ifndef UACPI_BAREBONES_MODE
 
-uacpi_status uacpi_kernel_pci_device_open(uacpi_pci_address, uacpi_handle*) {
-    return UACPI_STATUS_UNIMPLEMENTED;
+uacpi_status uacpi_kernel_pci_device_open(uacpi_pci_address address, uacpi_handle *out_handle) {
+    if (!MCFG_Validate(address.segment, address.bus))
+        return UACPI_STATUS_INVALID_ARGUMENT;
+    uacpi_pci_address* addr = new uacpi_pci_address(address);
+    *out_handle = addr;
+    return UACPI_STATUS_OK;
 }
 
-void uacpi_kernel_pci_device_close(uacpi_handle) {
+void uacpi_kernel_pci_device_close(uacpi_handle handle) {
+    delete static_cast<uacpi_pci_address*>(handle);
 }
 
-uacpi_status uacpi_kernel_pci_read8(uacpi_handle, size_t, uacpi_u8*) {
-    return UACPI_STATUS_UNIMPLEMENTED;
+uacpi_status uacpi_kernel_pci_read8(uacpi_handle device, uacpi_size offset, uacpi_u8 *value) {
+    uacpi_pci_address* addr = static_cast<uacpi_pci_address*>(device);
+    return MCFG_Read8(value, addr->segment, addr->bus, addr->device, addr->function, offset) ? UACPI_STATUS_OK : UACPI_STATUS_INVALID_ARGUMENT;
 }
 
-uacpi_status uacpi_kernel_pci_read16(uacpi_handle, size_t, uacpi_u16*) {
-    return UACPI_STATUS_UNIMPLEMENTED;
+uacpi_status uacpi_kernel_pci_read16(uacpi_handle device, uacpi_size offset, uacpi_u16 *value) {
+    uacpi_pci_address* addr = static_cast<uacpi_pci_address*>(device);
+    return MCFG_Read16(value, addr->segment, addr->bus, addr->device, addr->function, offset) ? UACPI_STATUS_OK : UACPI_STATUS_INVALID_ARGUMENT;
 }
 
-uacpi_status uacpi_kernel_pci_read32(uacpi_handle, size_t, uacpi_u32*) {
-    return UACPI_STATUS_UNIMPLEMENTED;
+uacpi_status uacpi_kernel_pci_read32(uacpi_handle device, uacpi_size offset, uacpi_u32 *value) {
+    uacpi_pci_address* addr = static_cast<uacpi_pci_address*>(device);
+    return MCFG_Read32(value, addr->segment, addr->bus, addr->device, addr->function, offset) ? UACPI_STATUS_OK : UACPI_STATUS_INVALID_ARGUMENT;
 }
 
-uacpi_status uacpi_kernel_pci_write8(uacpi_handle, size_t, uacpi_u8) {
-    return UACPI_STATUS_UNIMPLEMENTED;
+uacpi_status uacpi_kernel_pci_write8(uacpi_handle device, uacpi_size offset, uacpi_u8 value) {
+    uacpi_pci_address* addr = static_cast<uacpi_pci_address*>(device);
+    return MCFG_Write8(value, addr->segment, addr->bus, addr->device, addr->function, offset) ? UACPI_STATUS_OK : UACPI_STATUS_INVALID_ARGUMENT;
 }
 
-uacpi_status uacpi_kernel_pci_write16(uacpi_handle, size_t, uacpi_u16) {
-    return UACPI_STATUS_UNIMPLEMENTED;
+uacpi_status uacpi_kernel_pci_write16(uacpi_handle device, uacpi_size offset, uacpi_u16 value) {
+    uacpi_pci_address* addr = static_cast<uacpi_pci_address*>(device);
+    return MCFG_Write16(value, addr->segment, addr->bus, addr->device, addr->function, offset) ? UACPI_STATUS_OK : UACPI_STATUS_INVALID_ARGUMENT;
 }
 
-uacpi_status uacpi_kernel_pci_write32(uacpi_handle, size_t, uacpi_u32) {
-    return UACPI_STATUS_UNIMPLEMENTED;
+uacpi_status uacpi_kernel_pci_write32(uacpi_handle device, uacpi_size offset, uacpi_u32 value) {
+    uacpi_pci_address* addr = static_cast<uacpi_pci_address*>(device);
+    return MCFG_Write32(value, addr->segment, addr->bus, addr->device, addr->function, offset) ? UACPI_STATUS_OK : UACPI_STATUS_INVALID_ARGUMENT;
 }
 
 struct uACPIAPI_IOHandle {
