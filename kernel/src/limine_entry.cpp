@@ -23,7 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 extern "C" {
 
-volatile uint64_t limine_base_revision[] = LIMINE_BASE_REVISION(3);
+volatile uint64_t limine_base_revision[] = LIMINE_BASE_REVISION(4);
 
 static volatile struct limine_hhdm_request hhdm_request = {
     .id = LIMINE_HHDM_REQUEST_ID,

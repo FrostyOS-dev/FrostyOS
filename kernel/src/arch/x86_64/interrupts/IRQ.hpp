@@ -22,12 +22,34 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
+#include <DataStructures/Bitmap.hpp>
+#include <DataStructures/HashMap.hpp>
+
 typedef void (*x86_64_IRQHandler_t)(x86_64_ISR_Frame* frame, uint8_t irq);
+typedef void (*x86_64_GSIHandler_t)(x86_64_ISR_Frame* frame, void* ctx);
 
-void x86_64_IRQ_Init();
+struct x86_64_ProcessorIRQData {
+    struct HandlerData {
+        x86_64_GSIHandler_t handler;
+        void* ctx;
+    };
 
-void x86_64_IRQ_RegisterHandler(uint8_t irq, x86_64_IRQHandler_t handler);
+    RawBitmap usedInterrupts;
+    HashMap<uint8_t, HandlerData*> handlerMap;
+};
 
+void x86_64_IRQ_EarlyInit(); // called before memory management is ready
+void x86_64_IRQ_FullInit(); // called after current processor is ready
+
+void x86_64_PICHandler(x86_64_ISR_Frame* frame);
 void x86_64_IRQHandler(x86_64_ISR_Frame* frame);
+
+// Register a handler, including validating the GSI. Cannot be called until I/O APICs are intialised.
+bool x86_64_RegisterGSIHandler(uint32_t GSI, x86_64_GSIHandler_t handler, void* ctx);
+
+bool x86_64_RemoveGSIHandler(uint32_t GSI);
+
+bool x86_64_MaskGSI(uint32_t GSI);
+bool x86_64_UnmaskGSI(uint32_t GSI);
 
 #endif /* _x86_64_IRQ_HPP */

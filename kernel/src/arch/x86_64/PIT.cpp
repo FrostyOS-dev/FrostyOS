@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -17,9 +17,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "IO.h"
 #include "PIT.hpp"
+#include "Panic.hpp"
 
 #include "interrupts/IRQ.hpp"
 #include "interrupts/ISR.hpp"
+
+#include "interrupts/APIC/IOAPIC.hpp"
 
 #include <HAL/Time.hpp>
 
@@ -45,7 +48,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 uint64_t g_x86_64_PITTicks = 0; // in ms
 
-void x86_64_PIT_Handler(x86_64_ISR_Frame* frame, uint8_t irq) {
+void x86_64_PIT_Handler(x86_64_ISR_Frame* frame, void*) {
     g_x86_64_PITTicks += 5;
     HAL_TimerTick(5, frame);
 }
@@ -53,7 +56,8 @@ void x86_64_PIT_Handler(x86_64_ISR_Frame* frame, uint8_t irq) {
 void x86_64_PIT_Init() {
     x86_64_outb(PIT_COMMAND, PIT_COMMAND_CHANNEL0 | PIT_COMMAND_ACCESS_LOHI | PIT_COMMAND_MODE3 | PIT_COMMAND_BINARY);
 
-    x86_64_IRQ_RegisterHandler(0, x86_64_PIT_Handler);
+    if (!x86_64_RegisterGSIHandler(x86_64_GetGSIFromSource(0), x86_64_PIT_Handler, nullptr))
+        PANIC("PIT Handler Registration failed");
 
     x86_64_PIT_SetDivisor(5966); // just under 200 Hz
 }

@@ -20,8 +20,48 @@ endif()
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/dependencies/uACPI/uacpi.cmake)
 
+add_library(uacpi STATIC ${UACPI_SOURCES})
+
+set_target_properties(uacpi PROPERTIES CXX_STANDARD 23)
+set_target_properties(uacpi PROPERTIES CXX_STANDARD_REQUIRED ON)
+set_target_properties(uacpi PROPERTIES CXX_EXTENSIONS OFF)
+set_target_properties(uacpi PROPERTIES C_STANDARD 23)
+set_target_properties(uacpi PROPERTIES C_EXTENSIONS OFF)
+set_target_properties(uacpi PROPERTIES C_STANDARD_REQUIRED ON)
+
+target_include_directories(uacpi PRIVATE ${UACPI_INCLUDES})
+
+target_compile_definitions(uacpi PRIVATE UACPI_FORMATTED_LOGGING=1)
+
+target_compile_options(uacpi
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mcmodel=kernel>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C,ASM_NASM>:-g>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wall>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wextra>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-pedantic>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-strict-aliasing>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-pointer-arith>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-unused-parameter>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-switch>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-packed-bitfield-compat>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wno-address-of-packed-member>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-nostdlib>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-ffreestanding>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-pie>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fstack-protector>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mgeneral-regs-only>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mno-red-zone>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-O2>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-omit-frame-pointer>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-asynchronous-unwind-tables>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
+)
+
 if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
     set(kernel_sources
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/APIC/IOAPIC.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/APIC/LocalAPIC.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IDT.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IDT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IRQ.cpp
@@ -70,6 +110,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGA.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGAFont.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/Init.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/MADT.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/uACPIAPI.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/HAL.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/Time.cpp
@@ -89,7 +130,6 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/VGABackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTYBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTY.cpp
-    ${UACPI_SOURCES}
 )
 
 set(kernel_lib_sources
@@ -136,9 +176,7 @@ target_link_options(kernel
 
 target_compile_definitions(kernel PRIVATE _FROSTYOS_BUILD_TARGET=kernel)
 
-# target_compile_definitions(kernel PRIVATE UACPI_BAREBONES_MODE=1)
 target_compile_definitions(kernel PRIVATE UACPI_FORMATTED_LOGGING=1)
-# target_compile_definitions(kernel PRIVATE UACPI_NATIVE_ALLOC_ZEROED=1)
 
 target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mcmodel=kernel>
@@ -167,7 +205,7 @@ target_compile_options(kernel
 
 set_target_properties(kernel PROPERTIES LINK_DEPENDS ${LINKER_SCRIPT})
 
-target_link_libraries(kernel PRIVATE gcc)
+target_link_libraries(kernel PRIVATE uacpi gcc)
 
 target_compile_definitions(kernel PRIVATE _IS_IN_KERNEL=1)
 

@@ -22,7 +22,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "interrupts/IDT.hpp"
 #include "interrupts/IRQ.hpp"
-#include "interrupts/PIC.hpp"
+
+#include "interrupts/APIC/IOAPIC.hpp"
 
 #include "Memory/PagingInit.hpp"
 
@@ -39,7 +40,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 x86_64_Processor g_x86_64_BSP(true);
 Processor* g_BSP = &g_x86_64_BSP;
 
-x86_64_Processor::x86_64_Processor(bool BSP) {
+x86_64_Processor::x86_64_Processor(bool BSP) : m_IRQData(nullptr), m_LAPIC(nullptr) {
     m_BSP = BSP; // member of parent class
 }
 
@@ -60,15 +61,33 @@ void x86_64_Processor::Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uin
 
     x86_64_InitGDT();
     x86_64_InitIDT();
-    x86_64_IRQ_Init();
+    x86_64_IRQ_EarlyInit();
     x86_64_InitPaging(HHDMOffset, memoryMap, memoryMapEntryCount, pagingMode, kernelVirtual, kernelPhysical);
     g_KProcess->SetVMM(VMM::g_KVMM);
     
     Scheduler::InitBSPState();
     x86_64_SetGSBases(0, (uint64_t)&Scheduler::g_BSPState);
+
+    x86_64_IRQ_FullInit();
 }
 
 void x86_64_Processor::InitTime() {
     x86_64_PIT_Init();
-    x86_64_PIC_UnmaskIRQ(0);
+    x86_64_UnmaskGSI(x86_64_GetGSIFromSource(0));
+}
+
+void x86_64_Processor::SetIRQData(x86_64_ProcessorIRQData* data) {
+    m_IRQData = data;
+}
+
+x86_64_ProcessorIRQData* x86_64_Processor::GetIRQData() {
+    return m_IRQData;
+}
+
+void x86_64_Processor::SetLAPIC(x86_64_LAPIC* lapic) {
+    m_LAPIC = lapic;
+}
+
+x86_64_LAPIC* x86_64_Processor::GetLAPIC() const {
+    return m_LAPIC;
 }

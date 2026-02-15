@@ -1,4 +1,4 @@
-; Copyright (©) 2024  Frosty515
+; Copyright (©) 2024-2026  Frosty515
 
 ; This program is free software: you can redistribute it and/or modify
 ; it under the terms of the GNU General Public License as published by
@@ -17,6 +17,7 @@
 
 global x86_64_DisableInterrupts
 global x86_64_EnableInterrupts
+global x86_64_GetLAPICID
 
 x86_64_DisableInterrupts:
     cli
@@ -24,4 +25,22 @@ x86_64_DisableInterrupts:
 
 x86_64_EnableInterrupts:
     sti
+    ret
+
+x86_64_GetLAPICID:
+    push rbp
+    mov rbp, rsp
+
+    push rbx
+
+    mov eax, 0x01
+    cpuid
+
+    shr ebx, 24
+    movzx eax, bl
+    
+    pop rbx
+
+    mov rsp, rbp
+    pop rbp
     ret

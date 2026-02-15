@@ -34,6 +34,12 @@ PMM::~PMM() {
 void PMM::Init(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount) {
     for (uint64_t i = 0; i < memoryMapEntryCount; i++) {
         if (memoryMap[i]->Type == MEMORY_MAP_ENTRY_USABLE) {
+            if (memoryMap[i]->Base == 0) {
+                memoryMap[i]->Base += PAGE_SIZE;
+                memoryMap[i]->Length -= PAGE_SIZE;
+                if (memoryMap[i]->Length < PAGE_SIZE)
+                    continue;
+            }
             m_totalPageCount += memoryMap[i]->Length >> 12;
             m_FreePageCount += memoryMap[i]->Length >> 12;
             m_FreeListNodeCount++;

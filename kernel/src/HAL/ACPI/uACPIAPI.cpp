@@ -17,6 +17,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "Init.hpp"
 
+#include "../HAL.hpp"
+
 #include <spinlock.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -31,7 +33,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <arch/x86_64/Memory/PagingInit.hpp>
 #endif
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+
 #include <uacpi/kernel_api.h>
+#include <uacpi/status.h>
+
+#pragma GCC diagnostic pop
 
 #include <HAL/Time.hpp>
 
@@ -255,11 +263,16 @@ uacpi_status uacpi_kernel_handle_firmware_request(uacpi_firmware_request*) {
 }
 
 uacpi_status uacpi_kernel_install_interrupt_handler(uacpi_u32 irq, uacpi_interrupt_handler handler, uacpi_handle ctx, uacpi_handle* out_irq_handle) {
-    return UACPI_STATUS_UNIMPLEMENTED;
+    void* data = HAL_RegisterIntHandler(irq, handler, ctx);
+    if (data == nullptr)
+        return UACPI_STATUS_INTERNAL_ERROR;
+
+    *out_irq_handle = data;
+    return UACPI_STATUS_OK;
 }
 
 uacpi_status uacpi_kernel_uninstall_interrupt_handler(uacpi_interrupt_handler handler, uacpi_handle irq_handle) {
-    return UACPI_STATUS_UNIMPLEMENTED;
+    return HAL_RemoveIntHandler(irq_handle) ? UACPI_STATUS_OK : UACPI_STATUS_INTERNAL_ERROR;
 }
 
 uacpi_handle uacpi_kernel_create_spinlock(void) {

@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024-2025  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -23,6 +23,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Memory/MemoryMap.hpp>
 
 #ifdef __x86_64__
+#include <arch/x86_64/interrupts/IRQ.hpp>
+
 #include <arch/x86_64/Memory/PagingUtil.hpp>
 
 #include <arch/x86_64/ArchDefs.h>
@@ -30,8 +32,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 typedef x86_64_PagingMode PagingMode;
 typedef x86_64_Registers CPU_Registers;
+typedef uint32_t (*GSIHandler_t)(void* ctx);
 #endif
 
 void HAL_EarlyInit(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical, void* RSDP);
+void HAL_Stage2();
+
+void* HAL_RegisterIntHandler(uint32_t GSI, GSIHandler_t handler, void* ctx);
+bool HAL_RemoveIntHandler(void* data);
 
 #endif /* _KERNEL_HAL_HPP */

@@ -1,4 +1,4 @@
-# Copyright (©) 2024-2025  Frosty515
+# Copyright (©) 2024-2026  Frosty515
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -63,8 +63,8 @@ if (UNIX)
 		COMMAND mcopy -i ${CMAKE_SOURCE_DIR}/iso/fat.img ${CMAKE_SOURCE_DIR}/dist/boot/EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT
 		COMMAND mmd -i ${CMAKE_SOURCE_DIR}/iso/fat.img ::/FrostyOS
 		COMMAND mcopy -i ${CMAKE_SOURCE_DIR}/iso/fat.img ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/kernel.elf ::/FrostyOS
-		COMMAND mcopy -i ${CMAKE_SOURCE_DIR}/iso/fat.img ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/ksymbols.map ::/FrostyOS
-		COMMAND mcopy -i ${CMAKE_SOURCE_DIR}/iso/fat.img ${CMAKE_SOURCE_DIR}/dist/boot/limine.cfg ::
+		# COMMAND mcopy -i ${CMAKE_SOURCE_DIR}/iso/fat.img ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/ksymbols.map ::/FrostyOS
+		COMMAND mcopy -i ${CMAKE_SOURCE_DIR}/iso/fat.img ${CMAKE_SOURCE_DIR}/dist/boot/limine.conf ::
 		COMMAND ${CMAKE_SOURCE_DIR}/depend/tools/bin/mkgpt -o ${CMAKE_SOURCE_DIR}/iso/hdimage.bin --image-size 24576 --part ${CMAKE_SOURCE_DIR}/iso/fat.img --type system
 		BYPRODUCTS ${CMAKE_SOURCE_DIR}/iso/hdimage.bin ${CMAKE_SOURCE_DIR}/iso/fat.img
 	)

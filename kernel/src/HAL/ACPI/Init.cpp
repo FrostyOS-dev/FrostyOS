@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,16 +16,21 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "Init.hpp"
+#include "MADT.hpp"
 
 #include "../HAL.hpp"
-
 
 #include <stdio.h>
 #include <util.h>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+
 #include <uacpi/context.h>
 #include <uacpi/uacpi.h>
 #include <uacpi/status.h>
+
+#pragma GCC diagnostic pop
 
 #include <Memory/PagingUtil.hpp>
 #include <Memory/PMM.hpp>
@@ -52,6 +57,11 @@ namespace ACPI {
         if (uacpi_unlikely_error(rc)) {
             dbgprintf("Failed to initialize uACPI: %d\n", rc);
             PANIC("ACPI: Failed to initialize uACPI");
+        }
+
+        if (!InitMADT()) {
+            dbgprintf("MADT init failed.\n");
+            PANIC("Failed to initialise MADT table");
         }
 
         dbgprintf("ACPI: Early init complete\n");

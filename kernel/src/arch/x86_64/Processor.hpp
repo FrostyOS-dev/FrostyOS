@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -27,6 +27,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Scheduling/Scheduler.hpp>
 
+#include "interrupts/IRQ.hpp"
+
+#include "interrupts/APIC/LocalAPIC.hpp"
+
 class x86_64_Processor final : public Processor {
 public:
     x86_64_Processor(bool BSP);
@@ -36,6 +40,16 @@ public:
     void Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical) override;
 
     void InitTime() override;
+
+    void SetIRQData(x86_64_ProcessorIRQData* data);
+    x86_64_ProcessorIRQData* GetIRQData();
+
+    void SetLAPIC(x86_64_LAPIC* lapic);
+    x86_64_LAPIC* GetLAPIC() const;
+
+private:
+    x86_64_ProcessorIRQData* m_IRQData;
+    x86_64_LAPIC* m_LAPIC;
 };
 
 extern x86_64_Processor g_x86_64_BSP;

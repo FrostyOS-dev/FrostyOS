@@ -106,6 +106,8 @@ void Kernel_Stage2(void*) {
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");
 
+    HAL_Stage2();
+
     while (true) {
         __asm__ volatile("hlt");
     }
