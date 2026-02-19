@@ -40,16 +40,16 @@ bool x86_64_PageMapper::MapPage(uint64_t virt, uint64_t phys, VMM::Protection pr
     uint32_t flags = 1; // Present
     switch (prot) {
     case VMM::Protection::READ:
-        flags |= 0; // Read-only
+        flags |= 0x800'0000; // Read-only, No execute
         break;
     case VMM::Protection::READ_WRITE:
-        flags |= 2; // Read-write
+        flags |= 0x800'0002; // Read-write, No execute
         break;
     case VMM::Protection::READ_EXECUTE:
-        flags |= 0x800'0000; // Execute
+        flags |= 0; // Execute
         break;
     case VMM::Protection::READ_WRITE_EXECUTE:
-        flags |= 0x800'0002; // Read-write + execute
+        flags |= 2; // Read-write + execute
         break;
     default:
         return false; // Invalid protection
@@ -102,16 +102,16 @@ bool x86_64_PageMapper::RemapPage(uint64_t virt, VMM::Protection prot, VMM::Cach
     uint32_t flags = 1; // Present
     switch (prot) {
     case VMM::Protection::READ:
-        flags |= 0; // Read-only
+        flags |= 0x800'0000; // Read-only, No execute
         break;
     case VMM::Protection::READ_WRITE:
-        flags |= 2; // Read-write
+        flags |= 0x800'0002; // Read-write, No execute
         break;
     case VMM::Protection::READ_EXECUTE:
-        flags |= 0x800'0000; // Execute
+        flags |= 0; // Execute
         break;
     case VMM::Protection::READ_WRITE_EXECUTE:
-        flags |= 0x800'0002; // Read-write + execute
+        flags |= 2; // Read-write + execute
         break;
     default:
         return false; // Invalid protection
