@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -41,6 +41,9 @@ public:
     TTYBackend* GetBackend(TTYBackendStream stream) const;
 
     void Seek(TTYBackendStream stream, uint64_t pos);
+
+    void Lock(TTYBackendStream stream) const;
+    void Unlock(TTYBackendStream stream) const;
 
 private:
     TTYBackend* m_backends[4];

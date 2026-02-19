@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define _TTY_BACKEND_HPP
 
 #include <stdint.h>
+#include <spinlock.h>
 
 enum class TTYBackendType {
     VGA,
@@ -52,8 +53,12 @@ public:
 
     TTYBackendType GetType() const;
 
+    void Lock() const;
+    void Unlock() const;
+
 private:
     TTYBackendType m_type;
+    mutable spinlock_t m_lock;
 };
 
 #endif /* _TTY_BACKEND_HPP */

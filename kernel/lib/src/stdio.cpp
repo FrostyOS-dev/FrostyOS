@@ -114,11 +114,19 @@ void internal_swap_buffers(const fd_t file) {
 }
 
 void internal_lock(const fd_t file) {
-    
+    if (g_CurrentTTY != nullptr) {
+        TTYBackendStream stream = FDToTTYBackendStream(file);
+        if (stream != TTYBackendStream::INVALID)
+            g_CurrentTTY->Lock(stream);
+    }
 }
 
 void internal_unlock(const fd_t file) {
-    
+    if (g_CurrentTTY != nullptr) {
+        TTYBackendStream stream = FDToTTYBackendStream(file);
+        if (stream != TTYBackendStream::INVALID)
+            g_CurrentTTY->Unlock(stream);
+    }
 }
 
 void stdio_force_unlock() {

@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -76,4 +76,14 @@ void TTY::Seek(TTYBackendStream stream, uint64_t pos) {
     if (m_backends[(uint64_t)stream] != nullptr) {
         m_backends[(uint64_t)stream]->Seek(pos);
     }
+}
+
+void TTY::Lock(TTYBackendStream stream) const {
+    if (m_backends[(uint64_t)stream] != nullptr)
+        m_backends[(uint64_t)stream]->Lock();
+}
+
+void TTY::Unlock(TTYBackendStream stream) const {
+    if (m_backends[(uint64_t)stream] != nullptr)
+        m_backends[(uint64_t)stream]->Unlock();
 }

@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -17,7 +17,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "TTYBackend.hpp"
 
-TTYBackend::TTYBackend() : m_type(TTYBackendType::INVALID) {
+#include <spinlock.h>
+
+TTYBackend::TTYBackend() : m_type(TTYBackendType::INVALID), m_lock(SPINLOCK_DEFAULT_VALUE) {
 
 }
 
@@ -55,4 +57,12 @@ void TTYBackend::Seek(uint64_t pos) {
 
 TTYBackendType TTYBackend::GetType() const {
     return m_type;
+}
+
+void TTYBackend::Lock() const {
+    spinlock_acquire(&m_lock);
+}
+
+void TTYBackend::Unlock() const {
+    spinlock_release(&m_lock);
 }

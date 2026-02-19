@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024-2025  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -43,6 +43,8 @@ extern "C" [[noreturn]] void x86_64_Panic(const char* message, void* registers, 
 
     if (message == nullptr)
         message = g_x86_64_PanicReason;
+
+    stdio_force_unlock(); // Everything must be unlocked
 
     // all to debug first
     dbgputs("KERNEL PANIC!\n");
