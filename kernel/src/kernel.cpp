@@ -89,7 +89,7 @@ void StartKernel() {
     HAL_EarlyInit(g_kernelParams.HHDMStart, g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.pagingMode, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical, g_kernelParams.RSDP);
 
     memcpy(&g_KFramebuffer, &g_kernelParams.framebuffer, sizeof(FrameBuffer));
-    g_KFramebuffer.BaseAddress = VMM::g_KVMM->AllocatePages(DIV_ROUNDUP(g_KFramebuffer.pitch * g_KFramebuffer.height, PAGE_SIZE));
+    g_KFramebuffer.BaseAddress = VMM::g_KVMM->AllocatePages(DIV_ROUNDUP(g_KFramebuffer.pitch * g_KFramebuffer.height, PAGE_SIZE), VMM::Protection::READ_WRITE, true);
     g_KVGA.EnableDoubleBuffering(&g_KFramebuffer);
 
     LinkedList::NodePool_Init();

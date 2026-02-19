@@ -283,7 +283,7 @@ HeapSectionAllocator g_VMMHeapSectionAllocator = {[](size_t size) -> void* {
 }};
 
 HeapSectionAllocator g_KHeapSectionAllocator = {[](size_t size) -> void* {
-    return VMM::g_KVMM->AllocatePages(DIV_ROUNDUP(size, PAGE_SIZE));
+    return VMM::g_KVMM->AllocatePages(DIV_ROUNDUP(size, PAGE_SIZE), VMM::Protection::READ_WRITE, true);
 }, [](void* ptr, size_t) {
     if (!VMM::g_KVMM->FreePages(ptr)) {
         PANIC("Kernel heap failed to free section");

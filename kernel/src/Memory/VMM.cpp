@@ -46,7 +46,7 @@ namespace VMM {
         m_vmRegionAllocator = vmRegionAllocator;
     }
 
-    void* VMM::AllocatePages(uint64_t count, Protection prot) {
+    void* VMM::AllocatePages(uint64_t count, Protection prot, bool allocPhys) {
         if (count == 0 || g_defaultPager == nullptr)
             return nullptr;
 
@@ -61,12 +61,17 @@ namespace VMM {
         // allocate first one outside loop to save a check on each loop iteration
         memObj->pages = (Page*)kcalloc_vmm(1, sizeof(Page));
         memObj->pages->protection = Protection::READ_WRITE_EXECUTE;
+        if (allocPhys)
+            memObj->pages->physAddr = reinterpret_cast<uint64_t>(memObj->pager->AllocatePage());
 
         Page* prevPage = memObj->pages;
 
         for (uint64_t i = 1; i < count; i++) {
             Page* page = (Page*)kcalloc_vmm(1, sizeof(Page));
             page->protection = Protection::READ_WRITE_EXECUTE;
+
+            if (allocPhys)
+                page->physAddr = reinterpret_cast<uint64_t>(memObj->pager->AllocatePage());
 
             prevPage->next = page;
             prevPage = page;
@@ -80,6 +85,9 @@ namespace VMM {
             for (uint64_t i = 0; i < count; i++) {
                 Page* current = page;
                 page = page->next;
+
+                if (allocPhys)
+                    memObj->pager->FreePage(reinterpret_cast<void*>(current->physAddr));
 
                 kfree_vmm(current);
             }

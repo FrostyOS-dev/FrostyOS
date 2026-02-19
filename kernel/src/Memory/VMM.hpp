@@ -81,7 +81,7 @@ namespace VMM {
 
         void Init(PageMapper* pageMapper, VMRegionAllocator* vmRegionAllocator);
 
-        void* AllocatePages(uint64_t count, Protection prot = Protection::READ_WRITE);
+        void* AllocatePages(uint64_t count, Protection prot = Protection::READ_WRITE, bool allocPhys = false);
         bool FreePages(void* virtAddr);
 
         bool MapMemory(uint64_t virtAddr, MemoryObject* memObj, Protection prot);
