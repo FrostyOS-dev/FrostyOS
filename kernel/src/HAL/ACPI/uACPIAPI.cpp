@@ -220,7 +220,7 @@ void uacpi_kernel_free(void* mem) {
 }
 
 uacpi_u64 uacpi_kernel_get_nanoseconds_since_boot(void) {
-    return HAL_GetTicks() * 1'000'000;
+    return HAL_GetNSTicks();
 }
 
 void uacpi_kernel_stall(uacpi_u8 usec) {
