@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -34,12 +34,12 @@ Layout of the PAT:
 
 enum class x86_64_PATOffset {
     Default = 0,
-    WriteBack = 0,
-    WriteThrough = 1,
-    Uncached = 2,
-    Uncachable = 3,
-    WriteProtected = 4,
-    WriteCombining = 5
+    WriteBack = 0, // WB
+    WriteThrough = 1, // WT
+    Uncached = 2, // UC-
+    Uncachable = 3, // UC
+    WriteProtected = 4, // WP
+    WriteCombining = 5 // WC
 };
 
 enum class x86_64_PATEncoding {

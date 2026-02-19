@@ -26,12 +26,12 @@ class PageMapper {
 public:
     virtual ~PageMapper() {}
 
-    virtual bool MapPage(uint64_t virt, uint64_t phys, VMM::Protection prot) = 0;
-    virtual bool MapPages(uint64_t virt, uint64_t phys, size_t count, VMM::Protection prot) = 0;
+    virtual bool MapPage(uint64_t virt, uint64_t phys, VMM::Protection prot, VMM::CacheType cacheType) = 0;
+    virtual bool MapPages(uint64_t virt, uint64_t phys, size_t count, VMM::Protection prot, VMM::CacheType cacheType) = 0;
     virtual bool UnmapPage(uint64_t virt) = 0;
     virtual bool UnmapPages(uint64_t virt, size_t count) = 0;
-    virtual bool RemapPage(uint64_t virt, VMM::Protection prot) = 0;
-    virtual bool RemapPages(uint64_t virt, size_t count, VMM::Protection prot) = 0;
+    virtual bool RemapPage(uint64_t virt, VMM::Protection prot, VMM::CacheType cacheType) = 0;
+    virtual bool RemapPages(uint64_t virt, size_t count, VMM::Protection prot, VMM::CacheType cacheType) = 0;
 
     virtual void InvalidatePages(uint64_t virt, size_t count) = 0;
 };

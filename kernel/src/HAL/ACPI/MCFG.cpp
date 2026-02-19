@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "MCFG.hpp"
+#include "Memory/VMM.hpp"
 
 #include <assert.h>
 #include <stdint.h>
@@ -51,7 +52,7 @@ bool InitMCFG() {
     while (current_size < MCFG->hdr.length) {
         uint64_t phys = ALIGN_DOWN(entry->address, PAGE_SIZE);
         uint64_t mapSize = (entry->address % PAGE_SIZE) + (4096 * 8 * 32 * (entry->end_bus - entry->start_bus + 1));
-        g_KPageMapper->MapPages(to_HHDM(phys), phys, DIV_ROUNDUP(mapSize, PAGE_SIZE), VMM::Protection::READ_WRITE);
+        g_KPageMapper->MapPages(to_HHDM(phys), phys, DIV_ROUNDUP(mapSize, PAGE_SIZE), VMM::Protection::READ_WRITE, VMM::CacheType::UNCACHABLE);
 
         g_MCFGAllocations.insert(entry);
 

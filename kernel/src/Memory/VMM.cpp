@@ -46,7 +46,7 @@ namespace VMM {
         m_vmRegionAllocator = vmRegionAllocator;
     }
 
-    void* VMM::AllocatePages(uint64_t count, Protection prot, bool allocPhys) {
+    void* VMM::AllocatePages(uint64_t count, Protection prot, bool allocPhys, CacheType cacheType) {
         if (count == 0 || g_defaultPager == nullptr)
             return nullptr;
 
@@ -78,7 +78,7 @@ namespace VMM {
         }
 
         // Step 3: Map the memory
-        if (!MapMemory(reinterpret_cast<uint64_t>(pages), memObj, prot)) {
+        if (!MapMemory(reinterpret_cast<uint64_t>(pages), memObj, prot, cacheType)) {
             m_vmRegionAllocator->FreePages(pages, count);
 
             Page* page = memObj->pages;
@@ -143,7 +143,7 @@ namespace VMM {
         return true;
     }
 
-    bool VMM::MapMemory(uint64_t virtAddr, MemoryObject* memObj, Protection prot) {
+    bool VMM::MapMemory(uint64_t virtAddr, MemoryObject* memObj, Protection prot, CacheType cacheType) {
         if (memObj == nullptr)
             return false; // Invalid memory object
 
@@ -206,7 +206,7 @@ namespace VMM {
         page = memObj->pages;
         for (i = 0; i < pageCount; i++) {
             if (page->physAddr != 0)
-                m_pageMapper->MapPage(virtAddr + i * PAGE_SIZE, page->physAddr, prot);
+                m_pageMapper->MapPage(virtAddr + i * PAGE_SIZE, page->physAddr, prot, cacheType);
             page = page->next;
         }
 
@@ -216,6 +216,7 @@ namespace VMM {
         entry->endVirt = virtAddr + pageCount * PAGE_SIZE;
         entry->memoryObject = memObj;
         entry->protection = prot;
+        entry->cacheType = cacheType;
 
         m_mapEntries.lock();
         m_mapEntries.Insert(virtAddr, entry);
@@ -262,7 +263,7 @@ namespace VMM {
         return true;
     }
 
-    bool VMM::RemapMemory(uint64_t virtAddr, Protection prot) {
+    bool VMM::RemapMemory(uint64_t virtAddr, Protection prot, CacheType cacheType) {
         m_mapEntries.lock();
 
         MapEntry* entry = m_mapEntries.Find(virtAddr);
@@ -315,7 +316,7 @@ namespace VMM {
                 break;
 
             if (page->physAddr != 0)
-                m_pageMapper->RemapPage(virtAddr + i * PAGE_SIZE, prot);
+                m_pageMapper->RemapPage(virtAddr + i * PAGE_SIZE, prot, cacheType);
 
             page = page->next;
         }
@@ -349,6 +350,7 @@ namespace VMM {
         MemoryObject* obj = entry->memoryObject;
         uint64_t pageIndex = (virtAddr - entry->startVirt) >> PAGE_SIZE_SHIFT;
         Protection prot = entry->protection;
+        CacheType cacheType = entry->cacheType;
         
         spinlock_acquire(&obj->lock);
         m_mapEntries.unlock();
@@ -363,7 +365,7 @@ namespace VMM {
         }
 
         if (page->physAddr != 0) { // not mapped here, but is somewhere else
-            bool result = m_pageMapper->MapPage(virtAddr, page->physAddr, prot);
+            bool result = m_pageMapper->MapPage(virtAddr, page->physAddr, prot, cacheType);
             spinlock_release(&obj->lock);
             return result;
         }
@@ -395,7 +397,7 @@ namespace VMM {
         }
 
         page->physAddr = reinterpret_cast<uint64_t>(obj->pager->AllocatePage());
-        bool result = m_pageMapper->MapPage(virtAddr, page->physAddr, prot);
+        bool result = m_pageMapper->MapPage(virtAddr, page->physAddr, prot, cacheType);
 
         spinlock_release(&obj->lock);
 

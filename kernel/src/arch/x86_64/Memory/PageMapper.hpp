@@ -26,12 +26,12 @@ public:
     x86_64_PageMapper(void* pageTable);
     ~x86_64_PageMapper();
 
-    bool MapPage(uint64_t virt, uint64_t phys, VMM::Protection prot) override;
-    bool MapPages(uint64_t virt, uint64_t phys, size_t count, VMM::Protection prot) override;
+    bool MapPage(uint64_t virt, uint64_t phys, VMM::Protection prot, VMM::CacheType cacheType) override;
+    bool MapPages(uint64_t virt, uint64_t phys, size_t count, VMM::Protection prot, VMM::CacheType cacheType) override;
     bool UnmapPage(uint64_t virt) override;
     bool UnmapPages(uint64_t virt, size_t count) override;
-    bool RemapPage(uint64_t virt, VMM::Protection prot) override;
-    bool RemapPages(uint64_t virt, size_t count, VMM::Protection prot) override;
+    bool RemapPage(uint64_t virt, VMM::Protection prot, VMM::CacheType cacheType) override;
+    bool RemapPages(uint64_t virt, size_t count, VMM::Protection prot, VMM::CacheType cacheType) override;
 
     void InvalidatePages(uint64_t virt, size_t count) override;
 

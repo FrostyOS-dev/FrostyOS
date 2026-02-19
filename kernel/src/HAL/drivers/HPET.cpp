@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "HPET.hpp"
+#include "Memory/VMM.hpp"
 
 #include <assert.h>
 #include <stdint.h>
@@ -35,7 +36,7 @@ HPET::~HPET() {
 }
 
 bool HPET::Init() {
-    if (!g_KPageMapper->MapPage(m_address, from_HHDM(m_address), VMM::Protection::READ_WRITE))
+    if (!g_KPageMapper->MapPage(m_address, from_HHDM(m_address), VMM::Protection::READ_WRITE, VMM::CacheType::UNCACHABLE))
         return false;
 
     uint64_t data = volatile_addr_read64(m_address + static_cast<uint64_t>(HPET_Register::CAP_ID));

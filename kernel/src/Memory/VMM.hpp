@@ -47,6 +47,15 @@ namespace VMM {
         READ_WRITE_EXECUTE = READ | WRITE | EXECUTE
     };
 
+    enum class CacheType {
+        UNCACHABLE,
+        WRITE_BACK,
+        WRITE_THROUGH,
+        WRITE_PROTECTED,
+        WRITE_COMBINING,
+        DEFAULT = WRITE_BACK
+    };
+
     struct Page {
         uint64_t physAddr; // 0 when not assigned
         Protection protection; // highest protection this page is capable of
@@ -66,6 +75,7 @@ namespace VMM {
         uint64_t endVirt;
         MemoryObject* memoryObject;
         Protection protection;
+        CacheType cacheType;
         uint64_t memUsagePattern; // TODO
         uint64_t wireCount;
     };
@@ -81,12 +91,12 @@ namespace VMM {
 
         void Init(PageMapper* pageMapper, VMRegionAllocator* vmRegionAllocator);
 
-        void* AllocatePages(uint64_t count, Protection prot = Protection::READ_WRITE, bool allocPhys = false);
+        void* AllocatePages(uint64_t count, Protection prot = Protection::READ_WRITE, bool allocPhys = false, CacheType cacheType = CacheType::DEFAULT);
         bool FreePages(void* virtAddr);
 
-        bool MapMemory(uint64_t virtAddr, MemoryObject* memObj, Protection prot);
+        bool MapMemory(uint64_t virtAddr, MemoryObject* memObj, Protection prot, CacheType cacheType);
         bool UnmapMemory(uint64_t virtAddr);
-        bool RemapMemory(uint64_t virtAddr, Protection prot);
+        bool RemapMemory(uint64_t virtAddr, Protection prot, CacheType cacheType);
 
         bool HandlePageFault(PageFaultCode code, uint64_t virtAddr);
 

@@ -23,9 +23,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../../Panic.hpp"
 #include "../../Processor.hpp"
 
-#include "../../Memory/PageTables.hpp"
-#include "../../Memory/PagingInit.hpp"
-#include "../../Memory/PAT.hpp"
 
 #include <stdint.h>
 #include <util.h>
@@ -34,7 +31,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <HAL/Processor.hpp>
 
+#include <Memory/PageMapper.hpp>
 #include <Memory/PagingUtil.hpp>
+#include <Memory/VMM.hpp>
 
 #define x86_64_MSR_APIC_BASE 0x1B
 
@@ -61,7 +60,7 @@ void x86_64_LAPIC::Init(bool started) {
         m_LAPICBase = to_HHDM(x86_64_ReadMSR(x86_64_MSR_APIC_BASE) & 0xFFFFF000);
 
     if (m_BSP)
-        x86_64_MapPage(g_KernelRootPageTable, m_LAPICBase, from_HHDM(m_LAPICBase), 0x0800'0003 | x86_64_PAT_GetPageMappingFlags(x86_64_PATOffset::Uncachable));
+        g_KPageMapper->MapPage(m_LAPICBase, from_HHDM(m_LAPICBase), VMM::Protection::READ_WRITE, VMM::CacheType::UNCACHABLE);
 
     if (!started)
         return StartCPU();
