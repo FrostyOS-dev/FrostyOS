@@ -19,4 +19,4 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ## Status
 
-This is the 3rd of iteration of FrostyOS.
+This is the 3rd iteration of FrostyOS.
