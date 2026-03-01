@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define _DRIVERS_HPET_HPP
 
 #include <stdint.h>
+#include <spinlock.h>
 
 enum class HPET_Register {
     CAP_ID = 0,
@@ -49,11 +50,18 @@ public:
 
     uint64_t GetNSTicks(); // Get ticks in nanoseconds
 
+    uint64_t* GetMainCounterPointer();
+    uint64_t GetPeriod(); // In femtoseconds (10^-15)
+
+    void Lock() const;
+    void Unlock() const;
+
 private:
     uint64_t m_address;
     uint32_t m_period;
     uint32_t m_nsperiod;
     uint64_t m_freq;
+    mutable spinlock_t m_lock;
 };
 
 extern HPET* g_HPET;

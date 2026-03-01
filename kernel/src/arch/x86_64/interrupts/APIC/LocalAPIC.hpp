@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
+#include "../ISR.hpp"
+
 enum class x86_64_LAPIC_Register {
     LAPIC_ID     = 0x020,
     LAPIC_VER    = 0x030,
@@ -70,6 +72,12 @@ enum class x86_64_LAPIC_Register {
     DivideConfig = 0x3E0
 };
 
+
+#define LAPIC_TIMER_PERIOD 1'000'000'000 // 1ms in picoseconds, 1kHz
+#define LAPIC_TIMER_INT 0xFE
+
+class x86_64_Processor;
+
 class x86_64_LAPIC {
 public:
     x86_64_LAPIC(bool BSP = false, uint8_t ID = 0xFF);
@@ -77,6 +85,7 @@ public:
     void SetAddressOverride(uint64_t address); // must be called before Init
 
     void Init(bool started = false);
+    bool InitTimer();
 
     void AddNMISource(uint8_t LINT, bool activeLow, bool levelTriggered); // must be called before Init
 
@@ -92,6 +101,10 @@ public:
 
     uint8_t GetID() const;
 
+    void SetTimerPeriod(uint64_t period); // in picoseconds
+
+    void TimerInterrupt(x86_64_Processor* proc, x86_64_ISR_Frame* frame);
+
 private:
     bool m_BSP;
     uint8_t m_ID; // LAPIC ID
@@ -102,6 +115,9 @@ private:
         bool activeLow;
         bool levelTriggered;
     } m_NMISources[2]; // only 2 LINTs
+    uint64_t m_timerPeriod; // picoseconds
+    uint32_t m_timerTicks;
+    uint8_t m_timerDivisor;
 };
 
 extern x86_64_LAPIC* g_BSP_LAPIC;

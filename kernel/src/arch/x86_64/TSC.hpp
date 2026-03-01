@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025-2026  Frosty515
+Copyright (©) 2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,17 +15,18 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _HAL_TIME_HPP
-#define _HAL_TIME_HPP
+#ifndef _x86_64_TSC_HPP
+#define _x86_64_TSC_HPP
 
 #include <stdint.h>
 
-#include "Processor.hpp"
+class x86_64_Processor;
 
-void HAL_InitTime();
-void HAL_TimerTick(Processor* proc, uint64_t ticks, void* data);
 
-uint64_t HAL_GetTicks();
-uint64_t HAL_GetNSTicks();
+extern "C" uint64_t x86_64_ReadTSC();
+extern "C" uint64_t x86_64_ReadTSCFence();
 
-#endif /* _HAL_TIME_HPP */
+bool x86_64_IsInvariantTSCSupported();
+bool x86_64_TSCInit(x86_64_Processor* proc = nullptr); // proc must be the current processor
+
+#endif /* _x86_64_TSC_HPP */

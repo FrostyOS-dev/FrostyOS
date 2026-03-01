@@ -16,7 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "HPET.hpp"
-#include "Memory/VMM.hpp"
+#include "spinlock.h"
 
 #include <assert.h>
 #include <stdint.h>
@@ -24,6 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Memory/PageMapper.hpp>
 #include <Memory/PagingUtil.hpp>
+#include <Memory/VMM.hpp>
 
 HPET* g_HPET = nullptr;
 
@@ -56,4 +57,20 @@ bool HPET::Init() {
 
 uint64_t HPET::GetNSTicks() {
     return m_nsperiod * volatile_addr_read64(m_address + static_cast<uint64_t>(HPET_Register::MAIN_COUNTER));
+}
+
+uint64_t* HPET::GetMainCounterPointer() {
+    return reinterpret_cast<uint64_t*>(m_address + static_cast<uint64_t>(HPET_Register::MAIN_COUNTER));
+}
+
+uint64_t HPET::GetPeriod() {
+    return m_period;
+}
+
+void HPET::Lock() const {
+    spinlock_acquire(&m_lock);
+}
+
+void HPET::Unlock() const {
+    spinlock_release(&m_lock);
 }

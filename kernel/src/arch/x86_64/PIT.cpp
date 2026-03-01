@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "IO.h"
 #include "PIT.hpp"
 #include "Panic.hpp"
+#include "Processor.hpp"
 
 #include "interrupts/IRQ.hpp"
 #include "interrupts/ISR.hpp"
@@ -50,7 +51,7 @@ uint64_t g_x86_64_PITTicks = 0; // in ms
 
 void x86_64_PIT_Handler(x86_64_ISR_Frame* frame, void*) {
     g_x86_64_PITTicks += 5;
-    HAL_TimerTick(5, frame);
+    HAL_TimerTick(GetCurrentProcessor(), 5, frame);
 }
 
 void x86_64_PIT_Init() {

@@ -28,7 +28,7 @@ void HAL_InitTime() {
     g_BSP->InitTime();
 }
 
-void HAL_TimerTick(uint64_t ticks, void *data) {
+void HAL_TimerTick(Processor*, uint64_t ticks, void *data) {
     g_HALTimerTicks += ticks;
     Scheduler::TimerTick(ticks, data);
 }
