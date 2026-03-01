@@ -104,7 +104,7 @@ void uacpi_kernel_vlog(uacpi_log_level level, const uacpi_char* format, uacpi_va
 
 uacpi_status uacpi_kernel_pci_device_open(uacpi_pci_address address, uacpi_handle *out_handle) {
     if (!MCFG_Validate(address.segment, address.bus))
-        return UACPI_STATUS_INVALID_ARGUMENT;
+        return UACPI_STATUS_NOT_FOUND;
     uacpi_pci_address* addr = new uacpi_pci_address(address);
     *out_handle = addr;
     return UACPI_STATUS_OK;
@@ -253,6 +253,21 @@ void uacpi_kernel_free_event(uacpi_handle handle) {
 uacpi_thread_id uacpi_kernel_get_thread_id() {
     return 0;
 }
+
+#ifdef __x86_64__
+
+uacpi_interrupt_state uacpi_kernel_disable_interrupts() {
+    uint64_t flags = 0;
+    __asm__ volatile("pushfq\npop %0\ncli" : "=r"(flags));
+    return flags & (1 << 9);
+}
+
+void uacpi_kernel_restore_interrupts(uacpi_interrupt_state state) {
+    if (state & (1 << 9))
+        __asm__ volatile ("sti");
+}
+
+#endif /* __x86_64__ */
 
 uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle, uacpi_u16) {
     return UACPI_STATUS_OK;
