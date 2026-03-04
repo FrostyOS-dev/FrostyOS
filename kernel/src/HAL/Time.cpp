@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "drivers/HPET.hpp"
 
+#include <util.h>
+
 #include <Scheduling/Scheduler.hpp>
 
 uint64_t g_HALTimerTicks = 0; // in ms
@@ -28,8 +30,9 @@ void HAL_InitTime() {
     g_BSP->InitTime();
 }
 
-void HAL_TimerTick(Processor*, uint64_t ticks, void *data) {
-    g_HALTimerTicks += ticks;
+void HAL_TimerTick(Processor* proc, uint64_t ticks, void *data) {
+    if (proc->isBSP())
+        g_HALTimerTicks += ticks;
     Scheduler::TimerTick(ticks, data);
 }
 
@@ -41,4 +44,14 @@ uint64_t HAL_GetNSTicks() {
     if (g_HPET != nullptr)
         return g_HPET->GetNSTicks();
     return g_HALTimerTicks * 1'000'000;
+}
+
+void HAL_SleepNS(uint64_t ns) {
+    if (g_HPET != nullptr) {
+        uint64_t end = g_HPET->GetNSTicks() + ns;
+        while (g_HPET->GetNSTicks() < end) {}
+    } else {
+        uint64_t end = g_HALTimerTicks + DIV_ROUNDUP(ns, 1'000'000);
+        while (g_HALTimerTicks < end) {}
+    }
 }

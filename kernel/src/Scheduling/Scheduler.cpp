@@ -40,6 +40,8 @@ namespace Scheduler {
     uint64_t g_LastPID = 0;
     spinlock_t g_PIDLock;
     uint64_t g_isRunning = 0;
+    spinlock_t g_ProcessorsLock = SPINLOCK_DEFAULT_VALUE;
+    uint64_t g_processorCount = 1;
 
     // private functions
 
@@ -70,6 +72,8 @@ namespace Scheduler {
         // use BSP state as a list head
         ProcessorState* head = &g_BSPState;
 
+        spinlock_acquire(&g_ProcessorsLock);
+
         while (head->next != nullptr)
             head = head->next;
 
@@ -83,30 +87,46 @@ namespace Scheduler {
         memset(processor->runCounts, 0, sizeof(processor->runCounts));
         processor->currentThread = nullptr;
         memset(&(processor->registers), 0, sizeof(processor->registers));
+
+        g_processorCount++;
+
+        spinlock_release(&g_ProcessorsLock);
     }
 
     ProcessorState* GetProcessor(uint64_t id) {
+        spinlock_acquire(&g_ProcessorsLock);
         ProcessorState* head = &g_BSPState;
         while (head != nullptr) {
-            if (head->id == id)
+            if (head->id == id) {
+                spinlock_release(&g_ProcessorsLock);
                 return head;
+            }
             head = head->next;
         }
+        spinlock_release(&g_ProcessorsLock);
         return nullptr;
     }
 
     void RemoveProcessor(uint64_t id) {
         ProcessorState* head = &g_BSPState;
+        spinlock_acquire(&g_ProcessorsLock);
         while (head != nullptr) {
             if (head->id == id) {
                 if (head->prev != nullptr)
                     head->prev->next = head->next;
                 if (head->next != nullptr)
                     head->next->prev = head->prev;
+                g_processorCount--;
+                spinlock_release(&g_ProcessorsLock);
                 return;
             }
             head = head->next;
         }
+        spinlock_release(&g_ProcessorsLock);
+    }
+
+    uint64_t GetProcessorCount() {
+        return g_processorCount;
     }
 
     void AddProcess(Process* process) {
@@ -146,7 +166,7 @@ namespace Scheduler {
         g_Processes.unlock();
     }
 
-    void ScheduleThread(Thread* thread) {
+    void ScheduleThread(Thread* thread, ProcessorState* state) {
         Process* process = thread->GetParent();
         if (process == nullptr)
             return;
@@ -161,7 +181,10 @@ namespace Scheduler {
         x86_64_SetThreadRegisters(&(thread->GetMutableRegisters()), thread->GetStack(), thread->GetEntryPoint(), process->GetMode(), from_HHDM(g_KernelRootPageTable));
 #endif
 
-        ThreadList& list = g_BSPState.threads[nice];
+        if (state == nullptr)
+            state = &g_BSPState;
+
+        ThreadList& list = state->threads[nice];
         list.lock();
         list.pushBack(thread);
         list.unlock();
@@ -267,15 +290,48 @@ namespace Scheduler {
             g_BSPState.runCounts[i] = 0;
     }
 
-    [[noreturn]] void Start() {
+    ProcessorState* InitNewProcessor(Processor* proc) {
+        ProcessorState* state = new ProcessorState;
+        memset((void*)state, 0, sizeof(ProcessorState));
+        state->self = state;
+        state->processor = proc;
+        AddProcessor(state);
+        return state;
+    }
+
+    [[noreturn]] void Start(bool AP) {
         PickNext();
-        ProcessorState* state = GetCurrentProcessorState();
-        assert(state != nullptr);
+        ProcessorState* current = GetCurrentProcessorState();
+        assert(current != nullptr);
 
-        state->startAllowed = 1;
-        g_isRunning = 1;
+        if (!AP) {
+            current->startAllowed = 1;
+            g_isRunning = 1;
 
-        RunThread(state->currentThread);
+            ProcessorState* state = &g_BSPState;
+            for (uint64_t i = 0; i < g_processorCount; i++, state = state->next) {
+                if (state == nullptr)
+                    break; // shouldn't happen, but just to be safe
+                if (state->id == current->id)
+                    continue;
+
+                state->startAllowed = 1;
+            }
+
+        }
+
+        RunThread(current->currentThread);
+    }
+
+    void WaitForStart(ProcessorState* state) {
+        if (state == nullptr)
+            state = GetCurrentProcessorState();
+
+        while (state->startAllowed == 0) {
+#ifdef __x86_64__
+            __asm__ volatile ("pause" ::: "memory");
+#endif
+        }
     }
 
     bool isRunning() {

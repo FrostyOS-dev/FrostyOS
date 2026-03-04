@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -48,6 +48,7 @@ extern x86_64_IDTEntry g_x86_64_IDT[256];
 
 void x86_64_InitIDT();
 void x86_64_IDT_SetHandler(uint8_t vector, void (*handler)());
+x86_64_IDTPointer x86_64_CreateIDTR();
 
 extern "C" void x86_64_LoadIDT(x86_64_IDTPointer* pointer);
 

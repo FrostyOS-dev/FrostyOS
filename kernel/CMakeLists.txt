@@ -61,12 +61,14 @@ target_compile_options(uacpi
 if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
     set(kernel_sources
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/APIC/IOAPIC.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/APIC/IPI.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/APIC/LocalAPIC.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IDT.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IDT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/IRQ.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/ISR.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/NMI.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/interrupts/PIC.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PageFault.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PageMapper.cpp
@@ -77,6 +79,7 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PAT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Scheduling/Task.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Scheduling/TaskUtil.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/APTrampoline.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/ArchDefs.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/CPUID.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/E9.cpp

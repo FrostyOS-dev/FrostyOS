@@ -224,14 +224,15 @@ uacpi_u64 uacpi_kernel_get_nanoseconds_since_boot(void) {
 }
 
 void uacpi_kernel_stall(uacpi_u8 usec) {
-    uint64_t msec = DIV_ROUNDUP(usec, 1000);
-    uint64_t start = HAL_GetTicks();
-    while (HAL_GetTicks() - start < msec);
+    uint64_t nsec = usec * 1000;
+    uint64_t start = HAL_GetNSTicks();
+    while (HAL_GetNSTicks() - start < nsec);
 }
 
 void uacpi_kernel_sleep(uacpi_u64 msec) {
-    uint64_t start = HAL_GetTicks();
-    while (HAL_GetTicks() - start < msec);
+    uint64_t nsec = msec * 1000000;
+    uint64_t start = HAL_GetNSTicks();
+    while (HAL_GetNSTicks() - start < nsec);
 }
 
 uacpi_handle uacpi_kernel_create_mutex(void) {

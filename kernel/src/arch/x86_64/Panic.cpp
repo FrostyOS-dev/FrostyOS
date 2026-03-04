@@ -18,8 +18,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Panic.hpp"
 #include "ArchDefs.h"
 #include "Stack.hpp"
+#include "Processor.hpp"
 
 #include "interrupts/ISR.hpp"
+#include "interrupts/NMI.hpp"
 
 #include <stdio.h>
 
@@ -43,6 +45,14 @@ extern "C" [[noreturn]] void x86_64_Panic(const char* message, void* registers, 
 
     if (message == nullptr)
         message = g_x86_64_PanicReason;
+
+    x86_64_Processor* proc = static_cast<x86_64_Processor*>(GetCurrentProcessor());
+    if (proc == nullptr)
+        proc = &g_x86_64_BSP;
+
+    x86_64_LAPIC* lapic = proc->GetLAPIC();
+    if (lapic != nullptr) // If its null, then we just have to assume any other potential CPUs aren't running.
+        x86_64_GlobalNMI::Raise(lapic, x86_64_NMIType::HALT);
 
     stdio_force_unlock(); // Everything must be unlocked
 

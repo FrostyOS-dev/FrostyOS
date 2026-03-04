@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -33,6 +33,8 @@ public:
     virtual void Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical) = 0;
 
     virtual void InitTime() = 0;
+
+    virtual inline bool isBSP() const { return m_BSP; }
 
 protected:
     bool m_BSP;

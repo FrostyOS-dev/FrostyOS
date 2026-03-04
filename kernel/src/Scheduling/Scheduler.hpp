@@ -57,20 +57,23 @@ namespace Scheduler {
     void AddProcessor(ProcessorState* processor);
     ProcessorState* GetProcessor(uint64_t id);
     void RemoveProcessor(uint64_t id);
+    uint64_t GetProcessorCount();
     
     void AddProcess(Process* process);
     Process* GetProcess(uint64_t pid);
     void RemoveProcess(uint64_t pid);
     
-    void ScheduleThread(Thread* thread);
+    void ScheduleThread(Thread* thread, ProcessorState* state = nullptr);
     
     void TimerTick(uint64_t msSinceLast, void* data);
     
     void PickNext(bool lockState = true);
     
     void InitBSPState();
+    ProcessorState* InitNewProcessor(Processor* proc);
 
-    [[noreturn]] void Start();
+    [[noreturn]] void Start(bool AP = false);
+    void WaitForStart(ProcessorState* state = nullptr);
 
     bool isRunning();
     

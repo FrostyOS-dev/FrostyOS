@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -48,4 +48,8 @@ void x86_64_IDT_SetHandler(uint8_t vector, void (*handler)()) {
     g_x86_64_IDT[vector].Offset0 = handlerAddress & 0xFFFF;
     g_x86_64_IDT[vector].Offset1 = (handlerAddress >> 16) & 0xFFFF;
     g_x86_64_IDT[vector].Offset2 = (handlerAddress >> 32) & 0xFFFFFFFF;
+}
+
+x86_64_IDTPointer x86_64_CreateIDTR() {
+    return {sizeof(g_x86_64_IDT) - 1, (uint64_t)&g_x86_64_IDT};
 }

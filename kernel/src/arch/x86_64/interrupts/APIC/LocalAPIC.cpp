@@ -15,14 +15,21 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "IPI.hpp"
 #include "LocalAPIC.hpp"
 
+#include "../IDT.hpp"
 #include "../ISR.hpp"
 
+#include "../../GDT.hpp"
 #include "../../MSR.h"
 #include "../../Panic.hpp"
 #include "../../Processor.hpp"
 
+#include "../../Memory/PagingInit.hpp"
+#include "../../Memory/PagingUtil.hpp"
+
+#include <spinlock.h>
 #include <stdint.h>
 #include <util.h>
 
@@ -44,6 +51,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 x86_64_LAPIC BSP_LAPIC(true);
 
 x86_64_LAPIC* g_BSP_LAPIC = nullptr;
+
+spinlock_t g_APTrampLock = SPINLOCK_DEFAULT_VALUE;
 
 uint8_t g_LAPICDivisorLookup[8] = {
     0b1011,
@@ -120,7 +129,8 @@ void x86_64_LAPIC::Init(bool started) {
         WriteRegister((uint64_t)x86_64_LAPIC_Register::LVT_LINT0 + i * 0x10, value);
     }
 
-    x86_64_ISR_RegisterHandler(0xFF, x86_64_LAPIC_SpuriousInterruptHandler);
+    if (m_BSP)
+        x86_64_ISR_RegisterHandler(0xFF, x86_64_LAPIC_SpuriousInterruptHandler);
 
     uint32_t spuriousVector = ReadRegister(x86_64_LAPIC_Register::SpuriousIV) & 0xFFFF8C00;
     spuriousVector |= 0xFF;
@@ -215,7 +225,58 @@ void x86_64_LAPIC::AddNMISource(uint8_t LINT, bool activeLow, bool levelTriggere
 }
 
 void x86_64_LAPIC::StartCPU() {
-    return; // no SMP yet, don't do anything
+    if ((uint64_t)from_HHDM(g_KernelRootPageTable) > UINT32_MAX)
+        PANIC("Unable to start AP, root page table is too high in physical memory");
+
+    spinlock_acquire(&g_APTrampLock);
+
+    void* stack = VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE >> PAGE_SIZE_SHIFT, VMM::Protection::READ_WRITE, true);
+    if (stack == nullptr)
+        PANIC("Failed to allocate stack for AP");
+    memset(stack, 0, KERNEL_STACK_SIZE);
+
+    x86_64_Processor* proc = new x86_64_Processor(false);
+    proc->SetLAPIC(this);
+
+    g_KPageMapper->MapPage(AP_TRAMP_LOAD, AP_TRAMP_LOAD, VMM::Protection::READ_WRITE_EXECUTE, VMM::CacheType::DEFAULT);
+
+    memcpy(AP_TRAMP_LOAD_ADDR, (void*)&x86_64_APTrampoline, PAGE_SIZE);
+
+    x86_64_APInfo info;
+    info.cr3 = (uint32_t)from_HHDM((uint64_t)g_KernelRootPageTable);
+    info.cr4Extras = x86_64_Is5LevelPagingSupported() ? 1 << 12 : 0;
+    info.stackEnd = (uint64_t)stack + KERNEL_STACK_SIZE;
+    info.func = (uint64_t)&x86_64_AP_Init;
+    info.proc = proc;
+    info.GDTR = x86_64_CreateGDTR();
+    info.KCS = x86_64_GDT_KERNEL_CODE_SEGMENT;
+    info.KDS = x86_64_GDT_KERNEL_DATA_SEGMENT;
+    info.IDTR = x86_64_CreateIDTR();
+
+    memcpy(AP_TRAMP_DATA_ADDR, &info, sizeof(x86_64_APInfo));
+
+    dbgprintf("Starting AP %hhu\n", m_ID);
+
+    {
+        using namespace x86_64_IPI;
+
+        RaiseIPI(this, m_ID, 0, DeliveryMode::INIT);
+        HAL_SleepNS(10 * 1'000'000); // 10ms
+
+        // Intel suggests sending two SIPIs
+        RaiseIPI(this, m_ID, 0, DeliveryMode::Startup);
+        HAL_SleepNS(200 * 1000); // 200us
+        RaiseIPI(this, m_ID, 0, DeliveryMode::Startup);
+        HAL_SleepNS(200 * 1000); // 200us
+
+    }
+    spinlock_acquire(&proc->apLock);
+
+    dbgprintf("AP %hhu is online!\n", m_ID);
+
+    g_KPageMapper->UnmapPage(AP_TRAMP_LOAD);
+
+    spinlock_release(&g_APTrampLock);
 }
 
 void x86_64_LAPIC::WriteRegister(x86_64_LAPIC_Register reg, uint32_t value) {

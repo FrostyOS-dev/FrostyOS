@@ -27,6 +27,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Scheduling/Scheduler.hpp>
 
+#include "GDT.hpp"
+
+#include "interrupts/IDT.hpp"
 #include "interrupts/IRQ.hpp"
 
 #include "interrupts/APIC/LocalAPIC.hpp"
@@ -68,12 +71,16 @@ struct x86_64_CPUInfo {
     uint32_t maxHypervisorCPUID;
 };
 
+#define AP_TRAMP_LOAD 0
+#define AP_TRAMP_LOAD_ADDR (void*)0
+#define AP_TRAMP_DATA_ADDR (void*)0xF80
+
 class x86_64_Processor final : public Processor {
 public:
     x86_64_Processor(bool BSP);
     ~x86_64_Processor();
 
-    void Init() override;
+    [[noreturn]] void Init() override;
     void Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical) override;
 
     void FillCPUInfo();
@@ -89,6 +96,8 @@ public:
     // Will only return null if this is null
     const x86_64_CPUInfo* GetCPUInfo() const;
 
+    spinlock_t apLock; // starts locked
+
 private:
     x86_64_CPUInfo m_info;
     x86_64_ProcessorIRQData* m_IRQData;
@@ -96,7 +105,21 @@ private:
     bool m_TSCAvailable;
 };
 
+struct [[gnu::packed]] x86_64_APInfo {
+    uint32_t cr3;
+    uint32_t cr4Extras; // gets ORed with the existing cr4 value
+    uint64_t stackEnd;
+    uint64_t func;
+    x86_64_Processor* proc;
+    x86_64_GDTPointer GDTR;
+    uint16_t KCS;
+    uint16_t KDS;
+    x86_64_IDTPointer IDTR;
+};
+
 extern x86_64_Processor g_x86_64_BSP;
+
+void x86_64_AP_Init(x86_64_Processor* proc);
 
 extern "C" Processor* GetCurrentProcessor();
 extern "C" Scheduler::ProcessorState* GetCurrentProcessorState();

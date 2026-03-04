@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "ISR.hpp"
 #include "IDT.hpp"
+#include "NMI.hpp"
 
 #include "../Panic.hpp"
 
@@ -107,6 +108,8 @@ extern "C" void x86_64_ISR_Handler(x86_64_ISR_Frame* frame) {
 
     if (frame->INT == 0xE)
         return x86_64_PageFaultHandler(frame);
+    else if (frame->INT == 2 && x86_64_HandleNMI(frame))
+        return;
 
     if (in_exception) {
         while (true) {

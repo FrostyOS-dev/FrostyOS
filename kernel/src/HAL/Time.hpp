@@ -28,4 +28,6 @@ void HAL_TimerTick(Processor* proc, uint64_t ticks, void* data);
 uint64_t HAL_GetTicks();
 uint64_t HAL_GetNSTicks();
 
+void HAL_SleepNS(uint64_t ns);
+
 #endif /* _HAL_TIME_HPP */

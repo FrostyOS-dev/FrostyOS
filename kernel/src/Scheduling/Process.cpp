@@ -112,3 +112,4 @@ VMM::VMM* Process::GetVMM() const {
 }
 
 Process* g_KProcess = nullptr;
+Process* g_KLowestPriorityProcess = nullptr;

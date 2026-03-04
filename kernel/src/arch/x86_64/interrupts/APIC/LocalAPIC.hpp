@@ -122,4 +122,8 @@ private:
 
 extern x86_64_LAPIC* g_BSP_LAPIC;
 
+extern "C" {
+    extern void x86_64_APTrampoline();
+}
+
 #endif /* _x86_64_LAPIC_HPP */

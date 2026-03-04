@@ -30,9 +30,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Memory/PagingInit.hpp"
 
 #include "Scheduling/TaskUtil.hpp"
+#include "util.h"
 
 #include <stdint.h>
 #include <string.h>
+#include <spinlock.h>
+
+#include <kernel.hpp>
 
 #include <HAL/HAL.hpp>
 #include <HAL/Processor.hpp>
@@ -45,7 +49,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 x86_64_Processor g_x86_64_BSP(true);
 Processor* g_BSP = &g_x86_64_BSP;
 
-x86_64_Processor::x86_64_Processor(bool BSP) : m_IRQData(nullptr), m_LAPIC(nullptr), m_TSCAvailable(false) {
+x86_64_Processor::x86_64_Processor(bool BSP) : apLock(SPINLOCK_LOCKED_VALUE), m_IRQData(nullptr), m_LAPIC(nullptr), m_TSCAvailable(false) {
     m_BSP = BSP; // member of parent class
 }
 
@@ -53,11 +57,33 @@ x86_64_Processor::~x86_64_Processor() {
 
 }
 
-void x86_64_Processor::Init() {
+[[noreturn]] void x86_64_Processor::Init() {
     if (m_BSP)
         PANIC("BSP called Init() without arguments");
 
-    PANIC("AP Init() not implemented");
+    Scheduler::ProcessorState* state = Scheduler::InitNewProcessor(this);
+    x86_64_SetGSBases(0, (uint64_t)state);
+
+    FillCPUInfo();
+
+    m_LAPIC->Init(true);
+
+    m_TSCAvailable = x86_64_TSCInit(this);
+
+    spinlock_release(&apLock);
+
+    Scheduler::WaitForStart(state);
+
+    if (!m_LAPIC->InitTimer())
+        PANIC("AP LAPIC timer init failed");
+
+    Thread* thread = new Thread({Kernel_Idle, nullptr}, g_KLowestPriorityProcess);
+    thread->SetStack((uint64_t)VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::Protection::READ_WRITE, true) + KERNEL_STACK_SIZE);
+    g_KLowestPriorityProcess->AddThread(thread);
+
+    Scheduler::ScheduleThread(thread, state);
+
+    Scheduler::Start(true);
 }
 
 void x86_64_Processor::Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical) {
@@ -72,6 +98,7 @@ void x86_64_Processor::Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uin
     x86_64_IRQ_EarlyInit();
     x86_64_InitPaging(HHDMOffset, memoryMap, memoryMapEntryCount, pagingMode, kernelVirtual, kernelPhysical);
     g_KProcess->SetVMM(VMM::g_KVMM);
+    g_KLowestPriorityProcess->SetVMM(VMM::g_KVMM);
     
     Scheduler::InitBSPState();
     x86_64_SetGSBases(0, (uint64_t)&Scheduler::g_BSPState);
@@ -81,7 +108,7 @@ void x86_64_Processor::Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uin
 
 void x86_64_Processor::InitTime() {
     m_TSCAvailable = x86_64_TSCInit(this);
-    if (!m_LAPIC->InitTimer()) {
+    if (!m_LAPIC->InitTimer() && m_BSP) {
         dbgprintf("Warning: Local APIC timer is unavailable, falling back to the PIT\n");
         
         x86_64_PIT_Init();
@@ -191,4 +218,9 @@ x86_64_LAPIC* x86_64_Processor::GetLAPIC() const {
 
 const x86_64_CPUInfo* x86_64_Processor::GetCPUInfo() const {
     return &m_info;
+}
+
+
+void x86_64_AP_Init(x86_64_Processor *proc) {
+    return proc->Init();
 }

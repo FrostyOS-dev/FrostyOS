@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -61,4 +61,8 @@ void x86_64_InitGDT() {
     gdtPointer.Base = (uint64_t)&g_x86_64_GDT;
 
     x86_64_LoadGDT(&gdtPointer, 0x8, 0x10);
+}
+
+x86_64_GDTPointer x86_64_CreateGDTR() {
+    return {sizeof(g_x86_64_GDT) - 1, (uint64_t)&g_x86_64_GDT};
 }

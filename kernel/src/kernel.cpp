@@ -59,6 +59,8 @@ char Stage2Stack[KERNEL_STACK_SIZE];
 Process KProcess(ProcessMode::KERNEL, nullptr, NICE_LEVELS - 1);
 Thread KThread;
 
+Process KLowestPriorityProcess(ProcessMode::KERNEL, nullptr, 0);
+
 FrameBuffer g_KFramebuffer;
 
 void StartKernel() {
@@ -85,6 +87,7 @@ void StartKernel() {
     g_CurrentTTY = &g_KTTY;
 
     g_KProcess = &KProcess;
+    g_KLowestPriorityProcess = &KLowestPriorityProcess;
 
     HAL_EarlyInit(g_kernelParams.HHDMStart, g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.pagingMode, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical, g_kernelParams.RSDP);
 
@@ -94,7 +97,8 @@ void StartKernel() {
 
     LinkedList::NodePool_Init();
 
-    Scheduler::AddProcess(&KProcess);
+    Scheduler::AddProcess(g_KProcess);
+    Scheduler::AddProcess(g_KLowestPriorityProcess);
 
     KThread.Init({Kernel_Stage2, nullptr}, &KProcess);
     KThread.SetStack((uint64_t)Stage2Stack + KERNEL_STACK_SIZE);
@@ -114,6 +118,12 @@ void Kernel_Stage2(void*) {
 
     HAL_Stage2();
 
+    while (true) {
+        __asm__ volatile("hlt");
+    }
+}
+
+void Kernel_Idle(void*) {
     while (true) {
         __asm__ volatile("hlt");
     }
