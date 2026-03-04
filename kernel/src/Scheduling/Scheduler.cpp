@@ -256,14 +256,20 @@ namespace Scheduler {
             nice = i;
         }
 
+        bool stolen = false;
+
         if (thread == nullptr) {
-            // TODO: idle, work stealing
-            PANIC("Scheduler: Nothing to run on current CPU");
+            thread = StealThreadFromOther(state, &nice);
+            if (thread == nullptr)
+                PANIC("Scheduler: Nothing to run on current CPU");
+            stolen = true;
         }
         
         state->runCounts[nice]++;
-        state->threads[nice].popFront();
-        state->threads[nice].unlock();
+        if (!stolen) {
+            state->threads[nice].popFront();
+            state->threads[nice].unlock();
+        }
 
         for (int i = nice + 1; i < NICE_LEVELS; i++) {
             if (state->runCounts[i] == 2)
@@ -277,6 +283,43 @@ namespace Scheduler {
 
         if (lockState)
             spinlock_release(&(state->lock));
+    }
+
+    Thread* StealThreadFromOther(ProcessorState* current, int* niceOut) {
+        ProcessorState* state;
+        for (state = &g_BSPState; state != nullptr; state = state->next) {
+            if (state->id == current->id)
+                continue;
+
+            Thread* thread = nullptr;
+            int nice = -1;
+            
+            // go forwards through nice levels
+            for (int i = 0; i < NICE_LEVELS; i++) {
+                ThreadList& list = state->threads[i];
+                list.lock();
+                if (list.getCount() == 0 || (current->runCounts[i] == 2 && i != 0 && thread != nullptr)) {
+                    list.unlock();
+                    continue;
+                }
+                
+                if (thread != nullptr)
+                    state->threads[nice].unlock();
+                else if (current->runCounts[i] == 2)
+                    current->runCounts[i] = 0;
+                thread = list.getHead();
+                nice = i;
+            }
+
+            if (thread != nullptr) {
+                if (niceOut != nullptr)
+                    *niceOut = nice;
+                state->threads[nice].popFront();
+                state->threads[nice].unlock();
+                return thread;
+            }
+        }
+        return nullptr;
     }
 
     void InitBSPState() {

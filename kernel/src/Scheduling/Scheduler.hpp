@@ -68,6 +68,7 @@ namespace Scheduler {
     void TimerTick(uint64_t msSinceLast, void* data);
     
     void PickNext(bool lockState = true);
+    Thread* StealThreadFromOther(ProcessorState* current, int* niceOut = nullptr);
     
     void InitBSPState();
     ProcessorState* InitNewProcessor(Processor* proc);
