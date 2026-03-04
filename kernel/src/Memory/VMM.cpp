@@ -127,12 +127,29 @@ namespace VMM {
 
         spinlock_acquire(&obj->lock);
 
+        uint64_t lowestMapped = UINT64_MAX;
+        uint64_t highestMapped = 0;
+
+        // go through once and unmap the pages
         Page* page = obj->pages;
         for (uint64_t i = 0; page != nullptr; i++) {
             if (page->physAddr != 0) {
                 m_pageMapper->UnmapPage(virt + i * PAGE_SIZE);
-                obj->pager->FreePage(reinterpret_cast<void*>(page->physAddr));
+                if (lowestMapped == UINT64_MAX)
+                    lowestMapped = i;
+                highestMapped = i;
             }
+            page = page->next;
+        }
+
+        // Invalidate the unmapped pages
+        m_pageMapper->InvalidatePages(reinterpret_cast<uint64_t>(virtAddr) + lowestMapped * PAGE_SIZE, (highestMapped - lowestMapped) * PAGE_SIZE, true);
+
+        // go through a second time and free the underlying pages and structures
+        page = obj->pages;
+        while (page != nullptr) {
+            if (page->physAddr != 0)
+                obj->pager->FreePage(reinterpret_cast<void*>(page->physAddr));
             Page* current = page;
             page = page->next;
             kfree_vmm(current);
@@ -258,7 +275,7 @@ namespace VMM {
 
         kfree_vmm(entry);
 
-        m_pageMapper->InvalidatePages(virtAddr, pageCount);
+        m_pageMapper->InvalidatePages(virtAddr, pageCount, true);
 
         return true;
     }
@@ -323,9 +340,11 @@ namespace VMM {
 
         spinlock_release(&entry->memoryObject->lock);
 
+        Protection oldProt = entry->protection;
+
         m_mapEntries.unlock(); // need to hold the lock for the whole function to ensure it can't be unmapped on us part way through
 
-        m_pageMapper->InvalidatePages(virtAddr, pageCount);
+        m_pageMapper->InvalidatePages(virtAddr, pageCount, m_pageMapper->isPermsReduction(oldProt, prot));
         return true;
     }
 

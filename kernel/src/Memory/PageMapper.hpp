@@ -33,7 +33,9 @@ public:
     virtual bool RemapPage(uint64_t virt, VMM::Protection prot, VMM::CacheType cacheType) = 0;
     virtual bool RemapPages(uint64_t virt, size_t count, VMM::Protection prot, VMM::CacheType cacheType) = 0;
 
-    virtual void InvalidatePages(uint64_t virt, size_t count) = 0;
+    virtual void InvalidatePages(uint64_t virt, size_t count, bool shootdown = false) = 0;
+
+    virtual bool isPermsReduction(VMM::Protection oldProt, VMM::Protection newProt) const = 0;
 };
 
 extern PageMapper* g_KPageMapper;

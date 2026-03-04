@@ -33,10 +33,12 @@ public:
     bool RemapPage(uint64_t virt, VMM::Protection prot, VMM::CacheType cacheType) override;
     bool RemapPages(uint64_t virt, size_t count, VMM::Protection prot, VMM::CacheType cacheType) override;
 
-    void InvalidatePages(uint64_t virt, size_t count) override;
+    void InvalidatePages(uint64_t virt, size_t count, bool shootdown) override;
 
     void SetPageTable(void* pageTable);
     void* GetPageTable() const;
+
+    bool isPermsReduction(VMM::Protection oldProt, VMM::Protection newProt) const override;
 
 private:
     void* m_pageTable;

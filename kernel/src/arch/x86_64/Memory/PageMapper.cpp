@@ -20,6 +20,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "PagingUtil.hpp"
 #include "PAT.hpp"
 
+#include "../interrupts/NMI.hpp"
+#include "arch/x86_64/Processor.hpp"
+#include "arch/x86_64/interrupts/APIC/LocalAPIC.hpp"
+
 #include <util.h>
 
 #include <Memory/VMM.hpp>
@@ -147,8 +151,17 @@ bool x86_64_PageMapper::RemapPages(uint64_t virt, size_t count, VMM::Protection 
     return true;
 }
 
-void x86_64_PageMapper::InvalidatePages(uint64_t virt, size_t count) {
+void x86_64_PageMapper::InvalidatePages(uint64_t virt, size_t count, bool shootdown) {
     x86_64_InvalidatePages(virt, count * PAGE_SIZE);
+    if (shootdown) {
+        x86_64_Processor* proc = static_cast<x86_64_Processor*>(GetCurrentProcessor());
+        if (proc != nullptr) {
+            x86_64_NMI_InvPagesData data = {virt, count};
+            x86_64_LAPIC* lapic = proc->GetLAPIC();
+            if (lapic != nullptr)
+                x86_64_GlobalNMI::Raise(lapic, x86_64_NMIType::INVPAGES, &data);
+        }
+    }
 }
 
 void x86_64_PageMapper::SetPageTable(void* pageTable) {
@@ -157,4 +170,21 @@ void x86_64_PageMapper::SetPageTable(void* pageTable) {
 
 void* x86_64_PageMapper::GetPageTable() const {
     return m_pageTable;
+}
+
+bool x86_64_PageMapper::isPermsReduction(VMM::Protection oldProt, VMM::Protection newProt) const {
+    using namespace VMM;
+    switch (newProt) {
+    case Protection::READ:
+        return oldProt != newProt;
+    case Protection::WRITE:
+    case Protection::READ_WRITE:
+        return oldProt != Protection::EXECUTE && oldProt != Protection::READ_EXECUTE && oldProt != Protection::READ_WRITE_EXECUTE;
+    case Protection::EXECUTE:
+    case Protection::READ_EXECUTE:
+        return oldProt != Protection::WRITE && oldProt != Protection::READ_WRITE && oldProt != Protection::READ_WRITE_EXECUTE;
+    case Protection::READ_WRITE_EXECUTE:
+        return false;
+    }
+    return true;
 }
