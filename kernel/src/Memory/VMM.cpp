@@ -351,6 +351,33 @@ namespace VMM {
         uint64_t pageIndex = (virtAddr - entry->startVirt) >> PAGE_SIZE_SHIFT;
         Protection prot = entry->protection;
         CacheType cacheType = entry->cacheType;
+
+        // need to validate that the page fault was actually caused by a mismatch in protection
+        bool valid = false;
+        switch (prot) {
+        case Protection::READ:
+            valid = !code.write && !code.execute;
+            break;
+        case Protection::WRITE:
+            valid = code.write && !code.execute;
+            break;
+        case Protection::EXECUTE:
+            valid = code.execute; // no way to differentiate between read and write, so don't bother
+            break;
+        case Protection::READ_WRITE:
+            valid = !code.execute;
+            break;
+        case Protection::READ_EXECUTE:
+            valid = !code.write;
+            break;
+        case Protection::READ_WRITE_EXECUTE:
+            valid = true;
+            break;
+        }
+        if (!valid) {
+            m_mapEntries.unlock();
+            return false;
+        }
         
         spinlock_acquire(&obj->lock);
         m_mapEntries.unlock();
@@ -365,7 +392,11 @@ namespace VMM {
         }
 
         if (page->physAddr != 0) { // not mapped here, but is somewhere else
-            bool result = m_pageMapper->MapPage(virtAddr, page->physAddr, prot, cacheType);
+            bool result;
+            if (code.present)
+                result = m_pageMapper->RemapPage(virtAddr, prot, cacheType);
+            else
+                result = m_pageMapper->MapPage(virtAddr, page->physAddr, prot, cacheType);
             spinlock_release(&obj->lock);
             return result;
         }
@@ -396,8 +427,11 @@ namespace VMM {
             break;
         }
 
-        page->physAddr = reinterpret_cast<uint64_t>(obj->pager->AllocatePage());
-        bool result = m_pageMapper->MapPage(virtAddr, page->physAddr, prot, cacheType);
+        bool result = false;
+        if (!code.present) {
+            page->physAddr = reinterpret_cast<uint64_t>(obj->pager->AllocatePage());
+            result = m_pageMapper->MapPage(virtAddr, page->physAddr, prot, cacheType);
+        }
 
         spinlock_release(&obj->lock);
 
