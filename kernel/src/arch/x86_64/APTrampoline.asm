@@ -98,6 +98,7 @@ align 64
     lidt [abs IDTR_loc]
 
     mov rdi, QWORD [abs proc_loc]
+    mov rsi, rsp
 
     push 0
 

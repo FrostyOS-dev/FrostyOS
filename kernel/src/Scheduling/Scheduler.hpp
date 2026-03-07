@@ -39,6 +39,7 @@ namespace Scheduler {
         ProcessorState* self;
         uint64_t id;
         Processor* processor;
+        void* kernelStack;
         CPU_Registers registers;
         Thread* currentThread; // must only be modified by the processor that owns this state. Reads must be done with the lock held
         uint32_t runCounts[NICE_LEVELS]; // share locks with thread lists

@@ -57,7 +57,7 @@ x86_64_Processor::~x86_64_Processor() {
 
 }
 
-[[noreturn]] void x86_64_Processor::Init() {
+[[noreturn]] void x86_64_Processor::Init(uint64_t stackTop) {
     if (m_BSP)
         PANIC("BSP called Init() without arguments");
 
@@ -76,6 +76,8 @@ x86_64_Processor::~x86_64_Processor() {
 
     if (!m_LAPIC->InitTimer())
         PANIC("AP LAPIC timer init failed");
+
+    state->kernelStack = reinterpret_cast<void*>(stackTop);
 
     Thread* thread = new Thread({Kernel_Idle, nullptr}, g_KLowestPriorityProcess);
     thread->SetStack((uint64_t)VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::Protection::READ_WRITE, true) + KERNEL_STACK_SIZE);
@@ -221,6 +223,6 @@ const x86_64_CPUInfo* x86_64_Processor::GetCPUInfo() const {
 }
 
 
-void x86_64_AP_Init(x86_64_Processor *proc) {
-    return proc->Init();
+void x86_64_AP_Init(x86_64_Processor* proc, uint64_t stackTop) {
+    return proc->Init(stackTop);
 }

@@ -80,7 +80,7 @@ public:
     x86_64_Processor(bool BSP);
     ~x86_64_Processor();
 
-    [[noreturn]] void Init() override;
+    [[noreturn]] void Init(uint64_t stackTop) override;
     void Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical) override;
 
     void FillCPUInfo();
@@ -119,7 +119,7 @@ struct [[gnu::packed]] x86_64_APInfo {
 
 extern x86_64_Processor g_x86_64_BSP;
 
-void x86_64_AP_Init(x86_64_Processor* proc);
+void x86_64_AP_Init(x86_64_Processor* proc, uint64_t stackTop);
 
 extern "C" Processor* GetCurrentProcessor();
 extern "C" Scheduler::ProcessorState* GetCurrentProcessorState();
