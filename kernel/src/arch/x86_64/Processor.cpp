@@ -61,6 +61,9 @@ x86_64_Processor::~x86_64_Processor() {
     if (m_BSP)
         PANIC("BSP called Init() without arguments");
 
+    memset(&m_TSS, 0, sizeof(x86_64_TSS));
+    x86_64_InitGDT(m_GDT, &m_TSS);
+
     Scheduler::ProcessorState* state = Scheduler::InitNewProcessor(this);
     x86_64_SetGSBases(0, (uint64_t)state);
 
@@ -70,14 +73,15 @@ x86_64_Processor::~x86_64_Processor() {
 
     m_TSCAvailable = x86_64_TSCInit(this);
 
+    state->kernelStack = reinterpret_cast<void*>(stackTop);
+    InitTSS(state);
+
     spinlock_release(&apLock);
 
     Scheduler::WaitForStart(state);
 
     if (!m_LAPIC->InitTimer())
         PANIC("AP LAPIC timer init failed");
-
-    state->kernelStack = reinterpret_cast<void*>(stackTop);
 
     Thread* thread = new Thread({Kernel_Idle, nullptr}, g_KLowestPriorityProcess);
     thread->SetStack((uint64_t)VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::Protection::READ_WRITE, true) + KERNEL_STACK_SIZE);
@@ -92,7 +96,8 @@ void x86_64_Processor::Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uin
     if (!m_BSP)
         PANIC("AP called Init() with arguments");
 
-    x86_64_InitGDT();
+    memset(&m_TSS, 0, sizeof(x86_64_TSS));
+    x86_64_InitGDT(m_GDT, &m_TSS);
     x86_64_InitIDT();
 
     FillCPUInfo();
@@ -105,7 +110,28 @@ void x86_64_Processor::Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uin
     Scheduler::InitBSPState();
     x86_64_SetGSBases(0, (uint64_t)&Scheduler::g_BSPState);
 
+    uint64_t kernelStack = (uint64_t)VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::Protection::READ_WRITE, true) + KERNEL_STACK_SIZE;
+    Scheduler::g_BSPState.kernelStack = (void*)kernelStack;
+    InitTSS(&Scheduler::g_BSPState);
+
     x86_64_IRQ_FullInit();
+}
+
+void x86_64_Processor::InitBSPLate() {
+    if (!m_BSP)
+        return;
+
+    x86_64_IDT_SetISTS();
+}
+
+void x86_64_Processor::InitTSS(Scheduler::ProcessorState* state) {
+    m_TSS.RSP[0] = (uint64_t)state->kernelStack;
+    m_TSS.IST[0] = (uint64_t)VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::Protection::READ_WRITE, true) + KERNEL_STACK_SIZE;
+    m_TSS.IST[1] = (uint64_t)VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::Protection::READ_WRITE, true) + KERNEL_STACK_SIZE;
+    if (state->kernelStack == 0 || m_TSS.IST[0] == 0 || m_TSS.IST[1] == 0)
+        PANIC("Failed to allocate stack for TSS");
+
+    x86_64_LoadTSS(x86_64_TSS_SEGMENT);
 }
 
 void x86_64_Processor::InitTime() {

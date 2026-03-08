@@ -248,9 +248,6 @@ void x86_64_LAPIC::StartCPU() {
     info.stackEnd = (uint64_t)stack + KERNEL_STACK_SIZE;
     info.func = (uint64_t)&x86_64_AP_Init;
     info.proc = proc;
-    info.GDTR = x86_64_CreateGDTR();
-    info.KCS = x86_64_GDT_KERNEL_CODE_SEGMENT;
-    info.KDS = x86_64_GDT_KERNEL_DATA_SEGMENT;
     info.IDTR = x86_64_CreateIDTR();
 
     memcpy(AP_TRAMP_DATA_ADDR, &info, sizeof(x86_64_APInfo));

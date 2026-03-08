@@ -50,6 +50,8 @@ void x86_64_InitIDT();
 void x86_64_IDT_SetHandler(uint8_t vector, void (*handler)());
 x86_64_IDTPointer x86_64_CreateIDTR();
 
+void x86_64_IDT_SetISTS();
+
 extern "C" void x86_64_LoadIDT(x86_64_IDTPointer* pointer);
 
 #endif /* _x86_64_IDT_HPP */

@@ -1,4 +1,4 @@
-; Copyright (©) 2024  Frosty515
+; Copyright (©) 2024-2026  Frosty515
 
 ; This program is free software: you can redistribute it and/or modify
 ; it under the terms of the GNU General Public License as published by
@@ -16,6 +16,7 @@
 [bits 64]
 
 global x86_64_LoadGDT
+global x86_64_LoadTSS
 
 x86_64_LoadGDT:
     lgdt [rdi]
@@ -34,3 +35,7 @@ x86_64_LoadGDT:
     push rcx ; restore return address
 
     retfq ; far return into new code segment
+
+x86_64_LoadTSS:
+    ltr di
+    ret

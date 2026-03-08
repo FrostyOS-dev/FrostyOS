@@ -22,10 +22,7 @@ section .data
 stackEnd_loc equ 0xF88
     func_loc equ 0xF90
     proc_loc equ 0xF98
-    GDTR_loc equ 0xFA0
-     KCS_loc equ 0xFAA
-     KDS_loc equ 0xFAC
-    IDTR_loc equ 0xFAE
+    IDTR_loc equ 0xFA0
 
 global x86_64_APTrampoline
 align 0x1000
@@ -75,9 +72,7 @@ align 64
 .longmode:
     [bits 64]
 
-    lgdt [abs GDTR_loc]
-
-    mov ax, WORD [abs KDS_loc]
+    mov ax, 0x10
     mov ds, ax
     mov es, ax
     mov fs, ax
@@ -87,14 +82,6 @@ align 64
     mov rsp, QWORD [abs stackEnd_loc]
     xor rbp, rbp
     
-    movzx rax, WORD [abs KCS_loc]
-    push rax
-
-    push .newGDT - x86_64_APTrampoline
-
-    retfq
-
-.newGDT:
     lidt [abs IDTR_loc]
 
     mov rdi, QWORD [abs proc_loc]

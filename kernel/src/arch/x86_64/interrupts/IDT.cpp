@@ -53,3 +53,8 @@ void x86_64_IDT_SetHandler(uint8_t vector, void (*handler)()) {
 x86_64_IDTPointer x86_64_CreateIDTR() {
     return {sizeof(g_x86_64_IDT) - 1, (uint64_t)&g_x86_64_IDT};
 }
+
+void x86_64_IDT_SetISTS() {
+    g_x86_64_IDT[2].IST = 1; // NMI
+    g_x86_64_IDT[8].IST = 2; // Double fault
+}

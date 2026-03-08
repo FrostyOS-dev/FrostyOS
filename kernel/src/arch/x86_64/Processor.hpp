@@ -82,6 +82,7 @@ public:
 
     [[noreturn]] void Init(uint64_t stackTop) override;
     void Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical) override;
+    void InitBSPLate() override;
 
     void FillCPUInfo();
 
@@ -99,10 +100,14 @@ public:
     spinlock_t apLock; // starts locked
 
 private:
+    void InitTSS(Scheduler::ProcessorState* state);
+
     x86_64_CPUInfo m_info;
     x86_64_ProcessorIRQData* m_IRQData;
     x86_64_LAPIC* m_LAPIC;
     bool m_TSCAvailable;
+    x86_64_GDTEntry m_GDT[x86_64_GDT_ENTRY_COUNT];
+    x86_64_TSS m_TSS;
 };
 
 struct [[gnu::packed]] x86_64_APInfo {
@@ -111,9 +116,6 @@ struct [[gnu::packed]] x86_64_APInfo {
     uint64_t stackEnd;
     uint64_t func;
     x86_64_Processor* proc;
-    x86_64_GDTPointer GDTR;
-    uint16_t KCS;
-    uint16_t KDS;
     x86_64_IDTPointer IDTR;
 };
 

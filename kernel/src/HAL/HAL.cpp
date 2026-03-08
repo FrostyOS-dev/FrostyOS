@@ -29,6 +29,7 @@ void HAL_EarlyInit(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t mem
     g_BSP->Init(HHDMOffset, memoryMap, memoryMapEntryCount, pagingMode, kernelVirtual, kernelPhysical);
     ACPI::EarlyInit(RSDP);
     HAL_InitTime();
+    g_BSP->InitBSPLate();
 }
 
 void HAL_Stage2() {
