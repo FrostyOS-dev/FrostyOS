@@ -28,6 +28,13 @@ namespace LinkedList {
 
     static constexpr uint64_t POOL_SIZE = 512;
 
+    enum class IteratorDecision {
+        CONTINUE,
+        BREAK,
+        DELETE,
+        DELETE_BREAK
+    };
+
     struct Node {
         Node* previous;
         uint64_t data;
@@ -227,15 +234,15 @@ namespace LinkedList {
     template<typename T>
     class RearInsertLinkedList {
     public:
-        RearInsertLinkedList(bool usePool = false)
-            : m_count(0), m_start(nullptr), m_end(nullptr), m_usePool(usePool) {}
+        RearInsertLinkedList(bool vmm = false, bool usePool = false)
+            : m_count(0), m_start(nullptr), m_end(nullptr), m_vmm(vmm), m_usePool(usePool), m_lock(SPINLOCK_DEFAULT_VALUE) {}
         ~RearInsertLinkedList() {
             for (uint64_t i = 0; i < m_count; i++)
                 remove((uint64_t)0);
         }
 
         void insert(const T* obj) {
-            Node* node = newNode((uint64_t)obj, m_usePool);
+            Node* node = newNode((uint64_t)obj, m_vmm, m_usePool);
             if (m_count == 0) {
                 m_start = node;
                 m_end = node;
@@ -260,7 +267,7 @@ namespace LinkedList {
                 previous = temp;
                 temp = temp->next;
             }
-            Node* node = newNode(reinterpret_cast<uint64_t>(obj), m_usePool);
+            Node* node = newNode(reinterpret_cast<uint64_t>(obj), m_vmm, m_usePool);
             // node needs to slot in between temp and temp->next
             if (temp == nullptr) {
                 // empty list
@@ -269,6 +276,21 @@ namespace LinkedList {
                 m_count++;
                 return;
             }
+            if (temp->next != nullptr) {
+                temp->next->previous = node;
+                node->next = temp->next;
+            } else
+                m_end = node;
+            temp->next = node;
+            node->previous = temp;
+            m_count++;
+        }
+
+        void insertAfter(const T* obj, const T* newObj) {
+            Node* temp = findNode(m_start, reinterpret_cast<const uint64_t>(obj));
+            if (temp == nullptr)
+                return;
+            Node* node = newNode(reinterpret_cast<uint64_t>(newObj), m_vmm, m_usePool);
             if (temp->next != nullptr) {
                 temp->next->previous = node;
                 node->next = temp->next;
@@ -306,21 +328,21 @@ namespace LinkedList {
         }
 
         void remove(uint64_t index) {
-            deleteNode(m_start, (uint64_t)get(index));
+            deleteNode(m_start, (uint64_t)get(index), m_vmm, m_usePool);
             m_count--;
         }
 
         void remove(const T* obj) {
-            deleteNode(m_start, (uint64_t)obj);
+            deleteNode(m_start, (uint64_t)obj, m_vmm, m_usePool);
             m_count--;
         }
 
-        void Enumerate(void (*func)(T* obj)) const {
+        void Enumerate(bool (*func)(T* obj, void* data), void* data = nullptr) const {
             Node* temp = m_start;
             for (uint64_t i = 0; i < m_count; i++) {
                 // if (temp == nullptr)
                 // 	return;
-                func((T*)(temp->data));
+                func((T*)(temp->data), data);
                 temp = temp->next;
             }
         }
@@ -367,6 +389,52 @@ namespace LinkedList {
             }
         }
 
+        // Enumerate with possibility of deleting current node. func return 0 to continue, 1 to quit, 2 to delete current node, 3 to delete current node and exit
+        void EnumerateDelete(IteratorDecision (*func)(T* obj, void* data, uint64_t index), void* data = nullptr, uint64_t start = 0) {
+            Node* temp = m_start;
+            for (uint64_t i = 0; i < start; i++) {
+                temp = temp->next;
+            }
+            uint64_t index = start;
+            while (temp != nullptr) {
+                Node* next = temp->next;
+                switch (func(reinterpret_cast<T*>(temp->data), data, index)) {
+                case IteratorDecision::BREAK:
+                    return;
+                case IteratorDecision::DELETE: {
+                    if (next == nullptr)
+                        m_end = temp->previous;
+                    else
+                        next->previous = temp->previous;
+                    if (temp->previous != nullptr)
+                        temp->previous->next = next;
+                    else
+                        m_start = next;
+                    delete temp;
+                    m_count--;
+                    break;
+                }
+                case IteratorDecision::DELETE_BREAK: {
+                    if (next == nullptr)
+                        m_end = temp->previous;
+                    else
+                        next->previous = temp->previous;
+                    if (temp->previous != nullptr)
+                        temp->previous->next = next;
+                    else
+                        m_start = next;
+                    delete temp;
+                    m_count--;
+                    return;
+                }
+                default:
+                    break;
+                }
+                temp = next;
+                index++;
+            }
+        }
+
         [[nodiscard]] uint64_t getCount() const {
             return m_count;
         }
@@ -378,11 +446,21 @@ namespace LinkedList {
             m_end = nullptr;
         }
 
+        void lock() const {
+            spinlock_acquire(&m_lock);
+        }
+
+        void unlock() const {
+            spinlock_release(&m_lock);
+        }
+
     private:
         uint64_t m_count;
         Node* m_start;
         Node* m_end;
+        bool m_vmm;
         bool m_usePool;
+        mutable spinlock_t m_lock;
     };
 
     template<typename T>
