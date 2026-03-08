@@ -1,4 +1,4 @@
-; Copyright (©) 2024-2025  Frosty515
+; Copyright (©) 2024-2026  Frosty515
 
 ; This program is free software: you can redistribute it and/or modify
 ; it under the terms of the GNU General Public License as published by
@@ -330,6 +330,10 @@ ISR_NOERRORCODE 254
 ISR_NOERRORCODE 255
 
 x86_64_ISR_Common:
+    test [rsp + 24], 0x3
+    jz .s
+    swapgs
+.s:
     pushaq
 
     mov rax, cr2
@@ -355,5 +359,9 @@ x86_64_ISR_Common:
     mov cr2, rax
 
     popaq
+    test [rsp + 24], 0x3
+    jz .s2
+    swapgs
+.s2:
     add rsp, 16
     iretq
