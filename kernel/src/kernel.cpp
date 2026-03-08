@@ -54,8 +54,6 @@ TTYBackendVGA g_KVGABackend;
 
 TTY g_KTTY;
 
-char Stage2Stack[KERNEL_STACK_SIZE];
-
 Process KProcess(ProcessMode::KERNEL, nullptr, NICE_LEVELS - 1);
 Thread KThread;
 
@@ -95,17 +93,13 @@ void StartKernel() {
     g_KFramebuffer.BaseAddress = VMM::g_KVMM->AllocatePages(DIV_ROUNDUP(g_KFramebuffer.pitch * g_KFramebuffer.height, PAGE_SIZE), VMM::Protection::READ_WRITE, true);
     g_KVGA.EnableDoubleBuffering(&g_KFramebuffer);
 
-    LinkedList::NodePool_Init();
-
-    Scheduler::AddProcess(g_KProcess);
     Scheduler::AddProcess(g_KLowestPriorityProcess);
 
-    KThread.Init({Kernel_Stage2, nullptr}, &KProcess);
-    KThread.SetStack((uint64_t)Stage2Stack + KERNEL_STACK_SIZE);
+    if (!KProcess.CreateMainThread({Kernel_Stage2, nullptr}))
+        PANIC("Failed to create kernel stage 2 main thread");
 
-    KProcess.SetMainThread(&KThread);
-
-    Scheduler::ScheduleThread(&KThread);
+    if (!KProcess.Start())
+        PANIC("Failed to start kernel stage 2");
 
     Scheduler::Start();
 

@@ -16,10 +16,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "Process.hpp"
+#include "Scheduler.hpp"
+#include "Thread.hpp"
 
 #include <stdint.h>
 
-Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), m_VMM(vmm), m_Nice(nice), m_PID(UINT64_MAX), m_PPID(UINT64_MAX), m_nextTID(0), m_MainThread(nullptr), m_Threads(true) {
+#include <DataStructures/LinkedList.hpp>
+
+Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), m_VMM(vmm), m_Nice(nice), m_PID(UINT64_MAX), m_PPID(UINT64_MAX), m_nextTID(0), m_MainThread(nullptr), m_Threads() {
 
 }
 
@@ -27,8 +31,21 @@ Process::~Process() {
 
 }
 
-void Process::CreateMainThread(ThreadEntryPoint entryPoint) {
-    // TODO
+bool Process::Start() {
+    Scheduler::AddProcess(this);
+    Scheduler::ScheduleThread(m_MainThread);
+    m_Threads.lock();
+    m_Threads.Enumerate([](Thread* thread, void*) -> bool {
+        Scheduler::ScheduleThread(thread);
+        return true;
+    }, nullptr);
+    m_Threads.unlock();
+    return true;
+}
+
+bool Process::CreateMainThread(ThreadEntryPoint entryPoint) {
+    m_MainThread = new Thread(entryPoint, this, 0);
+    return m_MainThread->Init();
 }
 
 void Process::SetMainThread(Thread* thread) {
@@ -72,7 +89,17 @@ Thread* Process::GetThread(uint64_t tid) const {
 }
 
 void Process::RemoveThread(uint64_t tid) {
-    // TODO
+    if (tid == 0)
+        return; // Main thread
+
+    m_Threads.lock();
+    m_Threads.EnumerateDelete([](Thread* thread, void* data, uint64_t) -> LinkedList::IteratorDecision {
+        uint64_t* tid = static_cast<uint64_t*>(data);
+        if (thread->GetTID() == *tid)
+            return LinkedList::IteratorDecision::DELETE_BREAK;
+        return LinkedList::IteratorDecision::CONTINUE;
+    }, &tid);
+    m_Threads.unlock();
 }
 
 void Process::SwitchToThread(Thread* thread) {

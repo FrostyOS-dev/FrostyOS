@@ -36,7 +36,9 @@ public:
     Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice);
     ~Process();
 
-    void CreateMainThread(ThreadEntryPoint entryPoint);
+    bool Start();
+
+    bool CreateMainThread(ThreadEntryPoint entryPoint);
     void SetMainThread(Thread* thread);
     Thread* GetMainThread() const;
 
@@ -66,7 +68,7 @@ private:
     uint64_t m_PPID;
     uint64_t m_nextTID;
     Thread* m_MainThread;
-    LinkedList::LockableLinkedList<Thread> m_Threads;
+    LinkedList::RearInsertLinkedList<Thread> m_Threads;
 };
 
 extern Process* g_KProcess;

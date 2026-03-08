@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,12 +19,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Process.hpp"
 
 #include <string.h>
+#include <util.h>
 
-Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_ThreadListData{nullptr, nullptr}, m_TimeRemaining(0) {
+#include <Memory/VMM.hpp>
+
+Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_TimeRemaining(0) {
 
 }
 
-Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_ThreadListData{nullptr, nullptr}, m_TimeRemaining(0) {
+Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_TimeRemaining(0) {
 
 }
 
@@ -32,11 +35,38 @@ Thread::~Thread() {
 
 }
 
-void Thread::Init(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) {
+bool Thread::Init() {
+    if (m_Parent == nullptr)
+        return false;
+
+    return CreateStacks();
+}
+
+bool Thread::Init(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) {
     m_EntryPoint = entryPoint;
     m_Parent = parent;
     m_TID = tid;
     m_Stack = 0;
+    return Init();
+}
+
+bool Thread::Delete() {
+    if (m_Parent == nullptr)
+        return false;
+
+    VMM::VMM* vmm = m_Parent->GetVMM();
+    if (vmm == nullptr)
+        return false;
+
+    if (!vmm->FreePages(reinterpret_cast<void*>(m_KernelStack - KERNEL_STACK_SIZE)))
+        return false;
+
+    if (m_Parent->GetMode() == ProcessMode::USER && !vmm->FreePages(reinterpret_cast<void*>(m_Stack - DEFAULT_USER_STACK_SIZE)))
+        return false;
+
+    m_Stack = 0;
+    m_KernelStack = 0;
+    return true;
 }
 
 void Thread::SetEntryPoint(ThreadEntryPoint entryPoint) {
@@ -75,12 +105,44 @@ CPU_Registers& Thread::GetMutableRegisters() {
     return m_Registers;
 }
 
+bool Thread::CreateStacks() {
+    if (m_Parent == nullptr)
+        return false;
+
+    VMM::VMM* vmm = m_Parent->GetVMM();
+    if (vmm == nullptr)
+        return false;
+
+    void* stack = vmm->AllocatePages(DIV_ROUNDUP(KERNEL_STACK_SIZE, PAGE_SIZE), VMM::Protection::READ_WRITE, true);
+    if (stack == nullptr)
+        return false;
+    m_KernelStack = reinterpret_cast<uint64_t>(stack) + KERNEL_STACK_SIZE;
+
+    if (m_Parent->GetMode() == ProcessMode::USER) {
+        stack = vmm->AllocatePages(DIV_ROUNDUP(DEFAULT_USER_STACK_SIZE, PAGE_SIZE), VMM::Protection::READ_WRITE, false);
+        if (stack == nullptr)
+            return false;
+        m_Stack = reinterpret_cast<uint64_t>(stack) + DEFAULT_USER_STACK_SIZE;
+    } else
+        m_Stack = m_KernelStack;
+
+    return true;
+}
+
 void Thread::SetStack(uint64_t stack) {
     m_Stack = stack;
 }
 
 uint64_t Thread::GetStack() const {
     return m_Stack;
+}
+
+void Thread::SetKernelStack(uint64_t stack) {
+    m_KernelStack = stack;
+}
+
+uint64_t Thread::GetKernelStack() const {
+    return m_KernelStack;
 }
 
 void Thread::SetThreadListData(ThreadListItemInternalData& data) {
