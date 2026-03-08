@@ -42,6 +42,7 @@ namespace Scheduler {
         void* kernelStack;
         CPU_Registers registers;
         Thread* currentThread; // must only be modified by the processor that owns this state. Reads must be done with the lock held
+        Thread* idleThread;
         uint32_t runCounts[NICE_LEVELS]; // share locks with thread lists
         ThreadList threads[NICE_LEVELS];
         uint32_t isIdle;
@@ -65,6 +66,7 @@ namespace Scheduler {
     void RemoveProcess(uint64_t pid);
     
     void ScheduleThread(Thread* thread, ProcessorState* state = nullptr);
+    void CreateIdleThread(); // on the current processor, must be called on BSP first
     
     void TimerTick(uint64_t msSinceLast, void* data);
     
@@ -78,6 +80,8 @@ namespace Scheduler {
     void WaitForStart(ProcessorState* state = nullptr);
 
     bool isRunning();
+
+    [[noreturn]] void IdleTask(void*); // implemented in arch-specific code
     
 } // namespace Scheduler
 

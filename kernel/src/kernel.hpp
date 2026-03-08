@@ -41,6 +41,5 @@ extern KernelParams g_kernelParams;
 
 void StartKernel();
 void Kernel_Stage2(void*);
-void Kernel_Idle(void*);
 
 #endif /* _KERNEL_HPP */

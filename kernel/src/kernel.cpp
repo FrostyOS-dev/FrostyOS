@@ -57,8 +57,6 @@ TTY g_KTTY;
 Process KProcess(ProcessMode::KERNEL, nullptr, NICE_LEVELS - 1);
 Thread KThread;
 
-Process KLowestPriorityProcess(ProcessMode::KERNEL, nullptr, 0);
-
 FrameBuffer g_KFramebuffer;
 
 void StartKernel() {
@@ -85,15 +83,12 @@ void StartKernel() {
     g_CurrentTTY = &g_KTTY;
 
     g_KProcess = &KProcess;
-    g_KLowestPriorityProcess = &KLowestPriorityProcess;
 
     HAL_EarlyInit(g_kernelParams.HHDMStart, g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.pagingMode, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical, g_kernelParams.RSDP);
 
     memcpy(&g_KFramebuffer, &g_kernelParams.framebuffer, sizeof(FrameBuffer));
     g_KFramebuffer.BaseAddress = VMM::g_KVMM->AllocatePages(DIV_ROUNDUP(g_KFramebuffer.pitch * g_KFramebuffer.height, PAGE_SIZE), VMM::Protection::READ_WRITE, true);
     g_KVGA.EnableDoubleBuffering(&g_KFramebuffer);
-
-    Scheduler::AddProcess(g_KLowestPriorityProcess);
 
     if (!KProcess.CreateMainThread({Kernel_Stage2, nullptr}))
         PANIC("Failed to create kernel stage 2 main thread");
@@ -112,12 +107,6 @@ void Kernel_Stage2(void*) {
 
     HAL_Stage2();
 
-    while (true) {
-        __asm__ volatile("hlt");
-    }
-}
-
-void Kernel_Idle(void*) {
     while (true) {
         __asm__ volatile("hlt");
     }

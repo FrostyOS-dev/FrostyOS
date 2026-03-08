@@ -83,11 +83,7 @@ x86_64_Processor::~x86_64_Processor() {
     if (!m_LAPIC->InitTimer())
         PANIC("AP LAPIC timer init failed");
 
-    Thread* thread = new Thread({Kernel_Idle, nullptr}, g_KLowestPriorityProcess);
-    thread->SetStack((uint64_t)VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::Protection::READ_WRITE, true) + KERNEL_STACK_SIZE);
-    g_KLowestPriorityProcess->AddThread(thread);
-
-    Scheduler::ScheduleThread(thread, state);
+    Scheduler::CreateIdleThread();
 
     Scheduler::Start(true);
 }
@@ -105,7 +101,6 @@ void x86_64_Processor::Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uin
     x86_64_IRQ_EarlyInit();
     x86_64_InitPaging(HHDMOffset, memoryMap, memoryMapEntryCount, pagingMode, kernelVirtual, kernelPhysical);
     g_KProcess->SetVMM(VMM::g_KVMM);
-    g_KLowestPriorityProcess->SetVMM(VMM::g_KVMM);
     
     Scheduler::InitBSPState();
     x86_64_SetGSBases(0, (uint64_t)&Scheduler::g_BSPState);
@@ -113,6 +108,8 @@ void x86_64_Processor::Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uin
     uint64_t kernelStack = (uint64_t)VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::Protection::READ_WRITE, true) + KERNEL_STACK_SIZE;
     Scheduler::g_BSPState.kernelStack = (void*)kernelStack;
     InitTSS(&Scheduler::g_BSPState);
+
+    Scheduler::CreateIdleThread();
 
     x86_64_IRQ_FullInit();
 }

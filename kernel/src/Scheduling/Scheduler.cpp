@@ -15,7 +15,9 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "Process.hpp"
 #include "Scheduler.hpp"
+#include "Thread.hpp"
 
 #include <spinlock.h>
 #include <string.h>
@@ -23,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <DataStructures/LinkedList.hpp>
 
 #include <Memory/PagingUtil.hpp>
+#include <Memory/VMM.hpp>
 
 #include <HAL/Processor.hpp>
 
@@ -36,7 +39,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace Scheduler {
 
     ProcessorState g_BSPState;
-    LinkedList::LockableLinkedList<Process> g_Processes(true);
+    LinkedList::LockableLinkedList<Process> g_Processes;
+    Process g_IdleProcess(ProcessMode::KERNEL, nullptr, 0);
     uint64_t g_LastPID = 0;
     spinlock_t g_PIDLock;
     uint64_t g_isRunning = 0;
@@ -190,6 +194,29 @@ namespace Scheduler {
         list.unlock();
     }
 
+    void CreateIdleThread() {
+        ProcessorState* state = GetCurrentProcessorState();
+        if (state == nullptr)
+            return;
+
+        if (state->id == g_BSPState.id)
+            g_IdleProcess.SetVMM(VMM::g_KVMM);
+
+        Thread* thread = new Thread({IdleTask, nullptr}, &g_IdleProcess, state->id);
+        if (!thread->Init()) {
+            delete thread;
+            return;
+        }
+
+#ifdef __x86_64__
+        x86_64_SetThreadRegisters(&(thread->GetMutableRegisters()), thread->GetStack(), thread->GetEntryPoint(), ProcessMode::KERNEL, from_HHDM(g_KernelRootPageTable));
+#endif
+
+        spinlock_acquire(&state->lock);
+        state->idleThread = thread;
+        spinlock_release(&state->lock);
+    }
+
     void TimerTick(uint64_t msSinceLast, void* data) {
         ProcessorState* state = GetCurrentProcessorState();
         if (state == nullptr)
@@ -261,8 +288,11 @@ namespace Scheduler {
         if (thread == nullptr) {
             thread = StealThreadFromOther(state, &nice);
             if (thread == nullptr)
+                thread = state->idleThread;
+            else
+                stolen = true;
+            if (thread == nullptr)
                 PANIC("Scheduler: Nothing to run on current CPU");
-            stolen = true;
         }
         
         state->runCounts[nice]++;
@@ -278,6 +308,8 @@ namespace Scheduler {
 
         if (lockState)
             spinlock_acquire(&(state->lock));
+
+        state->isIdle = thread == state->idleThread ? 1 : 0;
 
         state->currentThread = thread;
 

@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -99,4 +99,13 @@ uint64_t x86_64_GetGSBase() {
 
 uint64_t x86_64_GetKernelGSBase() {
     return x86_64_ReadMSR(MSR_KERNEL_GS_BASE);
+}
+
+// from Scheduling/Scheduler.hpp
+
+namespace Scheduler {
+    [[noreturn]] void IdleTask(void*) {
+        while (true)
+            __asm__ volatile("hlt");
+    }
 }

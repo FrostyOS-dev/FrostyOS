@@ -72,6 +72,5 @@ private:
 };
 
 extern Process* g_KProcess;
-extern Process* g_KLowestPriorityProcess;
 
 #endif /* _PROCESS_HPP */
