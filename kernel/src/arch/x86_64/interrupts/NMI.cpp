@@ -36,9 +36,10 @@ namespace x86_64_GlobalNMI {
         uint64_t cpuCount;
         uint64_t maxCPUCount;
         spinlock_t lock;
+        spinlock_t raiseLock;
     };
 
-    GlobalNMIData g_NMIData = {x86_64_NMIType::NONE, {0, 0}, 0, 0, SPINLOCK_DEFAULT_VALUE};
+    GlobalNMIData g_NMIData = {x86_64_NMIType::NONE, {0, 0}, 0, 0, SPINLOCK_DEFAULT_VALUE, SPINLOCK_DEFAULT_VALUE};
 
     void SetData(x86_64_NMIType type, void* data, uint64_t cpuCount) {
         spinlock_acquire(&g_NMIData.lock);
@@ -51,8 +52,8 @@ namespace x86_64_GlobalNMI {
             break;
         }
         if (cpuCount == 0)
-            cpuCount = Scheduler::GetProcessorCount();
-        __atomic_store_n(&g_NMIData.cpuCount, cpuCount, __ATOMIC_SEQ_CST);
+            cpuCount = Scheduler::GetProcessorCount() - 1; // Don't raise on current cpu
+        __atomic_store_n(&g_NMIData.cpuCount, 0, __ATOMIC_SEQ_CST);
         __atomic_store_n(&g_NMIData.maxCPUCount, cpuCount, __ATOMIC_SEQ_CST);
         spinlock_release(&g_NMIData.lock);
     }
@@ -67,7 +68,7 @@ namespace x86_64_GlobalNMI {
 
         x86_64_DisableInterrupts();
 
-        while ((int64_t)(__atomic_load_n(&g_NMIData.cpuCount, __ATOMIC_SEQ_CST) - count) > 0)
+        while (__atomic_load_n(&g_NMIData.cpuCount, __ATOMIC_SEQ_CST) < count)
             __asm__ volatile ("pause" ::: "memory");
 
         if (flags > 0)
@@ -76,11 +77,13 @@ namespace x86_64_GlobalNMI {
 
     void Raise(x86_64_LAPIC* lapic, x86_64_NMIType type, void* data, uint64_t cpuCount, bool wait) {
         if (cpuCount == 0)
-            cpuCount = Scheduler::GetProcessorCount();
+            cpuCount = Scheduler::GetProcessorCount() - 1; // Don't raise on current cpu
+        spinlock_acquire(&g_NMIData.raiseLock);
         SetData(type, data, cpuCount);
         x86_64_IPI::RaiseIPI(lapic, 0, 0, x86_64_IPI::DeliveryMode::NMI, x86_64_IPI::TriggerMode::Edge, x86_64_IPI::DestMode::Physical, x86_64_IPI::DestShort::AllExcSelf);
         if (wait)
             WaitForCPUs(cpuCount);
+        spinlock_release(&g_NMIData.raiseLock);
     }
 
 }
@@ -92,20 +95,26 @@ bool x86_64_HandleNMI(x86_64_ISR_Frame* frame) {
     if (g_NMIData.type != x86_64_NMIType::NONE) {
         status = true;
         x86_64_NMIType type = g_NMIData.type;
-        uint64_t count = __atomic_sub_fetch(&g_NMIData.cpuCount, 1, __ATOMIC_SEQ_CST);
-        if (count == 0) {
-            g_NMIData.type = x86_64_NMIType::NONE;
-            g_NMIData.maxCPUCount = 0;
-        }
         switch (type) {
-        case x86_64_NMIType::HALT:
+        case x86_64_NMIType::HALT: {
             x86_64_DisableInterrupts();
+            uint64_t count = __atomic_add_fetch(&g_NMIData.cpuCount, 1, __ATOMIC_SEQ_CST);
+            if (count == __atomic_load_n(&g_NMIData.maxCPUCount, __ATOMIC_SEQ_CST)) {
+                g_NMIData.type = x86_64_NMIType::NONE;
+                g_NMIData.maxCPUCount = 0;
+            }
             spinlock_release(&g_NMIData.lock);
             while (true)
                 __asm__ volatile ("hlt");
+        }
         case x86_64_NMIType::INVPAGES:
             x86_64_InvalidatePages(g_NMIData.invPagesData.start, g_NMIData.invPagesData.pageCount * PAGE_SIZE);
             break;
+        }
+        uint64_t count = __atomic_add_fetch(&g_NMIData.cpuCount, 1, __ATOMIC_SEQ_CST);
+        if (count == __atomic_load_n(&g_NMIData.maxCPUCount, __ATOMIC_SEQ_CST)) {
+            g_NMIData.type = x86_64_NMIType::NONE;
+            g_NMIData.maxCPUCount = 0;
         }
     }
     spinlock_release(&g_NMIData.lock);
