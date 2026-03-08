@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
+#include <Scheduling/Scheduler.hpp>
+
 #include "ISR.hpp"
 
 enum class x86_64_NMIType {
@@ -34,6 +36,7 @@ struct x86_64_NMI_InvPagesData {
 };
 
 class x86_64_LAPIC;
+class x86_64_Processor;
 
 bool x86_64_HandleNMI(x86_64_ISR_Frame* frame);
 
@@ -41,6 +44,12 @@ namespace x86_64_GlobalNMI {
     void SetData(x86_64_NMIType type, void* data = nullptr, uint64_t cpuCount = 0); // cpuCount of 0 for all
     void WaitForCPUs(uint64_t count = 0); // count = 0 for all
     void Raise(x86_64_LAPIC* lapic, x86_64_NMIType type, void* data = nullptr, uint64_t cpuCount = 0, bool wait = true); // cpuCount is that the number of CPUs to wait for, not the amount to send it to.
+}
+
+namespace x86_64_LocalNMI { // for NMIs on a specific CPU
+    void Init(); // must be called on each CPU
+
+    void Raise(x86_64_Processor* current, Scheduler::ProcessorState* target, x86_64_NMIType type, void* data = nullptr, bool wait = true);
 }
 
 #endif /* _x86_64_NMI_HPP */

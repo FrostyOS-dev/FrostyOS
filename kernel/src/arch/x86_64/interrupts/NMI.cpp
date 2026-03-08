@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "APIC/IPI.hpp"
 
 #include "../ArchDefs.h"
+#include "../Processor.hpp"
 
 #include "../Memory/PagingUtil.hpp"
 
@@ -88,6 +89,78 @@ namespace x86_64_GlobalNMI {
 
 }
 
+namespace x86_64_LocalNMI { // for NMIs on a specific CPU
+    struct LocalNMIData {
+        x86_64_NMIType type;
+        x86_64_NMI_InvPagesData data;
+        spinlock_t lock;
+        uint64_t handled;
+    };
+
+    void Init() {
+        x86_64_Processor* proc = static_cast<x86_64_Processor*>(GetCurrentProcessor());
+        if (proc == nullptr)
+            return;
+
+        proc->NMIData = new LocalNMIData {x86_64_NMIType::NONE, {0, 0}, SPINLOCK_DEFAULT_VALUE, 0};
+    }
+
+    void Raise(x86_64_Processor* current, Scheduler::ProcessorState* target, x86_64_NMIType type, void* data, bool wait) {
+        if (current == nullptr || target == nullptr)
+            return;
+
+        spinlock_acquire(&x86_64_GlobalNMI::g_NMIData.raiseLock);
+
+        x86_64_LAPIC* currentLAPIC = current->GetLAPIC();
+        if (currentLAPIC == nullptr) {
+            spinlock_release(&x86_64_GlobalNMI::g_NMIData.raiseLock);
+            return;
+        }
+
+        if (target == nullptr || target->processor == nullptr) {
+            spinlock_release(&x86_64_GlobalNMI::g_NMIData.raiseLock);
+            return;
+        }
+
+        x86_64_LAPIC* targetLAPIC = static_cast<x86_64_Processor*>(target->processor)->GetLAPIC();
+        if (targetLAPIC == nullptr) {
+            spinlock_release(&x86_64_GlobalNMI::g_NMIData.raiseLock);
+            return; 
+        }
+
+        LocalNMIData* NMIData = static_cast<LocalNMIData*>(current->NMIData);
+        if (NMIData == nullptr) {
+            spinlock_release(&x86_64_GlobalNMI::g_NMIData.raiseLock);
+            return; 
+        }
+
+        spinlock_acquire(&NMIData->lock);
+        NMIData->type = type;
+        if (type == x86_64_NMIType::INVPAGES)
+            memcpy(&NMIData->data, data, sizeof(x86_64_NMI_InvPagesData));
+        __atomic_store_n(&NMIData->handled, 0, __ATOMIC_SEQ_CST);
+        spinlock_release(&NMIData->lock);
+
+        x86_64_IPI::RaiseIPI(currentLAPIC, targetLAPIC->GetID(), 0, x86_64_IPI::DeliveryMode::NMI, x86_64_IPI::TriggerMode::Edge, x86_64_IPI::DestMode::Physical, x86_64_IPI::DestShort::None);
+        
+        if (wait) {
+            uint64_t flags = 0;
+            __asm__ volatile ("pushfq;pop %0" : "=r"(flags));
+            flags &= 1 << 9; // IF
+
+            x86_64_DisableInterrupts();
+
+            while (__atomic_load_n(&NMIData->handled, __ATOMIC_SEQ_CST) == 0)
+                __asm__ volatile ("pause" ::: "memory");
+
+            if (flags > 0)
+                x86_64_EnableInterrupts();
+        }
+
+        spinlock_release(&x86_64_GlobalNMI::g_NMIData.raiseLock);
+    }
+}
+
 bool x86_64_HandleNMI(x86_64_ISR_Frame* frame) {
     using namespace x86_64_GlobalNMI;
     spinlock_acquire(&g_NMIData.lock);
@@ -116,7 +189,31 @@ bool x86_64_HandleNMI(x86_64_ISR_Frame* frame) {
             g_NMIData.type = x86_64_NMIType::NONE;
             g_NMIData.maxCPUCount = 0;
         }
+        spinlock_release(&g_NMIData.lock);
+    } else {
+        spinlock_release(&g_NMIData.lock);
+        x86_64_Processor* proc = static_cast<x86_64_Processor*>(GetCurrentProcessor());
+        if (proc != nullptr && proc->NMIData != nullptr) {
+            using namespace x86_64_LocalNMI;
+            LocalNMIData* data = static_cast<LocalNMIData*>(proc->NMIData);
+            spinlock_acquire(&data->lock);
+            if (data->type != x86_64_NMIType::NONE) {
+                status = true;
+                switch (data->type) {
+                case x86_64_NMIType::HALT:
+                    x86_64_DisableInterrupts();
+                    __atomic_store_n(&data->handled, 1, __ATOMIC_SEQ_CST);
+                    spinlock_release(&data->lock);
+                    while (true)
+                        __asm__ volatile ("hlt");
+                case x86_64_NMIType::INVPAGES:
+                    x86_64_InvalidatePages(data->data.start, data->data.pageCount * PAGE_SIZE);
+                    break;
+                }
+                __atomic_store_n(&data->handled, 1, __ATOMIC_SEQ_CST);
+            }
+            spinlock_release(&data->lock);
+        }
     }
-    spinlock_release(&g_NMIData.lock);
     return status;
 }

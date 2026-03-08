@@ -24,17 +24,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "interrupts/IDT.hpp"
 #include "interrupts/IRQ.hpp"
+#include "interrupts/NMI.hpp"
 
 #include "interrupts/APIC/IOAPIC.hpp"
 
 #include "Memory/PagingInit.hpp"
 
 #include "Scheduling/TaskUtil.hpp"
-#include "util.h"
 
 #include <stdint.h>
 #include <string.h>
 #include <spinlock.h>
+#include <util.h>
 
 #include <kernel.hpp>
 
@@ -83,6 +84,8 @@ x86_64_Processor::~x86_64_Processor() {
     if (!m_LAPIC->InitTimer())
         PANIC("AP LAPIC timer init failed");
 
+    x86_64_LocalNMI::Init();
+
     Scheduler::CreateIdleThread();
 
     Scheduler::Start(true);
@@ -108,6 +111,8 @@ void x86_64_Processor::Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uin
     uint64_t kernelStack = (uint64_t)VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::Protection::READ_WRITE, true) + KERNEL_STACK_SIZE;
     Scheduler::g_BSPState.kernelStack = (void*)kernelStack;
     InitTSS(&Scheduler::g_BSPState);
+
+    x86_64_LocalNMI::Init();
 
     Scheduler::CreateIdleThread();
 

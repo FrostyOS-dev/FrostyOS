@@ -98,6 +98,7 @@ public:
     const x86_64_CPUInfo* GetCPUInfo() const;
 
     spinlock_t apLock; // starts locked
+    void* NMIData; // not managed by this class, just needs to be per-CPU
 
 private:
     void InitTSS(Scheduler::ProcessorState* state);
