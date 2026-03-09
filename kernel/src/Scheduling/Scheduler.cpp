@@ -212,6 +212,8 @@ namespace Scheduler {
             return;
         }
 
+        thread->GetCPUInfo()->state = state;
+
 #ifdef __x86_64__
         x86_64_SetThreadRegisters(&(thread->GetMutableRegisters()), thread->GetStack(), thread->GetEntryPoint(), ProcessMode::KERNEL, from_HHDM(g_KernelRootPageTable));
 #endif
