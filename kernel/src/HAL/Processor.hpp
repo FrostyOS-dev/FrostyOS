@@ -38,6 +38,7 @@ public:
     virtual void InitTime() = 0;
 
     virtual void Halt(bool wait = true) = 0;
+    virtual void Yield(bool forceSwitch = false) = 0;
 
     virtual inline bool isBSP() const { return m_BSP; }
 

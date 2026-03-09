@@ -89,6 +89,7 @@ public:
     void InitTime() override;
 
     void Halt(bool wait = true) override;
+    void Yield(bool forceSwitch = false) override;
 
     void SetIRQData(x86_64_ProcessorIRQData* data);
     x86_64_ProcessorIRQData* GetIRQData();

@@ -147,7 +147,23 @@ void x86_64_Processor::InitTime() {
 }
 
 void x86_64_Processor::Halt(bool wait) {
-    x86_64_LocalNMI::Raise(static_cast<x86_64_Processor*>(GetCurrentProcessor()), this, x86_64_NMIType::HALT, nullptr, wait);
+    x86_64_Processor* proc = static_cast<x86_64_Processor*>(GetCurrentProcessor());
+    if (this == proc) {
+        x86_64_DisableInterrupts();
+        while (true) {
+            __asm__ volatile ("hlt");
+        }
+    }
+
+    x86_64_LocalNMI::Raise(proc, this, x86_64_NMIType::HALT, nullptr, wait);
+}
+
+void x86_64_Processor::Yield(bool forceSwitch) {
+    x86_64_Processor* proc = static_cast<x86_64_Processor*>(GetCurrentProcessor());
+    if (this == proc)
+        Scheduler::Yield(forceSwitch, nullptr);
+
+    x86_64_LocalNMI::Raise(proc, this, x86_64_NMIType::YIELD, &forceSwitch, true);
 }
 
 void x86_64_Processor::FillCPUInfo() {

@@ -18,12 +18,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Thread.hpp"
 #include "Process.hpp"
 
+#include <spinlock.h>
 #include <string.h>
 #include <util.h>
 
 #include <Memory/VMM.hpp>
 
-Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_TimeRemaining(0) {
+Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE) {
 
 }
 
@@ -159,4 +160,8 @@ void Thread::SetTimeRemaining(uint64_t timeRemaining) {
 
 uint64_t Thread::GetTimeRemaining() const {
     return m_TimeRemaining;
+}
+
+Thread::CPUInfo* Thread::GetCPUInfo() {
+    return &m_CPUInfo;
 }

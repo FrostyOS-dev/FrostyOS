@@ -188,6 +188,10 @@ namespace Scheduler {
         if (state == nullptr)
             state = &g_BSPState;
 
+        spinlock_acquire(&thread->GetCPUInfo()->lock);
+        thread->GetCPUInfo()->state = state;
+        spinlock_release(&thread->GetCPUInfo()->lock);
+
         ThreadList& list = state->threads[nice];
         list.lock();
         list.pushBack(thread);
@@ -220,10 +224,19 @@ namespace Scheduler {
     // Assumes that if state is not the current state, then the CPU is already stopped. If it is, and the thread is running, this assumes the stack is already swapped.
     bool RemoveThreadFromState(Thread* thread, ProcessorState* state) {
         if (thread == state->currentThread) {
+            bool current = state == GetCurrentProcessorState();
+            if (!current) {
+                if (state->processor == nullptr)
+                    PANIC("ProcessorState doesn't have a Processor!");
+                state->processor->Halt(true);
+            }
             spinlock_acquire(&state->lock);
             state->currentThread = nullptr;
-            PickNext(false);
+            if (current)
+                PickNext(false);
             spinlock_release(&state->lock);
+            if (!current)
+                state->processor->Yield(false);
         } else if (thread == state->idleThread) {
             spinlock_acquire(&state->lock);
             state->idleThread = nullptr;
@@ -267,24 +280,24 @@ namespace Scheduler {
 
     bool RemoveThread(Thread* thread, ProcessorState* state) {
         if (state == nullptr) {
+            bool current = true;
             if (state != GetCurrentProcessorState()) {
                 if (state->processor == nullptr)
                     PANIC("ProcessorState doesn't have a Processor!");
                 state->processor->Halt(true);
+                current = false;
             }
-            return RemoveThreadFromState(thread, state);
+            if (!RemoveThreadFromState(thread, state))
+                return false;
+            if (!current)
+                state->processor->Yield(false);
+            return true;
         } else {
-            bool found = false;
-            state = &g_BSPState;
-            for (uint64_t i = 0; i < g_processorCount; i++) {
-                if (state == nullptr)
-                    break;
-
-                found = RemoveThreadFromState(thread, state);
-                if (found)
-                    break;
-                state = state->next;
-            }
+            Thread::CPUInfo* info = thread->GetCPUInfo();
+            spinlock_acquire(&info->lock);
+            state = info->state;
+            bool found = RemoveThreadFromState(thread, state);
+            spinlock_release(&info->lock);
             return found;
         }
     }
@@ -330,6 +343,38 @@ namespace Scheduler {
         spinlock_release(&(state->lock));
     }
 
+    void Yield(bool forceSwitch, void* data) {
+        ProcessorState* state = GetCurrentProcessorState();
+        if (state == nullptr)
+            return;
+
+        spinlock_acquire(&state->lock);
+
+        Thread* oldThread = state->currentThread;
+        if (oldThread != nullptr) {
+            int oldNice = oldThread->GetParent()->GetNice();
+
+            ThreadList& list = state->threads[oldNice];
+            list.lock();
+            list.pushBack(oldThread);
+            list.unlock();
+            state->currentThread = nullptr;
+        }
+        
+        if (oldThread == nullptr || forceSwitch)
+            PickNext(false);
+
+        state->currentThread->SetTimeRemaining(DEFAULT_TIMESLICE);
+
+        if (data != nullptr) {
+            RunThreadOnINTReturn(state->currentThread, oldThread, data);
+            spinlock_release(&(state->lock));
+        } else {
+            spinlock_release(&(state->lock));
+            RunThread(state->currentThread);
+        }
+    }
+
     void PickNext(bool lockState) { // the actual algorithm
         ProcessorState* state = GetCurrentProcessorState();
         if (state == nullptr)
@@ -361,8 +406,12 @@ namespace Scheduler {
             thread = StealThreadFromOther(state, &nice);
             if (thread == nullptr)
                 thread = state->idleThread;
-            else
+            else {
+                Thread::CPUInfo* info = thread->GetCPUInfo(); // already locked by above function
+                info->state = state;
+                spinlock_release(&info->lock);
                 stolen = true;
+            }
             if (thread == nullptr)
                 PANIC("Scheduler: Nothing to run on current CPU");
         }
@@ -416,6 +465,7 @@ namespace Scheduler {
             }
 
             if (thread != nullptr) {
+                spinlock_acquire(&thread->GetCPUInfo()->lock);
                 if (niceOut != nullptr)
                     *niceOut = nice;
                 state->threads[nice].popFront();

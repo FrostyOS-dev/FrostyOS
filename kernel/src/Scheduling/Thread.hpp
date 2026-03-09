@@ -33,8 +33,17 @@ struct ThreadEntryPoint {
 
 class Process;
 
+namespace Scheduler {
+    struct ProcessorState;
+}
+
 class Thread {
 public:
+    struct CPUInfo {
+        Scheduler::ProcessorState* state;
+        spinlock_t lock;
+    };
+
     Thread();
     Thread(ThreadEntryPoint entryPoint, Process* parent = nullptr, uint64_t tid = UINT64_MAX);
     ~Thread();
@@ -69,6 +78,8 @@ public:
     void SetTimeRemaining(uint64_t timeRemaining);
     uint64_t GetTimeRemaining() const;
 
+    CPUInfo* GetCPUInfo();
+
 private:
     ThreadEntryPoint m_EntryPoint;
     Process* m_Parent;
@@ -78,6 +89,7 @@ private:
     uint64_t m_KernelStack;
     ThreadListItemInternalData m_ThreadListData;
     uint64_t m_TimeRemaining;
+    CPUInfo m_CPUInfo;
 };
 
 #endif /* _THREAD_HPP */

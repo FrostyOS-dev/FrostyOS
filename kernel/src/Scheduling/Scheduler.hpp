@@ -70,6 +70,8 @@ namespace Scheduler {
     bool RemoveThread(Thread* thread, ProcessorState* state = nullptr); // If state is nullptr, checks all, otherwise, only checks the provided CPU
     
     void TimerTick(uint64_t msSinceLast, void* data);
+
+    void Yield(bool forceSwitch = false, void* data = nullptr); // data != nullptr means this is run in an interrupt context
     
     void PickNext(bool lockState = true);
     Thread* StealThreadFromOther(ProcessorState* current, int* niceOut = nullptr);

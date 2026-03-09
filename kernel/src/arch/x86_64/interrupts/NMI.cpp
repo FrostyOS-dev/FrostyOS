@@ -34,13 +34,14 @@ namespace x86_64_GlobalNMI {
     struct GlobalNMIData {
         x86_64_NMIType type;
         x86_64_NMI_InvPagesData invPagesData;
+        bool yieldData;
         uint64_t cpuCount;
         uint64_t maxCPUCount;
         spinlock_t lock;
         spinlock_t raiseLock;
     };
 
-    GlobalNMIData g_NMIData = {x86_64_NMIType::NONE, {0, 0}, 0, 0, SPINLOCK_DEFAULT_VALUE, SPINLOCK_DEFAULT_VALUE};
+    GlobalNMIData g_NMIData = {x86_64_NMIType::NONE, {0, 0}, false, 0, 0, SPINLOCK_DEFAULT_VALUE, SPINLOCK_DEFAULT_VALUE};
 
     void SetData(x86_64_NMIType type, void* data, uint64_t cpuCount) {
         spinlock_acquire(&g_NMIData.lock);
@@ -48,6 +49,9 @@ namespace x86_64_GlobalNMI {
         switch (type) {
         case x86_64_NMIType::INVPAGES:
             memcpy(&g_NMIData.invPagesData, data, sizeof(x86_64_NMI_InvPagesData));
+            break;
+        case x86_64_NMIType::YIELD:
+            g_NMIData.yieldData = *static_cast<bool*>(data);
             break;
         default:
             break;
@@ -92,7 +96,8 @@ namespace x86_64_GlobalNMI {
 namespace x86_64_LocalNMI { // for NMIs on a specific CPU
     struct LocalNMIData {
         x86_64_NMIType type;
-        x86_64_NMI_InvPagesData data;
+        x86_64_NMI_InvPagesData invPagesData;
+        bool yieldData;
         spinlock_t lock;
         uint64_t handled;
     };
@@ -102,7 +107,7 @@ namespace x86_64_LocalNMI { // for NMIs on a specific CPU
         if (proc == nullptr)
             return;
 
-        proc->NMIData = new LocalNMIData {x86_64_NMIType::NONE, {0, 0}, SPINLOCK_DEFAULT_VALUE, 0};
+        proc->NMIData = new LocalNMIData {x86_64_NMIType::NONE, {0, 0}, false, SPINLOCK_DEFAULT_VALUE, 0};
     }
 
     void Raise(x86_64_Processor* current, Scheduler::ProcessorState* target, x86_64_NMIType type, void* data, bool wait) {
@@ -142,8 +147,16 @@ namespace x86_64_LocalNMI { // for NMIs on a specific CPU
 
         spinlock_acquire(&NMIData->lock);
         NMIData->type = type;
-        if (type == x86_64_NMIType::INVPAGES)
-            memcpy(&NMIData->data, data, sizeof(x86_64_NMI_InvPagesData));
+        switch (type) {
+        case x86_64_NMIType::INVPAGES:
+            memcpy(&NMIData->invPagesData, data, sizeof(x86_64_NMI_InvPagesData));
+            break;
+        case x86_64_NMIType::YIELD:
+            NMIData->yieldData = *static_cast<bool*>(data);
+            break;
+        default:
+            break;
+        }
         __atomic_store_n(&NMIData->handled, 0, __ATOMIC_SEQ_CST);
         spinlock_release(&NMIData->lock);
 
@@ -189,6 +202,10 @@ bool x86_64_HandleNMI(x86_64_ISR_Frame* frame) {
         case x86_64_NMIType::INVPAGES:
             x86_64_InvalidatePages(g_NMIData.invPagesData.start, g_NMIData.invPagesData.pageCount * PAGE_SIZE);
             break;
+        case x86_64_NMIType::YIELD: {
+            Scheduler::Yield(g_NMIData.yieldData);
+            break;
+        }
         }
         uint64_t count = __atomic_add_fetch(&g_NMIData.cpuCount, 1, __ATOMIC_SEQ_CST);
         if (count == __atomic_load_n(&g_NMIData.maxCPUCount, __ATOMIC_SEQ_CST)) {
@@ -213,7 +230,10 @@ bool x86_64_HandleNMI(x86_64_ISR_Frame* frame) {
                     while (true)
                         __asm__ volatile ("hlt");
                 case x86_64_NMIType::INVPAGES:
-                    x86_64_InvalidatePages(data->data.start, data->data.pageCount * PAGE_SIZE);
+                    x86_64_InvalidatePages(data->invPagesData.start, data->invPagesData.pageCount * PAGE_SIZE);
+                    break;
+                case x86_64_NMIType::YIELD:
+                    Scheduler::Yield(data->yieldData, frame);
                     break;
                 }
                 __atomic_store_n(&data->handled, 1, __ATOMIC_SEQ_CST);

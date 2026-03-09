@@ -27,6 +27,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 enum class x86_64_NMIType {
     HALT,
     INVPAGES,
+    YIELD,
     NONE
 };
 
