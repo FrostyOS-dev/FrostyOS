@@ -106,6 +106,12 @@ namespace x86_64_LocalNMI { // for NMIs on a specific CPU
     }
 
     void Raise(x86_64_Processor* current, Scheduler::ProcessorState* target, x86_64_NMIType type, void* data, bool wait) {
+        if (target == nullptr || target->processor == nullptr)
+            return;
+        return Raise(current, static_cast<x86_64_Processor*>(target->processor), type, data, wait);
+    }
+
+    void Raise(x86_64_Processor* current, x86_64_Processor* target, x86_64_NMIType type, void* data, bool wait) {
         if (current == nullptr || target == nullptr)
             return;
 
@@ -117,12 +123,12 @@ namespace x86_64_LocalNMI { // for NMIs on a specific CPU
             return;
         }
 
-        if (target == nullptr || target->processor == nullptr) {
+        if (target == nullptr) {
             spinlock_release(&x86_64_GlobalNMI::g_NMIData.raiseLock);
             return;
         }
 
-        x86_64_LAPIC* targetLAPIC = static_cast<x86_64_Processor*>(target->processor)->GetLAPIC();
+        x86_64_LAPIC* targetLAPIC = target->GetLAPIC();
         if (targetLAPIC == nullptr) {
             spinlock_release(&x86_64_GlobalNMI::g_NMIData.raiseLock);
             return; 

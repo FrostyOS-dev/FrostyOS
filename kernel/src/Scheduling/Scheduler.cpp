@@ -217,6 +217,78 @@ namespace Scheduler {
         spinlock_release(&state->lock);
     }
 
+    // Assumes that if state is not the current state, then the CPU is already stopped. If it is, and the thread is running, this assumes the stack is already swapped.
+    bool RemoveThreadFromState(Thread* thread, ProcessorState* state) {
+        if (thread == state->currentThread) {
+            spinlock_acquire(&state->lock);
+            state->currentThread = nullptr;
+            PickNext(false);
+            spinlock_release(&state->lock);
+        } else if (thread == state->idleThread) {
+            spinlock_acquire(&state->lock);
+            state->idleThread = nullptr;
+            state->isIdle = 0; // should already be 0, but just to be safe
+            spinlock_release(&state->lock);
+        } else {
+            bool found = false;
+            
+            // go forwards through nice levels
+            for (int i = 0; i < NICE_LEVELS; i++) {
+                ThreadList& list = state->threads[i];
+                list.lock();
+                if (list.getCount() == 0) {
+                    list.unlock();
+                    continue;
+                }
+
+                Thread* t = list.getHead();
+                
+                for (uint64_t i = 0; i < list.getCount(); i++) {
+                    if (t == nullptr)
+                        break;
+                    if (t == thread) {
+                        list.remove(t);
+                        found = true;
+                        break;
+                    }
+                    t = t->GetThreadListData().next;
+                }
+
+                list.unlock();
+
+                if (found)
+                    break;
+            }
+
+            return found;
+        }
+        return true;
+    }
+
+    bool RemoveThread(Thread* thread, ProcessorState* state) {
+        if (state == nullptr) {
+            if (state != GetCurrentProcessorState()) {
+                if (state->processor == nullptr)
+                    PANIC("ProcessorState doesn't have a Processor!");
+                state->processor->Halt(true);
+            }
+            return RemoveThreadFromState(thread, state);
+        } else {
+            bool found = false;
+            state = &g_BSPState;
+            for (uint64_t i = 0; i < g_processorCount; i++) {
+                if (state == nullptr)
+                    break;
+
+                found = RemoveThreadFromState(thread, state);
+                if (found)
+                    break;
+                state = state->next;
+            }
+            return found;
+        }
+    }
+
     void TimerTick(uint64_t msSinceLast, void* data) {
         ProcessorState* state = GetCurrentProcessorState();
         if (state == nullptr)

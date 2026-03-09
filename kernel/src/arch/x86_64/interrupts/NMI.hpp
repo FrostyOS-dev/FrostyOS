@@ -50,6 +50,7 @@ namespace x86_64_LocalNMI { // for NMIs on a specific CPU
     void Init(); // must be called on each CPU
 
     void Raise(x86_64_Processor* current, Scheduler::ProcessorState* target, x86_64_NMIType type, void* data = nullptr, bool wait = true);
+    void Raise(x86_64_Processor* current, x86_64_Processor* target, x86_64_NMIType type, void* data = nullptr, bool wait = true);
 }
 
 #endif /* _x86_64_NMI_HPP */

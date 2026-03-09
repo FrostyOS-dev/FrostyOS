@@ -67,6 +67,7 @@ namespace Scheduler {
     
     void ScheduleThread(Thread* thread, ProcessorState* state = nullptr);
     void CreateIdleThread(); // on the current processor, must be called on BSP first
+    bool RemoveThread(Thread* thread, ProcessorState* state = nullptr); // If state is nullptr, checks all, otherwise, only checks the provided CPU
     
     void TimerTick(uint64_t msSinceLast, void* data);
     

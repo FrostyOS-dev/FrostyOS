@@ -146,6 +146,10 @@ void x86_64_Processor::InitTime() {
     }
 }
 
+void x86_64_Processor::Halt(bool wait) {
+    x86_64_LocalNMI::Raise(static_cast<x86_64_Processor*>(GetCurrentProcessor()), this, x86_64_NMIType::HALT, nullptr, wait);
+}
+
 void x86_64_Processor::FillCPUInfo() {
     // start with max CPUID leaf and vendor string
     x86_64_CPUIDResult result = x86_64_CPUID(0, 0);
