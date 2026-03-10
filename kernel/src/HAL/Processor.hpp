@@ -24,6 +24,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Memory/MemoryMap.hpp>
 
+class Thread;
+
 // to be implemented by arch specific code
 class Processor {
 public:
@@ -39,6 +41,11 @@ public:
 
     virtual void Halt(bool wait = true) = 0;
     virtual void Yield(bool forceSwitch = false) = 0;
+
+    virtual int DisableInterrupts() = 0; // return value is an arch-specific state
+    virtual void EnableInterrupts(int prevState = -1) = 0;
+
+    virtual bool PrepCurrentThreadExit(Thread* thread, void* stack, bool (Thread::*func)(bool), bool arg) = 0;
 
     virtual inline bool isBSP() const { return m_BSP; }
 

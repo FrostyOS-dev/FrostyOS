@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "PIT.hpp"
 #include "TSC.hpp"
 
+#include "arch/x86_64/Scheduling/Task.h"
 #include "interrupts/IDT.hpp"
 #include "interrupts/IRQ.hpp"
 #include "interrupts/NMI.hpp"
@@ -164,6 +165,24 @@ void x86_64_Processor::Yield(bool forceSwitch) {
         Scheduler::Yield(forceSwitch, nullptr);
 
     x86_64_LocalNMI::Raise(proc, this, x86_64_NMIType::YIELD, &forceSwitch, true);
+}
+
+int x86_64_Processor::DisableInterrupts() {
+    int64_t state = 0;
+    __asm__ volatile ("pushf; pop %0; cli;" : "=r"(state));
+    return state;
+}
+
+void x86_64_Processor::EnableInterrupts(int state) {
+    if (state == -1 || (state & (1 << 9)) > 0)
+        x86_64_EnableInterrupts();
+}
+
+bool x86_64_Processor::PrepCurrentThreadExit(Thread* thread, void* stack, bool (Thread::*func)(bool), bool arg) {
+    if (thread == nullptr || stack == nullptr || func == nullptr)
+        return false;
+
+    x86_64_PrepCurrentThreadExit(thread, reinterpret_cast<uint64_t>(stack), func, arg);
 }
 
 void x86_64_Processor::FillCPUInfo() {

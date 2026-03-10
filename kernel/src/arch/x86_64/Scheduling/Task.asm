@@ -1,4 +1,4 @@
-; Copyright (©) 2024-2025  Frosty515
+; Copyright (©) 2024-2026  Frosty515
 
 ; This program is free software: you can redistribute it and/or modify
 ; it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 extern x86_64_WriteMSR
 
 global x86_64_KernelSwitchTask
-global x86_64_SwitchTask
+global x86_64_PrepCurrentThreadExit
 
 x86_64_KernelSwitchTask:
     cli ; make sure interrupts are disabled
@@ -60,3 +60,13 @@ x86_64_KernelSwitchTask:
 
     ; return into new code
     ret
+
+
+; rdi = thread, rsi = newStack, rdx = func, rcx = arg
+x86_64_PrepCurrentThreadExit:
+    mov rsp, rsi
+    mov rsi, rcx
+    xor rbp, rbp
+    push 0
+    jmp rdx
+

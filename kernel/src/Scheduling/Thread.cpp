@@ -15,8 +15,9 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "Thread.hpp"
 #include "Process.hpp"
+#include "Scheduler.hpp"
+#include "Thread.hpp"
 
 #include <spinlock.h>
 #include <string.h>
@@ -68,6 +69,17 @@ bool Thread::Delete() {
     m_Stack = 0;
     m_KernelStack = 0;
     return true;
+}
+
+bool Thread::Exit(bool deleteThis) {
+    spinlock_acquire(&m_CPUInfo.lock);
+    Scheduler::ProcessorState* state = m_CPUInfo.state;
+    bool current = state == GetCurrentProcessorState();
+    spinlock_acquire(&state->lock); // writes require it to be locked
+    state->processor->DisableInterrupts();
+    if (current && state->currentThread == this)
+        return state->processor->PrepCurrentThreadExit(this, state->kernelStack, &Thread::Internal_Exit, deleteThis);
+    return Internal_Exit(deleteThis);
 }
 
 void Thread::SetEntryPoint(ThreadEntryPoint entryPoint) {
@@ -164,4 +176,34 @@ uint64_t Thread::GetTimeRemaining() const {
 
 Thread::CPUInfo* Thread::GetCPUInfo() {
     return &m_CPUInfo;
+}
+
+bool Thread_DeleteHelper(Thread* thread, bool current) {
+    delete thread;
+    if (current)
+        Scheduler::Yield();
+    return true;
+}
+
+bool Thread::Internal_Exit(bool deleteThis) {
+    Scheduler::ProcessorState* state = m_CPUInfo.state;
+    bool current = state == GetCurrentProcessorState();
+    bool currentThread = current && state->currentThread == this;
+    if (!current)
+        state->processor->Halt();
+    spinlock_release(&state->lock);
+    if (!Scheduler::RemoveThread(this, m_CPUInfo.state, false, false)) {
+        if (currentThread) // we can't do anything at this point
+            PANIC("Scheduler::RemoveThread failed unexpectedly");
+        spinlock_release(&m_CPUInfo.lock);
+        return false;
+    }
+    if (!current)
+        state->processor->Yield(false); // processor can continue now
+    Delete();
+    if (deleteThis)
+        return Thread_DeleteHelper(this, currentThread);
+    if (currentThread)
+        Scheduler::Yield();
+    return true;
 }

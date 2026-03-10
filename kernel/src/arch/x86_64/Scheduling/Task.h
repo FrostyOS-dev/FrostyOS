@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,12 +22,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
+class Thread;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // Switch kernel task. Does not save anything or return to the caller.
 [[noreturn]] void x86_64_KernelSwitchTask(const struct x86_64_Registers* regs);
+
+[[noreturn]] void x86_64_PrepCurrentThreadExit(Thread* thread, uint64_t newStack, bool (Thread::*func)(bool), bool arg);
 
 #ifdef __cplusplus
 }
