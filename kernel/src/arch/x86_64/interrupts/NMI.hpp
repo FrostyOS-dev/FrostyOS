@@ -31,6 +31,14 @@ enum class x86_64_NMIType {
     NONE
 };
 
+/*
+Note:
+Stopping a CPU with HALT and/or changing execution path with YIELD with the
+intention of not returning to the original code is dangerous with the current setup.
+
+This could result in a deadlock or worse.
+*/
+
 struct x86_64_NMI_InvPagesData {
     uint64_t start;
     uint64_t pageCount;
@@ -42,6 +50,7 @@ class x86_64_Processor;
 bool x86_64_HandleNMI(x86_64_ISR_Frame* frame);
 
 namespace x86_64_GlobalNMI {
+    void ForceAllowRaise();
     void SetData(x86_64_NMIType type, void* data = nullptr, uint64_t cpuCount = 0); // cpuCount of 0 for all
     void WaitForCPUs(uint64_t count = 0); // count = 0 for all
     void Raise(x86_64_LAPIC* lapic, x86_64_NMIType type, void* data = nullptr, uint64_t cpuCount = 0, bool wait = true); // cpuCount is that the number of CPUs to wait for, not the amount to send it to.

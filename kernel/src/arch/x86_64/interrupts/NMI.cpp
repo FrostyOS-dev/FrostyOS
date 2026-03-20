@@ -24,6 +24,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../Memory/PagingUtil.hpp"
 
+#include "../Scheduling/TaskUtil.hpp"
+
 #include <spinlock.h>
 #include <string.h>
 #include <util.h>
@@ -42,6 +44,10 @@ namespace x86_64_GlobalNMI {
     };
 
     GlobalNMIData g_NMIData = {x86_64_NMIType::NONE, {0, 0}, false, 0, 0, SPINLOCK_DEFAULT_VALUE, SPINLOCK_DEFAULT_VALUE};
+
+    void ForceAllowRaise() {
+        spinlock_release(&g_NMIData.raiseLock);
+    }
 
     void SetData(x86_64_NMIType type, void* data, uint64_t cpuCount) {
         spinlock_acquire(&g_NMIData.lock);
@@ -139,7 +145,7 @@ namespace x86_64_LocalNMI { // for NMIs on a specific CPU
             return; 
         }
 
-        LocalNMIData* NMIData = static_cast<LocalNMIData*>(current->NMIData);
+        LocalNMIData* NMIData = static_cast<LocalNMIData*>(target->NMIData);
         if (NMIData == nullptr) {
             spinlock_release(&x86_64_GlobalNMI::g_NMIData.raiseLock);
             return; 
@@ -189,21 +195,25 @@ bool x86_64_HandleNMI(x86_64_ISR_Frame* frame) {
         x86_64_NMIType type = g_NMIData.type;
         switch (type) {
         case x86_64_NMIType::HALT: {
-            x86_64_DisableInterrupts();
-            uint64_t count = __atomic_add_fetch(&g_NMIData.cpuCount, 1, __ATOMIC_SEQ_CST);
-            if (count == __atomic_load_n(&g_NMIData.maxCPUCount, __ATOMIC_SEQ_CST)) {
-                g_NMIData.type = x86_64_NMIType::NONE;
-                g_NMIData.maxCPUCount = 0;
+            if (!Scheduler::isRunning() || !Scheduler::SaveOnInt(frame)) {
+                x86_64_DisableInterrupts();
+                uint64_t count = __atomic_add_fetch(&g_NMIData.cpuCount, 1, __ATOMIC_SEQ_CST);
+                if (count == __atomic_load_n(&g_NMIData.maxCPUCount, __ATOMIC_SEQ_CST)) {
+                    g_NMIData.type = x86_64_NMIType::NONE;
+                    g_NMIData.maxCPUCount = 0;
+                }
+                spinlock_release(&g_NMIData.lock);
+                while (true)
+                    __asm__ volatile ("hlt");
             }
-            spinlock_release(&g_NMIData.lock);
-            while (true)
-                __asm__ volatile ("hlt");
+            x86_64_CreateHaltISRFrame(frame);
+            break;
         }
         case x86_64_NMIType::INVPAGES:
             x86_64_InvalidatePages(g_NMIData.invPagesData.start, g_NMIData.invPagesData.pageCount * PAGE_SIZE);
             break;
         case x86_64_NMIType::YIELD: {
-            Scheduler::Yield(g_NMIData.yieldData);
+            Scheduler::Yield(g_NMIData.yieldData, frame);
             break;
         }
         }
@@ -224,11 +234,15 @@ bool x86_64_HandleNMI(x86_64_ISR_Frame* frame) {
                 status = true;
                 switch (data->type) {
                 case x86_64_NMIType::HALT:
-                    x86_64_DisableInterrupts();
-                    __atomic_store_n(&data->handled, 1, __ATOMIC_SEQ_CST);
-                    spinlock_release(&data->lock);
-                    while (true)
-                        __asm__ volatile ("hlt");
+                    if (!Scheduler::isRunning() || !Scheduler::SaveOnInt(frame)) {
+                        x86_64_DisableInterrupts();
+                        __atomic_store_n(&data->handled, 1, __ATOMIC_SEQ_CST);
+                        spinlock_release(&data->lock);
+                        while (true)
+                            __asm__ volatile ("hlt");
+                    }
+                    x86_64_CreateHaltISRFrame(frame);
+                    break;
                 case x86_64_NMIType::INVPAGES:
                     x86_64_InvalidatePages(data->invPagesData.start, data->invPagesData.pageCount * PAGE_SIZE);
                     break;

@@ -32,6 +32,16 @@ x86_64_Registers g_x86_64_PanicRegisters;
 extern "C" [[noreturn]] void x86_64_Panic(const char* message, void* registers, bool type) {
     x86_64_DisableInterrupts();
 
+    x86_64_Processor* proc = static_cast<x86_64_Processor*>(GetCurrentProcessor());
+    if (proc == nullptr)
+        proc = &g_x86_64_BSP;
+
+    x86_64_LAPIC* lapic = proc->GetLAPIC();
+    if (lapic != nullptr) { // If its null, then we just have to assume any other potential CPUs aren't running.
+        x86_64_GlobalNMI::ForceAllowRaise();
+        x86_64_GlobalNMI::Raise(lapic, x86_64_NMIType::HALT);
+    }
+
     x86_64_ISR_Frame* isrFrame = nullptr;
     if (type)
         isrFrame = (x86_64_ISR_Frame*)registers;
@@ -45,14 +55,6 @@ extern "C" [[noreturn]] void x86_64_Panic(const char* message, void* registers, 
 
     if (message == nullptr)
         message = g_x86_64_PanicReason;
-
-    x86_64_Processor* proc = static_cast<x86_64_Processor*>(GetCurrentProcessor());
-    if (proc == nullptr)
-        proc = &g_x86_64_BSP;
-
-    x86_64_LAPIC* lapic = proc->GetLAPIC();
-    if (lapic != nullptr) // If its null, then we just have to assume any other potential CPUs aren't running.
-        x86_64_GlobalNMI::Raise(lapic, x86_64_NMIType::HALT);
 
     stdio_force_unlock(); // Everything must be unlocked
 
