@@ -60,6 +60,8 @@ private:
     uint64_t m_usedPageCount;
     uint64_t m_reservedPageCount;
     uint64_t m_totalPageCount;
+
+    spinlock_t m_lock;
 };
 
 #endif /* _VIRTMEM_REGION_ALLOCATOR_HPP */
