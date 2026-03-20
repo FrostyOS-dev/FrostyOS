@@ -38,6 +38,7 @@ struct KernelParams {
 };
 
 extern KernelParams g_kernelParams;
+extern FrameBuffer g_KFramebuffer;
 
 void StartKernel();
 void Kernel_Stage2(void*);
