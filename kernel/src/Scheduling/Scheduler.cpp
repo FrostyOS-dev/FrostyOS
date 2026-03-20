@@ -186,7 +186,7 @@ namespace Scheduler {
 #endif
 
         if (state == nullptr)
-            state = &g_BSPState;
+            state = GetCurrentProcessorState();
 
         spinlock_acquire(&thread->GetCPUInfo()->lock);
         thread->GetCPUInfo()->state = state;
@@ -281,7 +281,7 @@ namespace Scheduler {
     }
 
     bool RemoveThread(Thread* thread, ProcessorState* state, bool stop, bool lockCPUInfo) {
-        if (state == nullptr) {
+        if (state != nullptr) {
             bool current = true;
             if (state != GetCurrentProcessorState()) {
                 if (state->processor == nullptr)
@@ -304,6 +304,13 @@ namespace Scheduler {
                 spinlock_release(&info->lock);
             return found;
         }
+    }
+
+    bool RemoveCurrentThread() {
+        ProcessorState* state = GetCurrentProcessorState();
+        state->currentThread = nullptr;
+        PickNext(false);
+        return true;
     }
 
     void TimerTick(uint64_t msSinceLast, void* data) {
@@ -345,6 +352,14 @@ namespace Scheduler {
         RunThreadOnINTReturn(state->currentThread, oldThread, data);
 
         spinlock_release(&(state->lock));
+    }
+
+    bool SaveOnInt(void *data) {
+        ProcessorState* state = GetCurrentProcessorState();
+        if (state == nullptr || state->currentThread == nullptr)
+            return false;
+        SaveThreadFromINT(state->currentThread, data);
+        return true;
     }
 
     void Yield(bool forceSwitch, void* data) {
@@ -391,14 +406,14 @@ namespace Scheduler {
         for (int i = 0; i < NICE_LEVELS; i++) {
             ThreadList& list = state->threads[i];
             list.lock();
-            if (list.getCount() == 0 || (state->runCounts[i] == 2 && i != 0 && thread != nullptr)) {
+            if (list.getCount() == 0 || (state->runCounts[i] >= 2 && i != 0 && thread != nullptr)) {
                 list.unlock();
                 continue;
             }
             
             if (thread != nullptr)
                 state->threads[nice].unlock();
-            else if (state->runCounts[i] == 2)
+            else if (state->runCounts[i] >= 2)
                 state->runCounts[i] = 0;
             thread = list.getHead();
             nice = i;
@@ -412,8 +427,7 @@ namespace Scheduler {
             if (thread == nullptr) {
                 thread = state->idleThread;
                 idle = true;
-            }
-            else {
+            } else {
                 Thread::CPUInfo* info = thread->GetCPUInfo(); // already locked by above function
                 info->state = state;
                 spinlock_release(&info->lock);
@@ -431,7 +445,7 @@ namespace Scheduler {
         }
 
         for (int i = nice + 1; i < NICE_LEVELS; i++) {
-            if (state->runCounts[i] == 2)
+            if (state->runCounts[i] >= 2)
                 state->runCounts[i] = 0;
         }
 
@@ -451,6 +465,8 @@ namespace Scheduler {
         for (state = &g_BSPState; state != nullptr; state = state->next) {
             if (state->id == current->id)
                 continue;
+
+            spinlock_acquire(&state->lock);
 
             Thread* thread = nullptr;
             int nice = -1;
@@ -476,10 +492,14 @@ namespace Scheduler {
                 spinlock_acquire(&thread->GetCPUInfo()->lock);
                 if (niceOut != nullptr)
                     *niceOut = nice;
-                state->threads[nice].popFront();
+                Thread* t2 = state->threads[nice].popFront();
+                assert(t2 == thread);
                 state->threads[nice].unlock();
+                spinlock_release(&state->lock);
                 return thread;
             }
+
+            spinlock_release(&state->lock);
         }
         return nullptr;
     }

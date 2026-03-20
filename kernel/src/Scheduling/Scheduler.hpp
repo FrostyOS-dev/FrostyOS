@@ -31,7 +31,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define NICE_LEVELS 16
 #define DEFAULT_NICE 8
-#define DEFAULT_TIMESLICE 30
+#define DEFAULT_TIMESLICE 10
 
 namespace Scheduler {
     
@@ -68,8 +68,10 @@ namespace Scheduler {
     void ScheduleThread(Thread* thread, ProcessorState* state = nullptr);
     void CreateIdleThread(); // on the current processor, must be called on BSP first
     bool RemoveThread(Thread* thread, ProcessorState* state = nullptr, bool stop = true, bool lockCPUInfo = true); // If state is nullptr, checks all, otherwise, only checks the provided CPU
-    
+    bool RemoveCurrentThread(); // ProcessorState and the thread's CPUInfo are assumed to both be locked, and will not be unlocked by this
+
     void TimerTick(uint64_t msSinceLast, void* data);
+    bool SaveOnInt(void* data);
 
     void Yield(bool forceSwitch = false, void* data = nullptr); // data != nullptr means this is run in an interrupt context
     
