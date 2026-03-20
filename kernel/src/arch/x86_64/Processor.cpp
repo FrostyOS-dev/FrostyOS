@@ -182,6 +182,8 @@ bool x86_64_Processor::PrepCurrentThreadExit(Thread* thread, void* stack, bool (
     if (thread == nullptr || stack == nullptr || func == nullptr)
         return false;
 
+    dbgprintf("Deleting current thread %lu from process %lu on proc %lu\n", thread->GetTID(), thread->GetParent()->GetPID(), GetCurrentProcessorState()->id);
+
     x86_64_PrepCurrentThreadExit(thread, reinterpret_cast<uint64_t>(stack), func, arg);
 }
 

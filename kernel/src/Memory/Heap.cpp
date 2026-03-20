@@ -142,6 +142,7 @@ void HeapAllocator::Free(void* ptr) {
     HeapBlock* block = reinterpret_cast<HeapBlock*>(reinterpret_cast<uint64_t>(ptr) - sizeof(HeapBlock));
     assert(!block->free);
     block->free = true;
+    memset(ptr, 0xCC, block->size);
 
     // need to insert the block back into the list
     HeapSection* section = m_Head;

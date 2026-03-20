@@ -190,6 +190,7 @@ namespace Scheduler {
 
         spinlock_acquire(&thread->GetCPUInfo()->lock);
         thread->GetCPUInfo()->state = state;
+        // dbgprintf("Assigning new thread %lu to proc %lu (current = %lu)\n", thread->GetTID(), state->id, GetCurrentProcessorState()->id);
         spinlock_release(&thread->GetCPUInfo()->lock);
 
         ThreadList& list = state->threads[nice];
@@ -318,10 +319,10 @@ namespace Scheduler {
         if (state == nullptr)
             return;
 
-        spinlock_acquire(&(state->lock));
+        // spinlock_acquire(&(state->lock));
 
         if (state->startAllowed == 0) {
-            spinlock_release(&(state->lock));
+            // spinlock_release(&(state->lock));
             return;
         }
 
@@ -332,7 +333,7 @@ namespace Scheduler {
             oldThread->SetTimeRemaining(oldThread->GetTimeRemaining() - msSinceLast);
             if (oldThread->GetTimeRemaining() > 0) {
                 SaveThreadFromINT(oldThread, data);
-                spinlock_release(&(state->lock));
+                // spinlock_release(&(state->lock));
                 return;
             }
 
@@ -429,6 +430,7 @@ namespace Scheduler {
                 idle = true;
             } else {
                 Thread::CPUInfo* info = thread->GetCPUInfo(); // already locked by above function
+                dbgprintf("Thread %lu moving from %lu to %lu\n", thread->GetTID(), info->state->id, state->id);
                 info->state = state;
                 spinlock_release(&info->lock);
             }
@@ -461,6 +463,7 @@ namespace Scheduler {
     }
 
     Thread* StealThreadFromOther(ProcessorState* current, int* niceOut) {
+        dbgprintf("steal\n");
         ProcessorState* state;
         for (state = &g_BSPState; state != nullptr; state = state->next) {
             if (state->id == current->id)

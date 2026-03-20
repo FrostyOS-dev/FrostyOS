@@ -33,7 +33,7 @@ void HAL_EarlyInit(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t mem
 }
 
 void HAL_Stage2() {
-    ACPI::Stage2Init();
+    // ACPI::Stage2Init();
 }
 
 struct HAL_IntHandlerData {

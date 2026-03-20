@@ -74,7 +74,7 @@ add_dependencies(build_iso build_boot build_mkgpt update_ovmf)
 
 if(FROSTYOS_BUILD_CONFIG STREQUAL "Debug")
 	add_custom_target(run-qemu
-		COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/hdimage.bin,index=0,media=disk -m 256M -debugcon file:/dev/stdout -monitor stdio -machine accel=kvm -M q35 -cpu qemu64
+		COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/hdimage.bin,index=0,media=disk -m 1G -debugcon file:/dev/stdout -monitor stdio -M q35 -cpu qemu64 -machine accel=kvm -smp 2 -s -M smm=off -no-reboot -no-shutdown -d int,exec,cpu -D qemu_log.txt
 		USES_TERMINAL
 	)
 else()

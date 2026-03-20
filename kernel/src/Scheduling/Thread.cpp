@@ -76,7 +76,11 @@ bool Thread::Exit(bool deleteThis) {
     Scheduler::ProcessorState* state = m_CPUInfo.state;
     state->processor->DisableInterrupts();
     bool current = state == GetCurrentProcessorState();
+    assert(current); // TODO: remove this
+    // if (!current)
+    //     return false;
     spinlock_acquire(&state->lock); // writes require it to be locked
+    // assert(state->currentThread == this);
     if (state->currentThread != this)
         return false;
     return state->processor->PrepCurrentThreadExit(this, state->kernelStack, &Thread::Internal_Exit, deleteThis);
@@ -194,8 +198,9 @@ Thread::CPUInfo* Thread::GetCPUInfo() {
 
 bool Thread::Internal_Exit(bool deleteThis) {
     Scheduler::ProcessorState* state = m_CPUInfo.state;
-    if (state != GetCurrentProcessorState() || state->currentThread != this)
-        return false;
+    // if (state != GetCurrentProcessorState() || state->currentThread != this)
+    //     return false;
+    assert(state == GetCurrentProcessorState() && state->currentThread == this);
     bool status = Scheduler::RemoveCurrentThread();
     spinlock_release(&state->lock);
     spinlock_release(&m_CPUInfo.lock);
