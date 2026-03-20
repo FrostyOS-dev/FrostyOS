@@ -132,6 +132,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Scheduler.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Thread.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/ThreadList.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/fworktst.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/kernel.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/limine_entry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/DebugBackend.cpp
