@@ -33,6 +33,8 @@ extern "C" {
 
 [[noreturn]] void x86_64_PrepCurrentThreadExit(Thread* thread, uint64_t newStack, bool (Thread::*func)(bool), bool arg);
 
+[[noreturn]] void x86_64_Halt();
+
 #ifdef __cplusplus
 }
 #endif

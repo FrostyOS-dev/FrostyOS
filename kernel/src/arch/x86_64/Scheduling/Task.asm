@@ -19,6 +19,7 @@ extern x86_64_WriteMSR
 
 global x86_64_KernelSwitchTask
 global x86_64_PrepCurrentThreadExit
+global x86_64_Halt
 
 x86_64_KernelSwitchTask:
     cli ; make sure interrupts are disabled
@@ -64,9 +65,20 @@ x86_64_KernelSwitchTask:
 
 ; rdi = thread, rsi = newStack, rdx = func, rcx = arg
 x86_64_PrepCurrentThreadExit:
+    push rbp
+    push r10
+    mov r10, rsp ; use a callee-saved register
     mov rsp, rsi
     mov rsi, rcx
     xor rbp, rbp
-    push 0
-    jmp rdx
+    call rdx
+    mov rsp, r10
+    pop r10
+    pop rbp
+    ret
 
+x86_64_Halt:
+    cli
+.l:
+    hlt
+    jmp .l

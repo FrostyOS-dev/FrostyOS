@@ -33,6 +33,8 @@ void x86_64_CopyFromISRFrame(const x86_64_ISR_Frame* frame, x86_64_Registers* re
 
 void x86_64_SetThreadRegisters(x86_64_Registers* regs, uint64_t stack, ThreadEntryPoint entryPoint, ProcessMode mode, void* pageMap);
 
+void x86_64_CreateHaltISRFrame(x86_64_ISR_Frame* frame);
+
 void x86_64_SetGSBases(uint64_t kernelBase, uint64_t base);
 void x86_64_SetGSBase(uint64_t base);
 uint64_t x86_64_GetGSBase();

@@ -15,12 +15,17 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "Task.h"
 #include "TaskUtil.hpp"
 
 #include "../GDT.hpp"
 #include "../MSR.h"
 
+#include "../Memory/PagingInit.hpp"
+
 #include <string.h>
+
+#include <Memory/PagingUtil.hpp>
 
 void x86_64_CopyToISRFrame(const x86_64_Registers* regs, x86_64_ISR_Frame* frame) {
     frame->RAX = regs->RAX;
@@ -82,6 +87,16 @@ void x86_64_SetThreadRegisters(x86_64_Registers* regs, uint64_t stack, ThreadEnt
     regs->CS = mode == ProcessMode::KERNEL ? x86_64_GDT_KERNEL_CODE_SEGMENT : x86_64_GDT_USER_CODE_SEGMENT;
     regs->SS = mode == ProcessMode::KERNEL ? x86_64_GDT_KERNEL_DATA_SEGMENT : x86_64_GDT_USER_DATA_SEGMENT;
     regs->CR3 = (uint64_t)pageMap;
+}
+
+void x86_64_CreateHaltISRFrame(x86_64_ISR_Frame* frame) {
+    frame->RSP = 0;
+    frame->RBP = 0;
+    frame->CR3 = (uint64_t)from_HHDM(g_KernelRootPageTable);
+    frame->CS = x86_64_GDT_KERNEL_CODE_SEGMENT;
+    frame->SS = x86_64_GDT_KERNEL_DATA_SEGMENT;
+    frame->RFLAGS = 0x2;
+    frame->RIP = (uint64_t)&x86_64_Halt;
 }
 
 void x86_64_SetGSBases(uint64_t kernelBase, uint64_t base) {
