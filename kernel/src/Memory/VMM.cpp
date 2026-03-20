@@ -52,6 +52,8 @@ namespace VMM {
 
         // Step 1: get a VM region. doing this first as it is more likely to fail (whilst still being quite unlikely), and easier to cleanup
         void* pages = m_vmRegionAllocator->AllocatePages(count);
+        if (pages == nullptr)
+            return nullptr;
 
         // Step 2: put together the memory object, including page list
         MemoryObject* memObj = (MemoryObject*)kcalloc_vmm(1, sizeof(MemoryObject));
