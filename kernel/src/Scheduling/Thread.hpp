@@ -53,12 +53,8 @@ public:
 
     bool Delete(); // Assumed to be removed from scheduler, and not running
 
-    /* Exit this thread
-    If this is the current thread on the current CPU, then a stack change will occur, and this function will not return.
-    This function can return in all cases if there is an error.
-    If deleteThis is true, then `delete this;` will happen after successful exit
-    */
-    bool Exit(bool deleteThis);
+    bool Exit(bool deleteThis); // must only be called if this is the current thread
+    static bool ExitCurrentThread(bool deleteThis);
 
     void SetEntryPoint(ThreadEntryPoint entryPoint);
     ThreadEntryPoint GetEntryPoint() const;

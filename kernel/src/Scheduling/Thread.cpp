@@ -74,12 +74,19 @@ bool Thread::Delete() {
 bool Thread::Exit(bool deleteThis) {
     spinlock_acquire(&m_CPUInfo.lock);
     Scheduler::ProcessorState* state = m_CPUInfo.state;
+    state->processor->DisableInterrupts();
     bool current = state == GetCurrentProcessorState();
     spinlock_acquire(&state->lock); // writes require it to be locked
-    state->processor->DisableInterrupts();
-    if (current && state->currentThread == this)
-        return state->processor->PrepCurrentThreadExit(this, state->kernelStack, &Thread::Internal_Exit, deleteThis);
-    return Internal_Exit(deleteThis);
+    if (state->currentThread != this)
+        return false;
+    return state->processor->PrepCurrentThreadExit(this, state->kernelStack, &Thread::Internal_Exit, deleteThis);
+}
+
+bool Thread::ExitCurrentThread(bool deleteThis) {
+    Scheduler::ProcessorState* state = GetCurrentProcessorState();
+    if (state == nullptr || state->currentThread == nullptr)
+        return false;
+    return state->currentThread->Exit(deleteThis);
 }
 
 void Thread::SetEntryPoint(ThreadEntryPoint entryPoint) {
@@ -178,32 +185,23 @@ Thread::CPUInfo* Thread::GetCPUInfo() {
     return &m_CPUInfo;
 }
 
-bool Thread_DeleteHelper(Thread* thread, bool current) {
-    delete thread;
-    if (current)
-        Scheduler::Yield();
-    return true;
+[[noreturn]] void Thread_DeleteHelper(Thread* thread, bool deleteThis) {
+    if (deleteThis)
+        delete thread;
+    Scheduler::Yield(); // only should return on error
+    PANIC("Scheduler failed to yield on thread exit!"); // if we get to this point, we can't return due to the old stack being deleted
 }
 
 bool Thread::Internal_Exit(bool deleteThis) {
     Scheduler::ProcessorState* state = m_CPUInfo.state;
-    bool current = state == GetCurrentProcessorState();
-    bool currentThread = current && state->currentThread == this;
-    if (!current)
-        state->processor->Halt();
-    spinlock_release(&state->lock);
-    if (!Scheduler::RemoveThread(this, m_CPUInfo.state, false, false)) {
-        if (currentThread) // we can't do anything at this point
-            PANIC("Scheduler::RemoveThread failed unexpectedly");
-        spinlock_release(&m_CPUInfo.lock);
+    if (state != GetCurrentProcessorState() || state->currentThread != this)
         return false;
-    }
-    if (!current)
-        state->processor->Yield(false); // processor can continue now
+    bool status = Scheduler::RemoveCurrentThread();
+    spinlock_release(&state->lock);
+    spinlock_release(&m_CPUInfo.lock);
+    assert(status);
+    if (m_Parent != nullptr)
+        m_Parent->RemoveThread(m_TID);
     Delete();
-    if (deleteThis)
-        return Thread_DeleteHelper(this, currentThread);
-    if (currentThread)
-        Scheduler::Yield();
-    return true;
+    Thread_DeleteHelper(this, deleteThis);
 }
