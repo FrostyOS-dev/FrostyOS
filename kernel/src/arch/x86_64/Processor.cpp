@@ -22,7 +22,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "PIT.hpp"
 #include "TSC.hpp"
 
-#include "arch/x86_64/Scheduling/Task.h"
 #include "interrupts/IDT.hpp"
 #include "interrupts/IRQ.hpp"
 #include "interrupts/NMI.hpp"
@@ -31,6 +30,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "Memory/PagingInit.hpp"
 
+#include "Scheduling/Task.hpp"
 #include "Scheduling/TaskUtil.hpp"
 
 #include <stdint.h>

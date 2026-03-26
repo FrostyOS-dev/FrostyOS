@@ -32,7 +32,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifdef __x86_64__
 #include <arch/x86_64/Memory/PagingInit.hpp>
 
-#include <arch/x86_64/Scheduling/Task.h>
+#include <arch/x86_64/Scheduling/Task.hpp>
 #include <arch/x86_64/Scheduling/TaskUtil.hpp>
 #endif
 

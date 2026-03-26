@@ -15,8 +15,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _x86_64_TASK_H
-#define _x86_64_TASK_H
+#ifndef _x86_64_TASK_HPP
+#define _x86_64_TASK_HPP
 
 #include "../ArchDefs.h"
 
@@ -24,9 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 class Thread;
 
-#ifdef __cplusplus
 extern "C" {
-#endif
 
 // Switch kernel task. Does not save anything or return to the caller.
 [[noreturn]] void x86_64_KernelSwitchTask(const struct x86_64_Registers* regs);
@@ -35,8 +33,6 @@ extern "C" {
 
 [[noreturn]] void x86_64_Halt();
 
-#ifdef __cplusplus
 }
-#endif
 
-#endif /* _x86_64_TASK_H */
+#endif /* _x86_64_TASK_HPP */
