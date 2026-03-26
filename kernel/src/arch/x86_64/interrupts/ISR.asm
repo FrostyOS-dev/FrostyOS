@@ -355,8 +355,7 @@ x86_64_ISR_Common:
     pop rax
     mov cr3, rax
     
-    pop rax
-    mov cr2, rax
+    add rsp, 8
 
     popaq
     test [rsp + 24], 0x3
