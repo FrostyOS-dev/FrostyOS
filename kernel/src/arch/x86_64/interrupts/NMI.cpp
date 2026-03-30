@@ -32,6 +32,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <string.h>
 #include <util.h>
 
+#include <HAL/Processor.hpp>
+
 #include <Scheduling/Scheduler.hpp>
 
 namespace x86_64_GlobalNMI {
@@ -75,17 +77,12 @@ namespace x86_64_GlobalNMI {
         if (count == 0)
             count = __atomic_load_n(&g_NMIData.maxCPUCount, __ATOMIC_SEQ_CST);
 
-        uint64_t flags = 0;
-        __asm__ volatile ("pushfq;pop %0" : "=r"(flags));
-        flags &= 1 << 9; // IF
-
-        x86_64_DisableInterrupts();
+        int flags = Processor::DisableInterrupts();
 
         while (__atomic_load_n(&g_NMIData.cpuCount, __ATOMIC_SEQ_CST) < count)
             __asm__ volatile ("pause" ::: "memory");
 
-        if (flags > 0)
-            x86_64_EnableInterrupts();
+        Processor::EnableInterrupts(flags);
     }
 
     void Raise(x86_64_LAPIC* lapic, x86_64_NMIType type, void* data, uint64_t cpuCount, bool wait) {
@@ -171,17 +168,12 @@ namespace x86_64_LocalNMI { // for NMIs on a specific CPU
         x86_64_IPI::RaiseIPI(currentLAPIC, targetLAPIC->GetID(), 0, x86_64_IPI::DeliveryMode::NMI, x86_64_IPI::TriggerMode::Edge, x86_64_IPI::DestMode::Physical, x86_64_IPI::DestShort::None);
         
         if (wait) {
-            uint64_t flags = 0;
-            __asm__ volatile ("pushfq;pop %0" : "=r"(flags));
-            flags &= 1 << 9; // IF
-
-            x86_64_DisableInterrupts();
+            int flags = Processor::DisableInterrupts();
 
             while (__atomic_load_n(&NMIData->handled, __ATOMIC_SEQ_CST) == 0)
                 __asm__ volatile ("pause" ::: "memory");
 
-            if (flags > 0)
-                x86_64_EnableInterrupts();
+            Processor::EnableInterrupts(flags);
         }
 
         spinlock_release(&x86_64_GlobalNMI::g_NMIData.raiseLock);
