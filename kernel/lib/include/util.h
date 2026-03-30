@@ -27,7 +27,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #ifndef KERNEL_STACK_SIZE
 // Size of the kernel stack after init
-#define KERNEL_STACK_SIZE 65536
+// #define KERNEL_STACK_SIZE 65536
+#define KERNEL_STACK_SIZE 1048576
 #endif
 
 #define volatile_read8(x) (*(volatile uint8_t*)&(x))
