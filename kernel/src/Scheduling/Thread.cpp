@@ -72,9 +72,9 @@ bool Thread::Delete() {
 }
 
 bool Thread::Exit(bool deleteThis) {
+    Processor::DisableInterrupts();
     spinlock_acquire(&m_CPUInfo.lock);
     Scheduler::ProcessorState* state = m_CPUInfo.state;
-    state->processor->DisableInterrupts();
     bool current = state == GetCurrentProcessorState();
     assert(current); // TODO: remove this
     // if (!current)
@@ -87,6 +87,7 @@ bool Thread::Exit(bool deleteThis) {
 }
 
 bool Thread::ExitCurrentThread(bool deleteThis) {
+    Processor::DisableInterrupts();
     Scheduler::ProcessorState* state = GetCurrentProcessorState();
     if (state == nullptr || state->currentThread == nullptr)
         return false;
@@ -201,12 +202,16 @@ bool Thread::Internal_Exit(bool deleteThis) {
     // if (state != GetCurrentProcessorState() || state->currentThread != this)
     //     return false;
     assert(state == GetCurrentProcessorState() && state->currentThread == this);
-    bool status = Scheduler::RemoveCurrentThread();
+    assert(Scheduler::RemoveCurrentThread() == this);
     spinlock_release(&state->lock);
     spinlock_release(&m_CPUInfo.lock);
-    assert(status);
     if (m_Parent != nullptr)
-        m_Parent->RemoveThread(m_TID);
+        m_Parent->LockThreadList();
+    Processor::EnableInterrupts();
+    if (m_Parent != nullptr) {
+        m_Parent->RemoveThread(m_TID, false);
+        m_Parent->UnlockThreadList();
+    }
     Delete();
     Thread_DeleteHelper(this, deleteThis);
 }

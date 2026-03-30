@@ -34,12 +34,12 @@ Process::~Process() {
 bool Process::Start() {
     Scheduler::AddProcess(this);
     Scheduler::ScheduleThread(m_MainThread);
-    m_Threads.lock();
+    LockThreadList();
     m_Threads.Enumerate([](Thread* thread, void*) -> bool {
         Scheduler::ScheduleThread(thread);
         return true;
     }, nullptr);
-    m_Threads.unlock();
+    UnlockThreadList();
     return true;
 }
 
@@ -58,10 +58,10 @@ Thread* Process::GetMainThread() const {
 }
 
 uint64_t Process::AddThread(Thread* thread) {
-    m_Threads.lock();
+    LockThreadList();
     thread->SetTID(m_nextTID++);
     m_Threads.insert(thread);
-    m_Threads.unlock();
+    UnlockThreadList();
     return thread->GetTID();
 }
 
@@ -74,7 +74,7 @@ Thread* Process::GetThread(uint64_t tid) const {
         uint64_t tid;
     } data = {nullptr, tid};
 
-    m_Threads.lock();
+    LockThreadList();
     m_Threads.Enumerate([](Thread* t, void* data) -> bool {
         Data* d = (Data*)data;
         if (t->GetTID() == d->tid) {
@@ -83,23 +83,33 @@ Thread* Process::GetThread(uint64_t tid) const {
         }
         return true;
     }, nullptr);
-    m_Threads.unlock();
+    UnlockThreadList();
 
     return data.thread;
 }
 
-void Process::RemoveThread(uint64_t tid) {
+void Process::RemoveThread(uint64_t tid, bool lock) {
     if (tid == 0)
         return; // Main thread
 
-    m_Threads.lock();
+    if (lock)
+        LockThreadList();
     m_Threads.EnumerateDelete([](Thread* thread, void* data, uint64_t) -> LinkedList::IteratorDecision {
         uint64_t* tid = static_cast<uint64_t*>(data);
         if (thread->GetTID() == *tid)
             return LinkedList::IteratorDecision::DELETE_BREAK;
         return LinkedList::IteratorDecision::CONTINUE;
     }, &tid);
-    m_Threads.unlock();
+    if (lock)
+        UnlockThreadList();
+}
+
+void Process::LockThreadList() const {
+    spinlock_acquire(&m_threadsLock);
+}
+
+void Process::UnlockThreadList() const {
+    spinlock_release(&m_threadsLock);
 }
 
 void Process::SwitchToThread(Thread* thread) {

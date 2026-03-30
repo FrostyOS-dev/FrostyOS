@@ -27,6 +27,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Memory/PagingUtil.hpp>
 #include <Memory/VMM.hpp>
 
+#include <HAL/HAL.hpp>
 #include <HAL/Processor.hpp>
 
 #ifdef __x86_64__
@@ -50,12 +51,15 @@ namespace Scheduler {
     // private functions
 
     [[noreturn]] void RunThread(Thread* thread) {
+        dbgprintf("Running thread %lu on CPU %lu, new RIP = %lx\n", thread->GetTID(), GetCurrentProcessorState()->id, thread->GetRegisters().RIP);
 #ifdef __x86_64__
         x86_64_KernelSwitchTask(&(thread->GetRegisters()));
 #endif
     }
 
     void RunThreadOnINTReturn(Thread* thread, Thread* oldThread, void* data) {
+        if (GetCurrentProcessorState()->isIdle == 0)
+            dbgprintf("Running int thread %lu on CPU %lu. new RIP = %lx\n", thread->GetTID(), GetCurrentProcessorState()->id, thread->GetRegisters().RIP);
 #ifdef __x86_64__
         if (oldThread != nullptr)
             x86_64_CopyFromISRFrame((x86_64_ISR_Frame*)data, &(oldThread->GetMutableRegisters()));
@@ -199,6 +203,29 @@ namespace Scheduler {
         list.unlock();
     }
 
+    bool AddExistingThread(Thread* thread) {
+        Process* process = thread->GetParent();
+        if (process == nullptr)
+            return false;
+
+        uint64_t nice = process->GetNice();
+        if (nice >= NICE_LEVELS)
+            return false;
+
+        ProcessorState* state = GetCurrentProcessorState();
+        if (state == nullptr)
+            return false;
+
+        thread->SetTimeRemaining(DEFAULT_TIMESLICE);
+
+        ThreadList& list = state->threads[nice];
+        list.lock();
+        list.pushBack(thread);
+        list.unlock();
+
+        return true;
+    }
+
     void CreateIdleThread() {
         ProcessorState* state = GetCurrentProcessorState();
         if (state == nullptr)
@@ -259,7 +286,7 @@ namespace Scheduler {
 
                 Thread* t = list.getHead();
                 
-                for (uint64_t i = 0; i < list.getCount(); i++) {
+                for (uint64_t j = 0; j < list.getCount(); j++) {
                     if (t == nullptr)
                         break;
                     if (t == thread) {
@@ -307,11 +334,12 @@ namespace Scheduler {
         }
     }
 
-    bool RemoveCurrentThread() {
+    Thread* RemoveCurrentThread() {
         ProcessorState* state = GetCurrentProcessorState();
+        Thread* thread = state->currentThread;
         state->currentThread = nullptr;
         PickNext(false);
-        return true;
+        return thread;
     }
 
     void TimerTick(uint64_t msSinceLast, void* data) {
@@ -331,28 +359,33 @@ namespace Scheduler {
         Thread* oldThread = state->currentThread;
         if (oldThread != nullptr) {
             oldThread->SetTimeRemaining(oldThread->GetTimeRemaining() - msSinceLast);
-            if (oldThread->GetTimeRemaining() > 0) {
+            if (oldThread->GetTimeRemaining() > 0 && state->isIdle == 0) {
                 SaveThreadFromINT(oldThread, data);
                 // spinlock_release(&(state->lock));
                 return;
             }
 
-            oldNice = oldThread->GetParent()->GetNice();
+            if (state->isIdle == 0) {
+                oldNice = oldThread->GetParent()->GetNice();
 
-            ThreadList& list = state->threads[oldNice];
-            list.lock();
-            list.pushBack(oldThread);
-            list.unlock();
+                ThreadList& list = state->threads[oldNice];
+                list.lock();
+                list.pushBack(oldThread);
+                list.unlock();
+            }
             state->currentThread = nullptr;
         }
 
         PickNext(false);
 
+        if (state->currentThread == nullptr)
+            PANIC("Scheduler: Nothing to run on timer tick");
+
         state->currentThread->SetTimeRemaining(DEFAULT_TIMESLICE);
 
         RunThreadOnINTReturn(state->currentThread, oldThread, data);
 
-        spinlock_release(&(state->lock));
+        // spinlock_release(&(state->lock));
     }
 
     bool SaveOnInt(void *data) {
@@ -368,6 +401,8 @@ namespace Scheduler {
         if (state == nullptr)
             return;
 
+        dbgprintf("Yielding on proc %lu\n", state->id);
+
         spinlock_acquire(&state->lock);
 
         Thread* oldThread = state->currentThread;
@@ -380,9 +415,15 @@ namespace Scheduler {
             list.unlock();
             state->currentThread = nullptr;
         }
-        
+
         if (oldThread == nullptr || forceSwitch)
             PickNext(false);
+
+        if (state->currentThread == nullptr) {
+            // No thread was selected to run; release the lock and return.
+            spinlock_release(&(state->lock));
+            return;
+        }
 
         state->currentThread->SetTimeRemaining(DEFAULT_TIMESLICE);
 
@@ -453,6 +494,11 @@ namespace Scheduler {
 
         if (lockState)
             spinlock_acquire(&(state->lock));
+
+        if (state->isIdle == 0 && thread == state->idleThread)
+            dbgprintf("Entering idle thread on CPU %lu\n", state->id);
+        else if (state->isIdle && thread != state->idleThread)
+            dbgprintf("Exiting idle thread on CPU %lu\n", state->id);
 
         state->isIdle = thread == state->idleThread ? 1 : 0;
 
@@ -567,3 +613,9 @@ namespace Scheduler {
     }
 
 } // namespace Scheduler
+
+void Scheduler_YieldAfterSave(Thread* currentThread, CPU_Registers* regs) {
+    memcpy(&currentThread->GetMutableRegisters(), regs, sizeof(CPU_Registers));
+    Scheduler::Yield();
+    PANIC("Scheduler::Yield returned");
+}

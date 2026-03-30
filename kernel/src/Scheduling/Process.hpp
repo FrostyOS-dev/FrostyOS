@@ -44,7 +44,10 @@ public:
 
     uint64_t AddThread(Thread* thread);
     Thread* GetThread(uint64_t tid) const;
-    void RemoveThread(uint64_t tid);
+    void RemoveThread(uint64_t tid, bool lock = true);
+
+    void LockThreadList() const;
+    void UnlockThreadList() const;
 
     void SwitchToThread(Thread* thread);
 
@@ -69,6 +72,7 @@ private:
     uint64_t m_nextTID;
     Thread* m_MainThread;
     LinkedList::RearInsertLinkedList<Thread> m_Threads;
+    mutable spinlock_t m_threadsLock;
 };
 
 extern Process* g_KProcess;

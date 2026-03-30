@@ -66,9 +66,11 @@ namespace Scheduler {
     void RemoveProcess(uint64_t pid);
     
     void ScheduleThread(Thread* thread, ProcessorState* state = nullptr);
+    bool AddExistingThread(Thread* thread);
+
     void CreateIdleThread(); // on the current processor, must be called on BSP first
     bool RemoveThread(Thread* thread, ProcessorState* state = nullptr, bool stop = true, bool lockCPUInfo = true); // If state is nullptr, checks all, otherwise, only checks the provided CPU
-    bool RemoveCurrentThread(); // ProcessorState and the thread's CPUInfo are assumed to both be locked, and will not be unlocked by this
+    Thread* RemoveCurrentThread(); // ProcessorState and the thread's CPUInfo are assumed to both be locked, and will not be unlocked by this. returns the current thread prior to this being called.
 
     void TimerTick(uint64_t msSinceLast, void* data);
     bool SaveOnInt(void* data);
@@ -91,5 +93,8 @@ namespace Scheduler {
 } // namespace Scheduler
 
 extern "C" Scheduler::ProcessorState* GetCurrentProcessorState(); // implemented in arch-specific code
+extern "C" void Scheduler_SaveAndYield(Thread* currentThread); // implemented in arch-specific code
+
+extern "C" void Scheduler_YieldAfterSave(Thread* currentThread, CPU_Registers* regs); // wrapper around Scheduler::Yield that can be called more easily from assembly
 
 #endif /* _SCHEDULER_HPP */

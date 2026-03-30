@@ -16,10 +16,12 @@
 [bits 64]
 
 extern x86_64_WriteMSR
+extern Scheduler_YieldAfterSave
 
 global x86_64_KernelSwitchTask
 global x86_64_PrepCurrentThreadExit
 global x86_64_Halt
+global Scheduler_SaveAndYield
 
 x86_64_KernelSwitchTask:
     cli ; make sure interrupts are disabled
@@ -79,6 +81,47 @@ x86_64_PrepCurrentThreadExit:
 
 x86_64_Halt:
     cli
+.l:
+    hlt
+    jmp .l
+
+Scheduler_SaveAndYield:
+    pushf
+    cli
+    pop rcx ; save for later
+    pop r8 ; return address
+    mov r9, rsp
+
+    ; caller-saved registers don't need to be saved in this case
+    xor rax, rax
+    mov ax, cs
+    mov dx, ss
+    shl edx, 16
+    or eax, edx
+    push rax ; CS, SS and alignment
+
+    mov rax, cr3
+    push rax ; CR3
+    push rcx ; RFLAGS
+    push r8 ; RIP
+    push r15
+    push r14
+    push r13
+    push r12
+    sub rsp, 32 ; ignore r8-r11
+    push rbp
+    push r9 ; RSP
+    sub rsp, 32 ; ignore rcx, rdx, rsi, rdi
+    push rbx
+    sub rsp, 16 ; ignore rax and align the stack
+
+    ; The 16 bytes reserved above consist of an unused "rax slot" plus padding
+    ; to keep the stack 16-byte aligned. Skip the lowest 8 bytes of this padding
+    ; so RSI points at the first field of the saved register frame structure.
+    ; The value of RDI is just parsed on.
+    lea rsi, [rsp + 8]
+    call Scheduler_YieldAfterSave
+
 .l:
     hlt
     jmp .l
