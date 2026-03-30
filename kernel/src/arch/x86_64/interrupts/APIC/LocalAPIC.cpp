@@ -204,7 +204,7 @@ bool x86_64_LAPIC::InitTimer() {
     // Start by setting divide config
     uint32_t value = ReadRegister(x86_64_LAPIC_Register::DivideConfig);
     value &= 0xB;
-    value |= g_LAPICDivisorLookup[m_timerDivisor];
+    value |= g_LAPICDivisorLookup[divisor];
     WriteRegister(x86_64_LAPIC_Register::DivideConfig, value);
 
     // Next set the LVT entry
