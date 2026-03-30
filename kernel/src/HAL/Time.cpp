@@ -25,9 +25,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Scheduling/Scheduler.hpp>
 
 uint64_t g_HALTimerTicks = 0; // in ms
+bool g_HALTimeReady = false;
 
 void HAL_InitTime() {
     g_BSP->InitTime();
+    g_HALTimeReady = true;
 }
 
 void HAL_TimerTick(Processor* proc, uint64_t ticks, void *data) {
@@ -47,11 +49,15 @@ uint64_t HAL_GetNSTicks() {
 }
 
 void HAL_SleepNS(uint64_t ns) {
+    if (!g_HALTimeReady)
+        return;
     if (g_HPET != nullptr) {
         uint64_t end = g_HPET->GetNSTicks() + ns;
-        while (g_HPET->GetNSTicks() < end) {}
+        while (g_HPET->GetNSTicks() < end)
+            PAUSE();
     } else {
         uint64_t end = g_HALTimerTicks + DIV_ROUNDUP(ns, 1'000'000);
-        while (g_HALTimerTicks < end) {}
+        while (g_HALTimerTicks < end)
+            PAUSE();
     }
 }
