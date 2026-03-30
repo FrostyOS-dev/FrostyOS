@@ -308,5 +308,6 @@ void x86_64_LAPIC::SetTimerPeriod(uint64_t period) {
 
 void x86_64_LAPIC::TimerInterrupt(x86_64_Processor* proc, x86_64_ISR_Frame* frame) {
     HAL_TimerTick(proc, LAPIC_TIMER_PERIOD / 1'000'000'000, frame);
+    dbgprintf("Returning to %lx on CPU %lu after irq\n", frame->RIP, GetCurrentProcessorState()->id);
     SendEOI();
 }

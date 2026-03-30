@@ -15,7 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "Task.h"
+#include "Task.hpp"
 #include "TaskUtil.hpp"
 
 #include "../GDT.hpp"
@@ -91,7 +91,7 @@ void x86_64_SetThreadRegisters(x86_64_Registers* regs, uint64_t stack, ThreadEnt
 
 void x86_64_CreateHaltISRFrame(x86_64_ISR_Frame* frame) {
     frame->RSP = 0;
-    frame->RBP = 0;
+    __asm__ volatile ("mov %%rbp, %0" : "=g"(frame->RBP));
     frame->CR3 = (uint64_t)from_HHDM(g_KernelRootPageTable);
     frame->CS = x86_64_GDT_KERNEL_CODE_SEGMENT;
     frame->SS = x86_64_GDT_KERNEL_DATA_SEGMENT;

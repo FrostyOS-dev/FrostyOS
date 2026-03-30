@@ -85,6 +85,8 @@ void x86_64_IRQHandler(x86_64_ISR_Frame* frame) {
 
     handler->handler(frame, handler->ctx);
 
+    dbgprintf("Returning to %lx on CPU %lu after irq\n", frame->RIP, GetCurrentProcessorState()->id);
+
     lapic->SendEOI();
 }
 
