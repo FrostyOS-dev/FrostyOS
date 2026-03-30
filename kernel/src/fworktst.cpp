@@ -169,7 +169,7 @@ void Init()
 }
 
 void PerformDelay(int ms, void*) {
-	HAL_SleepNS(ms * 1'000'000);
+	HAL_SleepNS(static_cast<uint64_t>(ms) * 1'000'000);
 }
 
 void* CreateThread(void (*func)(void*), void* data) {
@@ -209,7 +209,7 @@ unsigned RandTscBased()
 }
 
 int g_randGen = 0x9521af17;
-int Rand()
+int __attribute__((no_sanitize("undefined"))) Rand()
 {
 	g_randGen += (int)0xe120fc15;
 	uint64_t tmp = (uint64_t)g_randGen * 0x4a39b70d;
@@ -269,7 +269,7 @@ typedef struct _FIREWORK_DATA
 }
 FIREWORK_DATA, *PFIREWORK_DATA;
 
-uint32_t GetRandomColor()
+uint32_t __attribute__((no_sanitize("undefined"))) GetRandomColor()
 {
 	return (Rand() + 0x808080) & 0xFFFFFF;
 }

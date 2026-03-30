@@ -128,6 +128,8 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PMM.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/VMM.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/VMRegionAllocator.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/sanitisers/sanitisers.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/sanitisers/ubsan.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Process.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Scheduler.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Thread.cpp
@@ -208,6 +210,7 @@ target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-O2>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-omit-frame-pointer>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-asynchronous-unwind-tables>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fsanitize=undefined>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
 )

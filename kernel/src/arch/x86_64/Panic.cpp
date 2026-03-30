@@ -29,7 +29,7 @@ char const* g_x86_64_PanicReason;
 
 x86_64_Registers g_x86_64_PanicRegisters;
 
-extern "C" [[noreturn]] void x86_64_Panic(const char* message, void* registers, bool type) {
+extern "C" [[noreturn]] void __attribute__((no_sanitize("undefined"))) x86_64_Panic(const char* message, void* registers, bool type) {
     x86_64_DisableInterrupts();
 
     x86_64_Processor* proc = static_cast<x86_64_Processor*>(GetCurrentProcessor());
