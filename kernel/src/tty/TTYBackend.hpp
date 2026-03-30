@@ -59,6 +59,7 @@ public:
 private:
     TTYBackendType m_type;
     mutable spinlock_t m_lock;
+    mutable int m_intState;
 };
 
 #endif /* _TTY_BACKEND_HPP */

@@ -19,6 +19,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <spinlock.h>
 
+#include <HAL/Processor.hpp>
+
 TTYBackend::TTYBackend() : m_type(TTYBackendType::INVALID), m_lock(SPINLOCK_DEFAULT_VALUE) {
 
 }
@@ -60,9 +62,13 @@ TTYBackendType TTYBackend::GetType() const {
 }
 
 void TTYBackend::Lock() const {
+    int intState = Processor::DisableInterrupts();
     spinlock_acquire(&m_lock);
+    m_intState = intState;
 }
 
 void TTYBackend::Unlock() const {
+    int intState = m_intState;
     spinlock_release(&m_lock);
+    Processor::EnableInterrupts(intState);
 }
