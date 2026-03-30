@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -17,6 +17,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "ThreadList.hpp"
 #include "Thread.hpp"
+
+#include <HAL/Processor.hpp>
 
 ThreadList::ThreadList() : m_Head(nullptr), m_Tail(nullptr), m_Count(0) {
 }
@@ -79,9 +81,13 @@ uint64_t ThreadList::getCount() const {
 }
 
 void ThreadList::lock() const {
+    int intState = Processor::DisableInterrupts();
     spinlock_acquire(&m_Lock);
+    m_intState = intState; // only access member variable while lock is held
 }
 
 void ThreadList::unlock() const {
-    spinlock_release(&m_Lock);
+    int intState = m_intState;
+    spinlock_release(&m_Lock); // only access member variable while lock is held
+    Processor::EnableInterrupts(intState);
 }
