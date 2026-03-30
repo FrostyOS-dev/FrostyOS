@@ -25,7 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <spinlock.h>
 #include <util.h>
 
-VMRegionAllocator::VMRegionAllocator() : m_start(UINT64_MAX), m_end(0), m_allPagesTree(true), m_freePagesTree(true), m_freePageCount(0), m_usedPageCount(0), m_reservedPageCount(0), m_totalPageCount(0), m_lock(SPINLOCK_DEFAULT_VALUE) {
+VMRegionAllocator::VMRegionAllocator() : m_start(UINT64_MAX), m_end(0), m_allPagesTree(true), m_freePagesTree(true), m_freePageCount(0), m_usedPageCount(0), m_reservedPageCount(0), m_totalPageCount(0), m_lock() {
 
 }
 
@@ -56,15 +56,14 @@ void VMRegionAllocator::Init(uint64_t start, uint64_t end) {
     m_usedPageCount = 0;
     m_reservedPageCount = 0;
     m_totalPageCount = pageCount;
-    m_lock = SPINLOCK_DEFAULT_VALUE;
 }
 
 void* VMRegionAllocator::AllocatePages(uint64_t numPages) {
-    spinlock_acquire(&m_lock);
+    m_lock.Lock();
     uint64_t start = 0;
     AVLTree::wAVLTreeNode* node = m_freePagesTree.FindNodeOrHigher(numPages);
     if (node == nullptr) {
-        spinlock_release(&m_lock);
+        m_lock.Unlock();
         return nullptr;
     }
     if (node->key > numPages) {
@@ -102,7 +101,7 @@ void* VMRegionAllocator::AllocatePages(uint64_t numPages) {
     // Next step is to find the node in the m_allPagesTree and split from bigger section if needed, then mark as used
     AVLTree::wAVLTreeNode* allPagesNode = m_allPagesTree.FindNodeOrLower(start);
     if (allPagesNode == nullptr) {
-        spinlock_release(&m_lock);
+        m_lock.Unlock();
         return nullptr;
     }
 
@@ -111,7 +110,7 @@ void* VMRegionAllocator::AllocatePages(uint64_t numPages) {
 
     CompleteTreeNodeData nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
     if (nodeData.isFree == 0) { // already used
-        spinlock_release(&m_lock);
+        m_lock.Unlock();
         return nullptr;
     }
 
@@ -126,26 +125,26 @@ void* VMRegionAllocator::AllocatePages(uint64_t numPages) {
     m_freePageCount -= numPages;
     m_usedPageCount += numPages;
 
-    spinlock_release(&m_lock);
+    m_lock.Unlock();
 
     return (void*)start;
 }
 
 void VMRegionAllocator::FreePages(void* ptr, uint64_t numPages) {
-    spinlock_acquire(&m_lock);
+    m_lock.Lock();
     // Step 1: Find the exactly matching node in the m_allPagesTree, partial matches are not allowed
     AVLTree::wAVLTreeNode* allPagesNode = m_allPagesTree.FindNode((uint64_t)ptr);
     if (allPagesNode == nullptr) {
-        spinlock_release(&m_lock);
+        m_lock.Unlock();
         return;
     }
     CompleteTreeNodeData nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
     if (nodeData.isFree == 1) {
-        spinlock_release(&m_lock);
+        m_lock.Unlock();
         return; // already free
     }
     if (nodeData.size != numPages) {
-        spinlock_release(&m_lock);
+        m_lock.Unlock();
         return; // not the right size
     }
     nodeData.isFree = 1;
@@ -236,7 +235,7 @@ void VMRegionAllocator::FreePages(void* ptr, uint64_t numPages) {
     m_freePageCount += numPages;
     m_usedPageCount -= numPages;
 
-    spinlock_release(&m_lock);
+    m_lock.Unlock();
 }
 
 void VMRegionAllocator::ReservePages(void* ptr, uint64_t numPages) {
