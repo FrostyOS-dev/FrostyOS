@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
+#define PAUSE() __asm__ volatile ("pause" ::: "memory")
+
 struct x86_64_Registers {
     uint64_t RAX;
     uint64_t RBX;
