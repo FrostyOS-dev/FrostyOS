@@ -237,6 +237,8 @@ void x86_64_LAPIC::StartCPU() {
 
     x86_64_Processor* proc = new x86_64_Processor(false);
     proc->SetLAPIC(this);
+    Scheduler::ProcessorState* state = Scheduler::InitNewProcessor(proc);
+    proc->SetCPUState(state);
 
     g_KPageMapper->MapPage(AP_TRAMP_LOAD, AP_TRAMP_LOAD, VMM::Protection::READ_WRITE_EXECUTE, VMM::CacheType::DEFAULT);
 

@@ -102,6 +102,8 @@ public:
     void SetLAPIC(x86_64_LAPIC* lapic);
     x86_64_LAPIC* GetLAPIC() const;
 
+    void SetCPUState(Scheduler::ProcessorState* state); // does not set the GS base, should only be called for APs from the BSP
+
     // Will only return null if this is null
     const x86_64_CPUInfo* GetCPUInfo() const;
 
@@ -117,6 +119,7 @@ private:
     bool m_TSCAvailable;
     x86_64_GDTEntry m_GDT[x86_64_GDT_ENTRY_COUNT];
     x86_64_TSS m_TSS;
+    Scheduler::ProcessorState* m_state;
 };
 
 struct [[gnu::packed]] x86_64_APInfo {

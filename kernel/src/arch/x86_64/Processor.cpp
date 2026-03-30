@@ -66,8 +66,7 @@ x86_64_Processor::~x86_64_Processor() {
     memset(&m_TSS, 0, sizeof(x86_64_TSS));
     x86_64_InitGDT(m_GDT, &m_TSS);
 
-    Scheduler::ProcessorState* state = Scheduler::InitNewProcessor(this);
-    x86_64_SetGSBases(0, (uint64_t)state);
+    x86_64_SetGSBases(0, (uint64_t)m_state);
 
     FillCPUInfo();
 
@@ -75,12 +74,12 @@ x86_64_Processor::~x86_64_Processor() {
 
     m_TSCAvailable = x86_64_TSCInit(this);
 
-    state->kernelStack = reinterpret_cast<void*>(stackTop);
-    InitTSS(state);
+    m_state->kernelStack = reinterpret_cast<void*>(stackTop);
+    InitTSS(m_state);
 
     spinlock_release(&apLock);
 
-    Scheduler::WaitForStart(state);
+    Scheduler::WaitForStart(m_state);
 
     if (!m_LAPIC->InitTimer())
         PANIC("AP LAPIC timer init failed");
@@ -101,13 +100,14 @@ void x86_64_Processor::Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uin
     x86_64_InitIDT();
 
     FillCPUInfo();
+    
+    Scheduler::InitBSPState();
+    x86_64_SetGSBases(0, (uint64_t)&Scheduler::g_BSPState);
+    m_state = &Scheduler::g_BSPState;
 
     x86_64_IRQ_EarlyInit();
     x86_64_InitPaging(HHDMOffset, memoryMap, memoryMapEntryCount, pagingMode, kernelVirtual, kernelPhysical);
     g_KProcess->SetVMM(VMM::g_KVMM);
-    
-    Scheduler::InitBSPState();
-    x86_64_SetGSBases(0, (uint64_t)&Scheduler::g_BSPState);
 
     uint64_t kernelStack = (uint64_t)VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::Protection::READ_WRITE, true) + KERNEL_STACK_SIZE;
     Scheduler::g_BSPState.kernelStack = (void*)kernelStack;
