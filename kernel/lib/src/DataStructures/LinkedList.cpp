@@ -101,14 +101,17 @@ namespace LinkedList {
     }
 
     Node* newNode(uint64_t data, bool vmm, bool usePool) {
-        Node* node;
+        Node* node = nullptr;
 
         if (usePool)
             node = NodePool_AllocateNode();
         else if (vmm)
-            node = (Node*)kcalloc_vmm(1, sizeof(Node));
+            node = reinterpret_cast<Node*>(kcalloc_vmm(1, sizeof(Node)));
         else
             node = new Node();
+
+        if (node == nullptr)
+            return nullptr;
 
         node->data = data;
         node->previous = nullptr;
