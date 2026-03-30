@@ -167,17 +167,6 @@ void x86_64_Processor::Yield(bool forceSwitch) {
     x86_64_LocalNMI::Raise(proc, this, x86_64_NMIType::YIELD, &forceSwitch, true);
 }
 
-int x86_64_Processor::DisableInterrupts() {
-    int64_t state = 0;
-    __asm__ volatile ("pushf; pop %0; cli;" : "=r"(state));
-    return state;
-}
-
-void x86_64_Processor::EnableInterrupts(int state) {
-    if (state == -1 || (state & (1 << 9)) > 0)
-        x86_64_EnableInterrupts();
-}
-
 bool x86_64_Processor::PrepCurrentThreadExit(Thread* thread, void* stack, bool (Thread::*func)(bool), bool arg) {
     if (thread == nullptr || stack == nullptr || func == nullptr)
         return false;
@@ -287,8 +276,27 @@ x86_64_LAPIC* x86_64_Processor::GetLAPIC() const {
     return m_LAPIC;
 }
 
+void x86_64_Processor::SetCPUState(Scheduler::ProcessorState* state) {
+    m_state = state;
+}
+
 const x86_64_CPUInfo* x86_64_Processor::GetCPUInfo() const {
     return &m_info;
+}
+
+// Static methods from parent class
+
+int Processor::DisableInterrupts() {
+    int64_t state = 0;
+    __asm__ volatile ("pushf; pop %0; cli;" : "=r"(state));
+    return state;
+}
+
+void Processor::EnableInterrupts(int state) {
+    if (state == -1 || (state & (1 << 9)) > 0) {
+        // dbgprintf("Enabling interrupts (state = %u)\n", state);
+        x86_64_EnableInterrupts();
+    }
 }
 
 
