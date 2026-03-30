@@ -24,6 +24,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <spinlock.h>
 
+#include <Scheduling/Mutex.hpp>
+
 namespace LinkedList {
 
     static constexpr uint64_t POOL_SIZE = 512;
@@ -235,7 +237,7 @@ namespace LinkedList {
     class RearInsertLinkedList {
     public:
         RearInsertLinkedList(bool vmm = false, bool usePool = false)
-            : m_count(0), m_start(nullptr), m_end(nullptr), m_vmm(vmm), m_usePool(usePool), m_lock(SPINLOCK_DEFAULT_VALUE) {}
+            : m_count(0), m_start(nullptr), m_end(nullptr), m_vmm(vmm), m_usePool(usePool), m_lock() {}
         ~RearInsertLinkedList() {
             for (uint64_t i = 0; i < m_count; i++)
                 remove((uint64_t)0);
@@ -447,11 +449,11 @@ namespace LinkedList {
         }
 
         void lock() const {
-            spinlock_acquire(&m_lock);
+            m_lock.Lock();
         }
 
         void unlock() const {
-            spinlock_release(&m_lock);
+            m_lock.Unlock();
         }
 
     private:
@@ -460,7 +462,7 @@ namespace LinkedList {
         Node* m_end;
         bool m_vmm;
         bool m_usePool;
-        mutable spinlock_t m_lock;
+        mutable Mutex m_lock;
     };
 
     template<typename T>
