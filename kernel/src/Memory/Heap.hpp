@@ -21,6 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stddef.h>
 #include <spinlock.h>
 
+#include <Scheduling/Mutex.hpp>
+
 #define HEAP_MIN_BLOCK_SIZE 16
 
 struct HeapSectionAllocator {
@@ -59,7 +61,8 @@ private:
 
     HeapSection* m_Head;
     HeapSectionAllocator* m_SectionAllocator;
-    spinlock_t m_Lock;
+    // spinlock_t m_Lock;
+    Mutex m_lock;
     size_t m_UsedMemory;
     size_t m_FreeMemory;
     size_t m_MetadataMemory;
