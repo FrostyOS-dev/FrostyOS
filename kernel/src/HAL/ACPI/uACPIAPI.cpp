@@ -15,10 +15,9 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "HAL/ACPI/MCFG.hpp"
 #include "Init.hpp"
+#include "MCFG.hpp"
 
-#include "../HAL.hpp"
 #include "uacpi/types.h"
 
 #include <spinlock.h>
@@ -43,6 +42,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #pragma GCC diagnostic pop
 
+#include <HAL/HAL.hpp>
+#include <HAL/Processor.hpp>
 #include <HAL/Time.hpp>
 
 #include <Memory/PagingUtil.hpp>
@@ -255,20 +256,13 @@ uacpi_thread_id uacpi_kernel_get_thread_id() {
     return 0;
 }
 
-#ifdef __x86_64__
-
 uacpi_interrupt_state uacpi_kernel_disable_interrupts() {
-    uint64_t flags = 0;
-    __asm__ volatile("pushfq\npop %0\ncli" : "=r"(flags));
-    return flags & (1 << 9);
+    return Processor::DisableInterrupts();
 }
 
 void uacpi_kernel_restore_interrupts(uacpi_interrupt_state state) {
-    if (state & (1 << 9))
-        __asm__ volatile ("sti");
+    Processor::EnableInterrupts(state);
 }
-
-#endif /* __x86_64__ */
 
 uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle, uacpi_u16) {
     return UACPI_STATUS_OK;
@@ -315,22 +309,14 @@ void uacpi_kernel_free_spinlock(uacpi_handle lock) {
 }
 
 uacpi_cpu_flags uacpi_kernel_lock_spinlock(uacpi_handle lock) {
+    int flags = Processor::DisableInterrupts();
     spinlock_acquire((spinlock_t*)lock);
-#ifdef __x86_64__
-    uint64_t flags = 0;
-    __asm__ volatile("pushfq\npop %0\ncli" : "=r"(flags));
-    return flags & (1 << 9);
-#else
-    return 0;
-#endif
+    return flags;
 }
 
 void uacpi_kernel_unlock_spinlock(uacpi_handle lock, uacpi_cpu_flags flags) {
-#ifdef __x86_64__
-    if (flags & (1 << 9))
-        x86_64_EnableInterrupts();
-#endif
     spinlock_release((spinlock_t*)lock);
+    Processor::EnableInterrupts(flags);
 }
 
 uacpi_status uacpi_kernel_schedule_work(uacpi_work_type, uacpi_work_handler, uacpi_handle) {
