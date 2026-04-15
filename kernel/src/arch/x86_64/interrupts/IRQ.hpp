@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -45,8 +45,10 @@ void x86_64_PICHandler(x86_64_ISR_Frame* frame);
 void x86_64_IRQHandler(x86_64_ISR_Frame* frame);
 
 // Register a handler, including validating the GSI. Cannot be called until I/O APICs are intialised.
+// Uses a mutex for locking, must not be called from an interrupt context
 bool x86_64_RegisterGSIHandler(uint32_t GSI, x86_64_GSIHandler_t handler, void* ctx);
 
+// Same as above function, must not be called from an interrupt context
 bool x86_64_RemoveGSIHandler(uint32_t GSI);
 
 bool x86_64_MaskGSI(uint32_t GSI);

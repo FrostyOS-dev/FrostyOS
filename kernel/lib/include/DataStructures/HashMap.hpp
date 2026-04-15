@@ -47,7 +47,7 @@ public:
         m_tree.forEach(callback, data);
     }
 
-    void lock() {
+    void lock() { // uses a mutex
         m_tree.lock();
     }
 

@@ -30,9 +30,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdint.h>
 #include <stddef.h>
 
+#include <Scheduling/Mutex.hpp>
+
 /*
 This AVL tree implementation is based on the FreeBSD wAVL tree implementation.
-The majority of the code for this is in the tree.h file in this directly, along with its license.
+The majority of the code for this is in the tree.h file in this directory, along with its license.
 */
 
 namespace AVLTree {
@@ -51,7 +53,7 @@ namespace AVLTree {
     template <typename K, typename D>
     class wAVLTree { // NOTE: No allocations of K (key) or D (data) are performed by this class. 
     public:
-        wAVLTree(bool vmm = false) : m_vmm(vmm), m_lock(SPINLOCK_DEFAULT_VALUE) {
+        wAVLTree(bool vmm = false) : m_vmm(vmm), m_lock() {
             RB_INIT(&m_tree);
         }
 
@@ -155,17 +157,17 @@ namespace AVLTree {
         }
 
         void lock() const {
-            spinlock_acquire(&m_lock);
+            m_lock.Lock();
         }
 
         void unlock() const {
-            spinlock_release(&m_lock);
+            m_lock.Unlock();
         }
 
     private:
         raw_wAVLTree m_tree;
         bool m_vmm;
-        mutable spinlock_t m_lock;
+        mutable Mutex m_lock;
     };
 }
 
