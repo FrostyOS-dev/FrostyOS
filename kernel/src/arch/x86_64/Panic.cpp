@@ -25,6 +25,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdio.h>
 
+#include <Scheduling/Scheduler.hpp>
+
 char const* g_x86_64_PanicReason;
 
 x86_64_Registers g_x86_64_PanicRegisters;
@@ -64,6 +66,8 @@ extern "C" [[noreturn]] void __attribute__((no_sanitize("undefined"))) x86_64_Pa
         dbgputs("Exception: ");
     dbgprintf("%s\n", message);
 
+    dbgprintf("Currently running on CPU %lu\n", GetCurrentProcessorState()->id);
+
     dbgprintf("RAX=%016lx  RBX=%016lx  RCX=%016lx  RDX=%016lx\n", regs->RAX, regs->RBX, regs->RCX, regs->RDX);
     dbgprintf("RSI=%016lx  RDI=%016lx  RSP=%016lx  RBP=%016lx\n", regs->RSI, regs->RDI, regs->RSP, regs->RBP);
     dbgprintf("R8 =%016lx  R9 =%016lx  R10=%016lx  R11=%016lx\n", regs->R8 , regs->R9 , regs->R10, regs->R11);
@@ -77,8 +81,8 @@ extern "C" [[noreturn]] void __attribute__((no_sanitize("undefined"))) x86_64_Pa
     }
     dbgprintf("CR3=%016lx\n", regs->CR3);
     dbgprintf("Stack trace:\n%016lx\n", regs->RIP);
-    x86_64_WalkStackFrames(regs->RBP, [](x86_64_StackFrame* frame) {
-        dbgprintf("%016lx\n", frame->RIP);
+    x86_64_WalkStackFrames(regs->RBP, [](x86_64_StackFrame* frame) __attribute__((no_sanitize("undefined"))) -> void {
+        dbgprintf("%016lx\n", frame->RIP); 
     });
     
     
