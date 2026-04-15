@@ -342,6 +342,8 @@ x86_64_ISR_Common:
     mov rax, cr3
     push rax
 
+    cld
+
     mov rdi, rsp
 
     push QWORD [rdi+152]
