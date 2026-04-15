@@ -55,6 +55,7 @@ TTYBackendVGA g_KVGABackend;
 TTY g_KTTY;
 
 Process KProcess(ProcessMode::KERNEL, nullptr, NICE_LEVELS - 1);
+Process KLowestPriProc(ProcessMode::KERNEL, nullptr, 0);
 Thread KThread;
 
 FrameBuffer g_KFramebuffer;
@@ -83,6 +84,7 @@ void StartKernel() {
     g_CurrentTTY = &g_KTTY;
 
     g_KProcess = &KProcess;
+    g_KLowestPriorityProcess = &KLowestPriProc;
 
     HAL_EarlyInit(g_kernelParams.HHDMStart, g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.pagingMode, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical, g_kernelParams.RSDP);
 
@@ -95,6 +97,12 @@ void StartKernel() {
 
     if (!KProcess.Start())
         PANIC("Failed to start kernel stage 2");
+
+    if (!KLowestPriProc.CreateMainThread({Scheduler::HandleDeadThreads, nullptr}))
+        PANIC("Failed to create cleanup thread");
+
+    if (!KLowestPriProc.Start())
+        PANIC("Failed to start cleanup thread");
 
     Scheduler::Start();
 

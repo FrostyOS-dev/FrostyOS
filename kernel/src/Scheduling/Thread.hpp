@@ -53,7 +53,6 @@ public:
 
     bool Delete(); // Assumed to be removed from scheduler, and not running
 
-    bool Exit(bool deleteThis); // must only be called if this is the current thread
     static bool ExitCurrentThread(bool deleteThis);
 
     void SetEntryPoint(ThreadEntryPoint entryPoint);
@@ -83,8 +82,8 @@ public:
 
     CPUInfo* GetCPUInfo();
 
-private:
-    bool Internal_Exit(bool deleteThis);
+    void SetDeleteProp(bool deleteSelf);
+    bool ShouldDelete() const;
 
 private:
     ThreadEntryPoint m_EntryPoint;
@@ -96,6 +95,12 @@ private:
     ThreadListItemInternalData m_ThreadListData;
     uint64_t m_TimeRemaining;
     CPUInfo m_CPUInfo;
+
+    struct {
+        bool deleteThis;
+    } m_deleteProp;
 };
+
+[[noreturn]] void Thread_ExitHelper(void* data);
 
 #endif /* _THREAD_HPP */

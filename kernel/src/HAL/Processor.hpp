@@ -42,13 +42,15 @@ public:
     virtual void Halt(bool wait = true) = 0;
     virtual void Yield(bool forceSwitch = false) = 0;
 
-    // Both of these functions are implemented in arch-specific code
+    virtual inline bool isBSP() const { return m_BSP; }
+
+    // Following functions are implemented in arch-specific code
+    
     static int DisableInterrupts(); // return value is an arch-specific state
     static void EnableInterrupts(int prevState = -1);
 
-    virtual bool PrepCurrentThreadExit(Thread* thread, void* stack, bool (Thread::*func)(bool), bool arg) = 0;
+    static void SwapStack(void (*func)(void*), void* data, void* stack); // Should only return on error
 
-    virtual inline bool isBSP() const { return m_BSP; }
 
 protected:
     bool m_BSP;

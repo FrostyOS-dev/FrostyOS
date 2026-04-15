@@ -108,6 +108,7 @@ void x86_64_Processor::Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uin
     x86_64_IRQ_EarlyInit();
     x86_64_InitPaging(HHDMOffset, memoryMap, memoryMapEntryCount, pagingMode, kernelVirtual, kernelPhysical);
     g_KProcess->SetVMM(VMM::g_KVMM);
+    g_KLowestPriorityProcess->SetVMM(VMM::g_KVMM);
 
     uint64_t kernelStack = (uint64_t)VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::Protection::READ_WRITE, true) + KERNEL_STACK_SIZE;
     Scheduler::g_BSPState.kernelStack = (void*)kernelStack;
@@ -165,15 +166,6 @@ void x86_64_Processor::Yield(bool forceSwitch) {
         Scheduler::Yield(forceSwitch, nullptr);
 
     x86_64_LocalNMI::Raise(proc, this, x86_64_NMIType::YIELD, &forceSwitch, true);
-}
-
-bool x86_64_Processor::PrepCurrentThreadExit(Thread* thread, void* stack, bool (Thread::*func)(bool), bool arg) {
-    if (thread == nullptr || stack == nullptr || func == nullptr)
-        return false;
-
-    dbgprintf("Deleting current thread %lu from process %lu on proc %lu\n", thread->GetTID(), thread->GetParent()->GetPID(), GetCurrentProcessorState()->id);
-
-    x86_64_PrepCurrentThreadExit(thread, reinterpret_cast<uint64_t>(stack), func, arg);
 }
 
 void x86_64_Processor::FillCPUInfo() {
@@ -294,9 +286,15 @@ int Processor::DisableInterrupts() {
 
 void Processor::EnableInterrupts(int state) {
     if (state == -1 || (state & (1 << 9)) > 0) {
-        // dbgprintf("Enabling interrupts (state = %u)\n", state);
+        dbgprintf("Enabling interrupts (state = %u)\n", state);
         x86_64_EnableInterrupts();
     }
+}
+
+void Processor::SwapStack(void (*func)(void*), void* data, void* stack) {
+    if (func == nullptr || stack == nullptr)
+        return;
+    x86_64_SwapStack(func, data, stack);
 }
 
 

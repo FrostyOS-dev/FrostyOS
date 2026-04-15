@@ -25,11 +25,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Memory/VMM.hpp>
 
-Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE) {
+Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_deleteProp(false) {
 
 }
 
-Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_TimeRemaining(0) {
+Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_deleteProp(false) {
 
 }
 
@@ -71,27 +71,15 @@ bool Thread::Delete() {
     return true;
 }
 
-bool Thread::Exit(bool deleteThis) {
-    Processor::DisableInterrupts();
-    spinlock_acquire(&m_CPUInfo.lock);
-    Scheduler::ProcessorState* state = m_CPUInfo.state;
-    bool current = state == GetCurrentProcessorState();
-    assert(current); // TODO: remove this
-    // if (!current)
-    //     return false;
-    spinlock_acquire(&state->lock); // writes require it to be locked
-    // assert(state->currentThread == this);
-    if (state->currentThread != this)
-        return false;
-    return state->processor->PrepCurrentThreadExit(this, state->kernelStack, &Thread::Internal_Exit, deleteThis);
-}
-
 bool Thread::ExitCurrentThread(bool deleteThis) {
     Processor::DisableInterrupts();
-    Scheduler::ProcessorState* state = GetCurrentProcessorState();
-    if (state == nullptr || state->currentThread == nullptr)
+    Thread* thread = Scheduler::RemoveCurrentThread(true);
+    if (thread == nullptr)
         return false;
-    return state->currentThread->Exit(deleteThis);
+    thread->m_deleteProp.deleteThis = deleteThis;
+    Scheduler::ProcessorState* state = GetCurrentProcessorState();
+    Processor::SwapStack(Thread_ExitHelper, thread, state->kernelStack);
+    return false;
 }
 
 void Thread::SetEntryPoint(ThreadEntryPoint entryPoint) {
@@ -190,28 +178,19 @@ Thread::CPUInfo* Thread::GetCPUInfo() {
     return &m_CPUInfo;
 }
 
-[[noreturn]] void Thread_DeleteHelper(Thread* thread, bool deleteThis) {
-    if (deleteThis)
-        delete thread;
-    Scheduler::Yield(); // only should return on error
-    PANIC("Scheduler failed to yield on thread exit!"); // if we get to this point, we can't return due to the old stack being deleted
+void Thread::SetDeleteProp(bool deleteSelf) {
+    m_deleteProp.deleteThis = deleteSelf;
 }
 
-bool Thread::Internal_Exit(bool deleteThis) {
-    Scheduler::ProcessorState* state = m_CPUInfo.state;
-    // if (state != GetCurrentProcessorState() || state->currentThread != this)
-    //     return false;
-    assert(state == GetCurrentProcessorState() && state->currentThread == this);
-    assert(Scheduler::RemoveCurrentThread() == this);
-    spinlock_release(&state->lock);
-    spinlock_release(&m_CPUInfo.lock);
-    if (m_Parent != nullptr)
-        m_Parent->LockThreadList();
-    Processor::EnableInterrupts();
-    if (m_Parent != nullptr) {
-        m_Parent->RemoveThread(m_TID, false);
-        m_Parent->UnlockThreadList();
-    }
-    Delete();
-    Thread_DeleteHelper(this, deleteThis);
+bool Thread::ShouldDelete() const {
+    return m_deleteProp.deleteThis;
+}
+
+[[noreturn]] void Thread_ExitHelper(void* data) {
+    Thread* thread = static_cast<Thread*>(data);
+    if (!Scheduler::DeleteThread(thread))
+        PANIC("Failed to delete thread on exit!")
+
+    Scheduler::Yield();
+    PANIC("Scheduler::Yield() returned!")
 }

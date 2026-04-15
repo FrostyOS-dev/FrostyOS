@@ -70,7 +70,9 @@ namespace Scheduler {
 
     void CreateIdleThread(); // on the current processor, must be called on BSP first
     bool RemoveThread(Thread* thread, ProcessorState* state = nullptr, bool stop = true, bool lockCPUInfo = true); // If state is nullptr, checks all, otherwise, only checks the provided CPU
-    Thread* RemoveCurrentThread(); // ProcessorState and the thread's CPUInfo are assumed to both be locked, and will not be unlocked by this. returns the current thread prior to this being called.
+    Thread* RemoveCurrentThread(bool lock = false); // ProcessorState and the thread's CPUInfo are assumed to both be locked, and will not be unlocked by this. returns the current thread prior to this being called.
+
+    bool DeleteThread(Thread* thread); // Adds the thread to a list of threads to be deleted, already assumed to be removed
 
     void TimerTick(uint64_t msSinceLast, void* data);
     bool SaveOnInt(void* data);
@@ -89,6 +91,8 @@ namespace Scheduler {
     bool isRunning();
 
     [[noreturn]] void IdleTask(void*); // implemented in arch-specific code
+
+    [[noreturn]] void HandleDeadThreads(void*); // just an infinite loop waiting to delete threads
     
 } // namespace Scheduler
 

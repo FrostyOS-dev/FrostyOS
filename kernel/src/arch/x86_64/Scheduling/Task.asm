@@ -19,7 +19,7 @@ extern x86_64_WriteMSR
 extern Scheduler_YieldAfterSave
 
 global x86_64_KernelSwitchTask
-global x86_64_PrepCurrentThreadExit
+global x86_64_SwapStack
 global x86_64_Halt
 global Scheduler_SaveAndYield
 
@@ -64,20 +64,12 @@ x86_64_KernelSwitchTask:
     ; return into new code
     ret
 
-
-; rdi = thread, rsi = newStack, rdx = func, rcx = arg
-x86_64_PrepCurrentThreadExit:
-    push rbp
-    push r10
-    mov r10, rsp ; use a callee-saved register
-    mov rsp, rsi
-    mov rsi, rcx
-    xor rbp, rbp
-    call rdx
-    mov rsp, r10
-    pop r10
-    pop rbp
-    ret
+x86_64_SwapStack:
+    mov rsp, rdx
+    mov rax, rdi
+    mov rdi, rsi
+    push 0
+    jmp rax
 
 x86_64_Halt:
     cli

@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "Process.hpp"
 #include "Scheduler.hpp"
+#include "Semaphore.hpp"
 #include "Thread.hpp"
 
 #include <spinlock.h>
@@ -48,6 +49,9 @@ namespace Scheduler {
     spinlock_t g_ProcessorsLock = SPINLOCK_DEFAULT_VALUE;
     uint64_t g_processorCount = 1;
 
+    ThreadList g_deadThreads;
+    Semaphore g_deadThreadsSemaphore(0, 1);
+
     // private functions
 
     [[noreturn]] void RunThread(Thread* thread) {
@@ -59,10 +63,14 @@ namespace Scheduler {
 
     void RunThreadOnINTReturn(Thread* thread, Thread* oldThread, void* data) {
         if (GetCurrentProcessorState()->isIdle == 0)
-            dbgprintf("Running int thread %lu on CPU %lu. new RIP = %lx\n", thread->GetTID(), GetCurrentProcessorState()->id, thread->GetRegisters().RIP);
+            dbgprintf("Running int thread %lu on CPU %lu. new RIP = %lx", thread->GetTID(), GetCurrentProcessorState()->id, thread->GetRegisters().RIP);
 #ifdef __x86_64__
-        if (oldThread != nullptr)
+        if (oldThread != nullptr) {
             x86_64_CopyFromISRFrame((x86_64_ISR_Frame*)data, &(oldThread->GetMutableRegisters()));
+            dbgprintf(", old thread = %lu, RIP = %lx\n", oldThread->GetTID(), oldThread->GetRegisters().RIP);
+        }
+        else
+            dbgputc('\n');
         x86_64_CopyToISRFrame(&(thread->GetRegisters()), (x86_64_ISR_Frame*)data);
 #endif
     }
@@ -334,12 +342,24 @@ namespace Scheduler {
         }
     }
 
-    Thread* RemoveCurrentThread() {
+    Thread* RemoveCurrentThread(bool lock) {
         ProcessorState* state = GetCurrentProcessorState();
+        if (lock)
+            spinlock_acquire(&state->lock);
         Thread* thread = state->currentThread;
         state->currentThread = nullptr;
         PickNext(false);
+        if (lock)
+            spinlock_release(&state->lock);
         return thread;
+    }
+
+    bool DeleteThread(Thread* thread) {
+        g_deadThreads.lock();
+        g_deadThreads.pushBack(thread);
+        g_deadThreads.unlock();
+        g_deadThreadsSemaphore.Signal();
+        return true;
     }
 
     void TimerTick(uint64_t msSinceLast, void* data) {
@@ -367,6 +387,8 @@ namespace Scheduler {
 
             if (state->isIdle == 0) {
                 oldNice = oldThread->GetParent()->GetNice();
+
+                // TODO: should be swapping stack here
 
                 ThreadList& list = state->threads[oldNice];
                 list.lock();
@@ -509,16 +531,15 @@ namespace Scheduler {
     }
 
     Thread* StealThreadFromOther(ProcessorState* current, int* niceOut) {
-        dbgprintf("steal\n");
         ProcessorState* state;
         for (state = &g_BSPState; state != nullptr; state = state->next) {
             if (state->id == current->id)
-                continue;
-
-            spinlock_acquire(&state->lock);
-
-            Thread* thread = nullptr;
-            int nice = -1;
+            continue;
+        
+        spinlock_acquire(&state->lock);
+        
+        Thread* thread = nullptr;
+        int nice = -1;
             
             // go forwards through nice levels
             for (int i = 0; i < NICE_LEVELS; i++) {
@@ -530,7 +551,7 @@ namespace Scheduler {
                 }
                 
                 if (thread != nullptr)
-                    state->threads[nice].unlock();
+                state->threads[nice].unlock();
                 else if (current->runCounts[i] == 2)
                     current->runCounts[i] = 0;
                 thread = list.getHead();
@@ -545,6 +566,7 @@ namespace Scheduler {
                 assert(t2 == thread);
                 state->threads[nice].unlock();
                 spinlock_release(&state->lock);
+                dbgprintf("steal\n");
                 return thread;
             }
 
@@ -601,15 +623,30 @@ namespace Scheduler {
         if (state == nullptr)
             state = GetCurrentProcessorState();
 
-        while (state->startAllowed == 0) {
-#ifdef __x86_64__
-            __asm__ volatile ("pause" ::: "memory");
-#endif
-        }
+        while (state->startAllowed == 0)
+            PAUSE();
     }
 
     bool isRunning() {
         return g_isRunning > 0;
+    }
+
+    [[noreturn]] void HandleDeadThreads(void*) {
+        while (true) {
+            g_deadThreadsSemaphore.Wait();
+            g_deadThreads.lock();
+            for (uint64_t i = 0; i < g_deadThreads.getCount(); i++) {
+                Thread* thread = g_deadThreads.popFront();
+                if (thread == nullptr)
+                    continue;
+                if (Process* proc = thread->GetParent(); proc != nullptr)
+                    proc->RemoveThread(thread->GetTID());
+                thread->Delete();
+                if (thread->ShouldDelete())
+                    delete thread;
+            }
+            g_deadThreads.unlock();
+        }
     }
 
 } // namespace Scheduler

@@ -91,8 +91,6 @@ public:
     void Halt(bool wait = true) override;
     void Yield(bool forceSwitch = false) override;
 
-    bool PrepCurrentThreadExit(Thread* thread, void* stack, bool (Thread::*func)(bool), bool arg) override;
-
     void SetIRQData(x86_64_ProcessorIRQData* data);
     x86_64_ProcessorIRQData* GetIRQData();
 

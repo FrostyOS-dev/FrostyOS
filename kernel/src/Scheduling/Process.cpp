@@ -20,10 +20,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Thread.hpp"
 
 #include <stdint.h>
+#include <spinlock.h>
 
 #include <DataStructures/LinkedList.hpp>
 
-Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), m_VMM(vmm), m_Nice(nice), m_PID(UINT64_MAX), m_PPID(UINT64_MAX), m_nextTID(0), m_MainThread(nullptr), m_Threads() {
+Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), m_VMM(vmm), m_Nice(nice), m_PID(UINT64_MAX), m_PPID(UINT64_MAX), m_nextTID(0), m_MainThread(nullptr), m_Threads(), m_threadsLock(SPINLOCK_DEFAULT_VALUE), m_intState(-1) {
 
 }
 
@@ -105,11 +106,15 @@ void Process::RemoveThread(uint64_t tid, bool lock) {
 }
 
 void Process::LockThreadList() const {
+    int intState = Processor::DisableInterrupts();
     spinlock_acquire(&m_threadsLock);
+    m_intState = intState;
 }
 
 void Process::UnlockThreadList() const {
+    int intState = m_intState;
     spinlock_release(&m_threadsLock);
+    Processor::EnableInterrupts(intState);
 }
 
 void Process::SwitchToThread(Thread* thread) {

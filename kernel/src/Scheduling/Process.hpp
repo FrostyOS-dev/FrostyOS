@@ -73,8 +73,10 @@ private:
     Thread* m_MainThread;
     LinkedList::RearInsertLinkedList<Thread> m_Threads;
     mutable spinlock_t m_threadsLock;
+    mutable int m_intState;
 };
 
 extern Process* g_KProcess;
+extern Process* g_KLowestPriorityProcess;
 
 #endif /* _PROCESS_HPP */
