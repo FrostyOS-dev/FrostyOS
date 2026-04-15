@@ -89,6 +89,8 @@ namespace x86_64_GlobalNMI {
     void Raise(x86_64_LAPIC* lapic, x86_64_NMIType type, void* data, uint64_t cpuCount, bool wait) {
         if (cpuCount == 0)
             cpuCount = Scheduler::GetProcessorCount() - 1; // Don't raise on current cpu
+        if (cpuCount == 0)
+            return;
         spinlock_acquire(&g_NMIData.raiseLock);
         SetData(type, data, cpuCount);
         x86_64_IPI::RaiseIPI(lapic, 0, 0, x86_64_IPI::DeliveryMode::NMI, x86_64_IPI::TriggerMode::Edge, x86_64_IPI::DestMode::Physical, x86_64_IPI::DestShort::AllExcSelf);
