@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 #include <spinlock.h>
+
+#include <Scheduling/Mutex.hpp>
 
 #include "MemoryMap.hpp"
 
@@ -57,7 +59,7 @@ private:
     uint64_t m_usedPageCount;
     uint64_t m_totalPageCount;
 
-    spinlock_t m_Lock;
+    Mutex m_lock;
 };
 
 extern PMM* g_PMM;
