@@ -8,8 +8,10 @@ depend/
 dist/
 iso/
 bin/
+test/
 
 # Files
 compile_commands.json
 .clangd
 limine.h
+dump
