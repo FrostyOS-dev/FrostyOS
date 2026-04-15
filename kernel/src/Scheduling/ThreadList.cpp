@@ -31,11 +31,13 @@ void ThreadList::pushBack(Thread* thread) {
         m_Head = thread;
         m_Tail = thread;
         m_Count++;
+        thread->GetThreadListData() = {nullptr, nullptr};
         return;
     }
 
     m_Tail->GetThreadListData().next = thread;
     thread->GetThreadListData().previous = m_Tail;
+    thread->GetThreadListData().next = nullptr;
     m_Tail = thread;
     m_Count++;
 }
@@ -51,6 +53,7 @@ Thread* ThreadList::popFront() {
     else
         m_Tail = nullptr;
     m_Count--;
+    temp->GetThreadListData() = {nullptr, nullptr};
     return temp;
 }
 
@@ -65,6 +68,7 @@ void ThreadList::remove(Thread* thread) {
     else
         m_Tail = thread->GetThreadListData().previous;
 
+    thread->GetThreadListData() = {nullptr, nullptr};
     m_Count--;
 }
 
