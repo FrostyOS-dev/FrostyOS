@@ -72,3 +72,7 @@ void TTYBackend::Unlock() const {
     spinlock_release(&m_lock);
     Processor::EnableInterrupts(intState);
 }
+
+void TTYBackend::ForceUnlock() const {
+    spinlock_release(&m_lock);
+}

@@ -87,3 +87,10 @@ void TTY::Unlock(TTYBackendStream stream) const {
     if (m_backends[(uint64_t)stream] != nullptr)
         m_backends[(uint64_t)stream]->Unlock();
 }
+
+void TTY::ForceUnlockAll() const {
+    for (int i = 0; i < 4; i++) {
+        if (m_backends[i] != nullptr)
+            m_backends[i]->ForceUnlock();
+    }
+}

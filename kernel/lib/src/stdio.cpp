@@ -130,10 +130,8 @@ void internal_unlock(const fd_t file) {
 }
 
 void stdio_force_unlock() {
-    internal_unlock(stdin);
-    internal_unlock(stdout);
-    internal_unlock(stderr);
-    internal_unlock(stddebug);
+    if (g_CurrentTTY != nullptr)
+        g_CurrentTTY->ForceUnlockAll();
 }
 
 void internal_fputc(const fd_t file, const char c, bool swap, bool lock) {

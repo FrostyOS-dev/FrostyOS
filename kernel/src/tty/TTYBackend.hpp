@@ -55,6 +55,7 @@ public:
 
     void Lock() const;
     void Unlock() const;
+    void ForceUnlock() const; // Essentially just unlock without restoring interrupt state
 
 private:
     TTYBackendType m_type;

@@ -44,6 +44,7 @@ public:
 
     void Lock(TTYBackendStream stream) const;
     void Unlock(TTYBackendStream stream) const;
+    void ForceUnlockAll() const;
 
 private:
     TTYBackend* m_backends[4];
