@@ -22,6 +22,10 @@ include(${CMAKE_SOURCE_DIR}/build-scripts/utils.cmake)
 add_custom_target(build_boot
 	COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/dist/boot/EFI/BOOT
 	COMMAND ${CMAKE_COMMAND} -DROOT_SOURCE_DIR=${CMAKE_SOURCE_DIR} -P ${CMAKE_SOURCE_DIR}/build-scripts/download_boot_files.cmake
+	COMMAND ${CMAKE_COMMAND} -E tar xJ ${CMAKE_BINARY_DIR}/limine-binary.tar.xz
+	COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/limine-binary/BOOTX64.EFI ${CMAKE_SOURCE_DIR}/dist/boot/EFI/BOOT/
+	COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/limine-binary
+	BYPRODUCTS ${CMAKE_BINARY_DIR}/limine-binary.tar.xz ${CMAKE_SOURCE_DIR}/dist/boot/EFI/BOOT/BOOTX64.EFI ${CMAKE_SOURCE_DIR}/dist/boot/limine.conf ${CMAKE_SOURCE_DIR}/dist/boot/EFI/BOOT ${CMAKE_SOURCE_DIR}/dist/boot/EFI
 )
 
 add_dependencies(build_boot install_kernel)
@@ -66,7 +70,7 @@ if (UNIX)
 		# COMMAND mcopy -i ${CMAKE_SOURCE_DIR}/iso/fat.img ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/ksymbols.map ::/FrostyOS
 		COMMAND mcopy -i ${CMAKE_SOURCE_DIR}/iso/fat.img ${CMAKE_SOURCE_DIR}/dist/boot/limine.conf ::
 		COMMAND ${CMAKE_SOURCE_DIR}/depend/tools/bin/mkgpt -o ${CMAKE_SOURCE_DIR}/iso/hdimage.bin --image-size 24576 --part ${CMAKE_SOURCE_DIR}/iso/fat.img --type system
-		BYPRODUCTS ${CMAKE_SOURCE_DIR}/iso/hdimage.bin ${CMAKE_SOURCE_DIR}/iso/fat.img
+		BYPRODUCTS ${CMAKE_SOURCE_DIR}/iso/hdimage.bin ${CMAKE_SOURCE_DIR}/iso/fat.img ${CMAKE_SOURCE_DIR}/iso
 	)
 endif()
 
@@ -74,18 +78,18 @@ add_dependencies(build_iso build_boot build_mkgpt update_ovmf)
 
 if(FROSTYOS_BUILD_CONFIG STREQUAL "Debug")
 	add_custom_target(run-qemu
-		COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/hdimage.bin,index=0,media=disk -m 1G -debugcon file:/dev/stdout -monitor stdio -M q35 -cpu qemu64 -s -M smm=off -no-reboot -no-shutdown -d int -D qemu_log.txt
+		COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.4m.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/hdimage.bin,index=0,media=disk -m 16G -debugcon file:/dev/stdout -monitor stdio -machine accel=kvm -M q35 -cpu qemu64
 		USES_TERMINAL
 	)
 else()
 	if(FROSTYOS_BUILD_CONFIG STREQUAL "Release")
 		add_custom_target(run-qemu
-			COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/hdimage.bin,index=0,media=disk -m 256M -machine accel=kvm -M q35 -cpu qemu64
+			COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.4m.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/hdimage.bin,index=0,media=disk -m 256M -machine accel=kvm -M q35 -cpu qemu64
 			USES_TERMINAL
 		)
 	else() # Default is Debug
 		add_custom_target(run-qemu
-			COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/hdimage.bin,index=0,media=disk -m 256M -debugcon file:/dev/stdout -monitor stdio -machine accel=kvm -M q35 -cpu qemu64
+			COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.4m.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/hdimage.bin,index=0,media=disk -m 256M -debugcon file:/dev/stdout -monitor stdio -machine accel=kvm -M q35 -cpu qemu64
 			USES_TERMINAL
 		)
 	endif()

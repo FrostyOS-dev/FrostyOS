@@ -233,6 +233,7 @@ if (FROSTYOS_BUILD_TARGET STREQUAL "kernel")
     add_custom_target(install_kernel
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS
         COMMAND ${CMAKE_STRIP} --strip-debug $<TARGET_FILE:kernel> -o ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/kernel.elf
+        BYPRODUCTS ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/kernel.elf ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS ${CMAKE_SOURCE_DIR}/dist/boot ${CMAKE_SOURCE_DIR}/dist
     )
 
 endif()
