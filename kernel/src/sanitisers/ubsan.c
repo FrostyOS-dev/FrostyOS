@@ -20,9 +20,11 @@
 // Taken from Sortix kernel, modified for use in FrostyOS
 
 #include <stdint.h>
-#include <stdio.h>
 
 #include "sanitisers.h"
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 
 #ifdef __is_sortix_libk
 #include <libk.h>
@@ -404,3 +406,5 @@ void __ubsan_handle_cfi_bad_icall(void* data_raw,
 }
 
 ABORT_VARIANT_VP_VP(cfi_bad_icall);
+
+#pragma GCC diagnostic pop
