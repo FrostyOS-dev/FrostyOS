@@ -61,8 +61,7 @@ namespace x86_64_GlobalNMI {
             memcpy(&g_NMIData.invPagesData, data, sizeof(x86_64_NMI_InvPagesData));
             break;
         case x86_64_NMIType::YIELD:
-            assert(false);
-            g_NMIData.yieldData = *static_cast<bool*>(data);
+            PANIC("Yield NMIs are unsupported");
             break;
         default:
             break;
@@ -160,8 +159,7 @@ namespace x86_64_LocalNMI { // for NMIs on a specific CPU
             memcpy(&NMIData->invPagesData, data, sizeof(x86_64_NMI_InvPagesData));
             break;
         case x86_64_NMIType::YIELD:
-            assert(false);
-            NMIData->yieldData = *static_cast<bool*>(data);
+            PANIC("Yield NMIs are unsupported");
             break;
         default:
             break;
@@ -202,11 +200,9 @@ bool x86_64_HandleNMI(x86_64_ISR_Frame* frame) {
                     g_NMIData.maxCPUCount = 0;
                 }
                 spinlock_release(&g_NMIData.lock);
-                dbgputc('H');
                 while (true)
                     __asm__ volatile ("hlt");
             }
-            dbgputc('h');
             x86_64_CreateHaltISRFrame(frame);
             break;
         }
@@ -214,8 +210,7 @@ bool x86_64_HandleNMI(x86_64_ISR_Frame* frame) {
             x86_64_InvalidatePages(g_NMIData.invPagesData.start, g_NMIData.invPagesData.pageCount * PAGE_SIZE);
             break;
         case x86_64_NMIType::YIELD: {
-            assert(false);
-            Scheduler::Yield(g_NMIData.yieldData, frame);
+            PANIC("Yield NMIs are unsupported");
             break;
         }
         }
@@ -249,7 +244,7 @@ bool x86_64_HandleNMI(x86_64_ISR_Frame* frame) {
                     x86_64_InvalidatePages(data->invPagesData.start, data->invPagesData.pageCount * PAGE_SIZE);
                     break;
                 case x86_64_NMIType::YIELD:
-                    Scheduler::Yield(data->yieldData, frame);
+                    Scheduler::Yield(nullptr, data->yieldData, frame);
                     break;
                 }
                 __atomic_store_n(&data->handled, 1, __ATOMIC_SEQ_CST);
@@ -257,6 +252,5 @@ bool x86_64_HandleNMI(x86_64_ISR_Frame* frame) {
             spinlock_release(&data->lock);
         }
     }
-    debug_putc('n');
     return status;
 }

@@ -120,7 +120,6 @@ void __ubsan_handle_type_mismatch_v1(void* data_raw,
 		violation = "null pointer access";
 	else if ( data->alignment && (pointer & (data->alignment - 1)) )
 		violation = "unaligned access";
-	dbgprintf("type mismatch: pointer = %p\n", pointer);
 	ubsan_abort(&data->location, violation);
 }
 
