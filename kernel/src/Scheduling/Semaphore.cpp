@@ -30,18 +30,19 @@ Semaphore::Semaphore(uint64_t value, uint64_t maxValue) : m_value(value), m_maxV
 }
 
 Semaphore::~Semaphore() {
-
+    spinlock_acquire(&m_lock);
+    while (m_waitingThreads.getCount() > 0) {
+        Thread* thread = m_waitingThreads.popFront();
+        assert(thread != nullptr);
+        thread->yieldCallback = {};
+        assert(Scheduler::AddExistingThread(thread));
+    }
+    spinlock_release(&m_lock);
 }
 
 void Semaphore::Wait() {
     int intState = Processor::DisableInterrupts();
-    Scheduler::ProcessorState* state = GetCurrentProcessorState();
-    if (state == nullptr || state->processor == nullptr) {
-        Processor::EnableInterrupts(intState);
-        return;
-    }
     spinlock_acquire(&m_lock);
-    dbgprintf("waiting semaphore on CPU %lu, thread %ld, m_value = %lx\n", state->id, state->currentThread == nullptr ? -1 : state->currentThread->GetTID(), m_value);
     if (m_value > 0) { // fast path: value is already > 0
         m_value--;
         spinlock_release(&m_lock);
@@ -49,10 +50,13 @@ void Semaphore::Wait() {
         return;
     }
     while (true) {
-        if (Scheduler::isRunning() && state->currentThread != nullptr) {
-            Thread* thread = Scheduler::RemoveCurrentThread();
+        Scheduler::ProcessorState* state = GetCurrentProcessorState();
+        if (Scheduler::isRunning() && state != nullptr && state->processor != nullptr && state->currentThread != nullptr) {
+            Thread* thread = Scheduler::RemoveCurrentThread(true);
             assert(thread != nullptr);
-            m_waitingThreads.pushBack(thread); // go to the back of the queue
+            thread->sleepRemainingTime = 0;
+            thread->yieldCallback = {};
+            m_waitingThreads.pushBack(thread); // queue waiter before yielding to avoid lost wakeups
             spinlock_release(&m_lock);
             Scheduler_SaveAndYield(thread);
             spinlock_acquire(&m_lock);
@@ -72,17 +76,13 @@ void Semaphore::Wait() {
 
 void Semaphore::Signal() {
     int intState = Processor::DisableInterrupts();
-    Scheduler::ProcessorState* state = GetCurrentProcessorState();
-    if (state == nullptr || state->processor == nullptr) {
-        Processor::EnableInterrupts(intState);
-        return;
-    }
-    dbgprintf("signalling semaphore on CPU %lu, thread %ld\n", state->id, state->currentThread == nullptr ? -1 : state->currentThread->GetTID());
     spinlock_acquire(&m_lock);
     if (m_value < m_maxValue) {
         m_value++;
         if (Scheduler::isRunning() && m_waitingThreads.getCount() > 0) {
             Thread* thread = m_waitingThreads.popFront();
+            thread->yieldCallback = {};
+            thread->sleepRemainingTime = 0;
             assert(Scheduler::AddExistingThread(thread));
         }
     }

@@ -19,7 +19,9 @@ extern x86_64_WriteMSR
 extern Scheduler_YieldAfterSave
 
 global x86_64_KernelSwitchTask
+global x86_64_SwitchTask
 global x86_64_SwapStack
+global x86_64_SwapStackWithReturn
 global x86_64_Halt
 global Scheduler_SaveAndYield
 
@@ -64,12 +66,65 @@ x86_64_KernelSwitchTask:
     ; return into new code
     ret
 
+x86_64_SwitchTask:
+    cli ; interrupts must be disabled
+
+    ; as many GPRs as possible
+    mov rbx, QWORD [rdi+0x08] ; skip rax
+    mov rcx, QWORD [rdi+0x10]
+    mov rdx, QWORD [rdi+0x18]
+    mov rsi, QWORD [rdi+0x20]
+    mov rbp, QWORD [rdi+0x38] ; skip rdi and rsp
+    mov r8,  QWORD [rdi+0x40]
+    mov r9,  QWORD [rdi+0x48]
+    mov r10, QWORD [rdi+0x50]
+    mov r11, QWORD [rdi+0x58]
+    mov r12, QWORD [rdi+0x60]
+    mov r13, QWORD [rdi+0x68]
+    mov r14, QWORD [rdi+0x70]
+    mov r15, QWORD [rdi+0x78]
+
+    ; CR3
+    mov rax, QWORD [rdi+0x90]
+    mov cr3, rax
+
+    movzx rax, WORD [rdi+0x9A]
+    push rax ; SS
+
+    push QWORD [rdi+0x30] ; RSP
+    push QWORD [rdi+0x88] ; RFLAGS
+
+    movzx rax, WORD [rdi+0x98]
+    push rax ; CS
+
+    push QWORD [rdi+0x80] ; RIP
+
+    ; RAX+RDI
+    mov rax, QWORD [rdi]
+    mov rdi, QWORD [rdi+0x28]
+
+    iretq ; return into new code
+
 x86_64_SwapStack:
     mov rsp, rdx
     mov rax, rdi
     mov rdi, rsi
     push 0
     jmp rax
+
+x86_64_SwapStackWithReturn:
+    push rbp
+    mov rbp, rsp ; also saves old stack
+
+    mov rsp, rcx
+    mov rax, rdi
+    mov rdi, rsi
+    mov rsi, rdx
+    call rax
+
+    mov rsp, rbp ; restore old stack
+    pop rbp
+    ret
 
 x86_64_Halt:
     cli

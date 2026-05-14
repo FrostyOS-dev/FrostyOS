@@ -24,6 +24,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Scheduling/Scheduler.hpp>
 
+#ifdef __x86_64__
+#include <arch/x86_64/Processor.hpp>
+
+#include <arch/x86_64/interrupts/APIC/LocalAPIC.hpp>
+#endif
+
 uint64_t g_HALTimerTicks = 0; // in ms
 bool g_HALTimeReady = false;
 
@@ -35,7 +41,21 @@ void HAL_InitTime() {
 void HAL_TimerTick(Processor* proc, uint64_t ticks, void *data) {
     if (proc->isBSP())
         g_HALTimerTicks += ticks;
-    Scheduler::TimerTick(ticks, data);
+    Scheduler_PrepForTimerTick(ticks, data);
+}
+
+void HAL_EndTimerTick() {
+#ifdef __x86_64__
+
+    x86_64_Processor* proc = static_cast<x86_64_Processor*>(GetCurrentProcessor());
+    if (proc == nullptr)
+        return;
+
+    x86_64_LAPIC* lapic = proc->GetLAPIC();
+    if (lapic != nullptr)
+        lapic->SendEOI();
+
+#endif
 }
 
 uint64_t HAL_GetTicks() {
@@ -46,6 +66,13 @@ uint64_t HAL_GetNSTicks() {
     if (g_HPET != nullptr)
         return g_HPET->GetNSTicks();
     return g_HALTimerTicks * 1'000'000;
+}
+
+void HAL_Sleep(uint64_t ms) {
+    if (Scheduler::isRunning())
+        Scheduler::SleepCurrentThread(ms);
+    else
+        HAL_SleepNS(ms * 1'000'00);
 }
 
 void HAL_SleepNS(uint64_t ns) {

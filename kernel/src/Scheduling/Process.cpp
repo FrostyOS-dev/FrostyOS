@@ -18,13 +18,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Process.hpp"
 #include "Scheduler.hpp"
 #include "Thread.hpp"
+#include "ThreadList.hpp"
 
 #include <stdint.h>
 #include <spinlock.h>
 
 #include <DataStructures/LinkedList.hpp>
 
-Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), m_VMM(vmm), m_Nice(nice), m_PID(UINT64_MAX), m_PPID(UINT64_MAX), m_nextTID(0), m_MainThread(nullptr), m_Threads(), m_threadsLock(SPINLOCK_DEFAULT_VALUE), m_intState(-1) {
+Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), m_VMM(vmm), m_Nice(nice), m_PID(UINT64_MAX), m_PPID(UINT64_MAX), m_nextTID(0), m_MainThread(nullptr), m_Threads() {
 
 }
 
@@ -35,12 +36,12 @@ Process::~Process() {
 bool Process::Start() {
     Scheduler::AddProcess(this);
     Scheduler::ScheduleThread(m_MainThread);
-    LockThreadList();
-    m_Threads.Enumerate([](Thread* thread, void*) -> bool {
+    m_Threads.lock();
+    m_Threads.Enumerate([](Thread* thread, void*) -> ThreadList::IteratorDecision {
         Scheduler::ScheduleThread(thread);
-        return true;
+        return ThreadList::IteratorDecision::Continue;
     }, nullptr);
-    UnlockThreadList();
+    m_Threads.unlock();
     return true;
 }
 
@@ -59,10 +60,10 @@ Thread* Process::GetMainThread() const {
 }
 
 uint64_t Process::AddThread(Thread* thread) {
-    LockThreadList();
+    m_Threads.lock();
     thread->SetTID(m_nextTID++);
-    m_Threads.insert(thread);
-    UnlockThreadList();
+    m_Threads.pushBack(thread);
+    m_Threads.unlock();
     return thread->GetTID();
 }
 
@@ -75,16 +76,16 @@ Thread* Process::GetThread(uint64_t tid) const {
         uint64_t tid;
     } data = {nullptr, tid};
 
-    LockThreadList();
-    m_Threads.Enumerate([](Thread* t, void* data) -> bool {
+    m_Threads.lock();
+    m_Threads.EnumerateConst([](Thread* t, void* data) -> ThreadList::IteratorDecision {
         Data* d = (Data*)data;
         if (t->GetTID() == d->tid) {
             d->thread = t;
-            return false;
+            return ThreadList::IteratorDecision::Break;
         }
-        return true;
+        return ThreadList::IteratorDecision::Continue;
     }, nullptr);
-    UnlockThreadList();
+    m_Threads.unlock();
 
     return data.thread;
 }
@@ -94,27 +95,24 @@ void Process::RemoveThread(uint64_t tid, bool lock) {
         return; // Main thread
 
     if (lock)
-        LockThreadList();
-    m_Threads.EnumerateDelete([](Thread* thread, void* data, uint64_t) -> LinkedList::IteratorDecision {
+        m_Threads.lock();
+    m_Threads.Enumerate([](Thread* thread, void* data) -> ThreadList::IteratorDecision {
         uint64_t* tid = static_cast<uint64_t*>(data);
         if (thread->GetTID() == *tid)
-            return LinkedList::IteratorDecision::DELETE_BREAK;
-        return LinkedList::IteratorDecision::CONTINUE;
+            return ThreadList::IteratorDecision::Delete_Break;
+        return ThreadList::IteratorDecision::Continue;
     }, &tid);
     if (lock)
-        UnlockThreadList();
+        m_Threads.unlock();
 }
 
-void Process::LockThreadList() const {
-    int intState = Processor::DisableInterrupts();
-    spinlock_acquire(&m_threadsLock);
-    m_intState = intState;
-}
+void Process::RemoveThread(Thread* thread) {
+    if (thread == nullptr)
+        return;
 
-void Process::UnlockThreadList() const {
-    int intState = m_intState;
-    spinlock_release(&m_threadsLock);
-    Processor::EnableInterrupts(intState);
+    m_Threads.lock();
+    m_Threads.remove(thread);
+    m_Threads.unlock();
 }
 
 void Process::SwitchToThread(Thread* thread) {
@@ -154,4 +152,3 @@ VMM::VMM* Process::GetVMM() const {
 }
 
 Process* g_KProcess = nullptr;
-Process* g_KLowestPriorityProcess = nullptr;

@@ -27,11 +27,17 @@ class Thread;
 extern "C" {
 
 // Switch kernel task. Does not save anything or return to the caller.
-[[noreturn]] void x86_64_KernelSwitchTask(const struct x86_64_Registers* regs);
+[[noreturn]] void x86_64_KernelSwitchTask(const x86_64_Registers* regs);
+
+// generic task switching, uses iret
+[[noreturn]] void x86_64_SwitchTask(const x86_64_Registers* regs);
 
 [[noreturn]] void x86_64_SwapStack(void (*func)(void*), void* data, void* stack);
 
 [[noreturn]] void x86_64_Halt();
+
+// Similar to x86_64_SwapStack except returning is supported. Restores the original stack.
+void x86_64_SwapStackWithReturn(void (*func)(uint64_t, void*), uint64_t a, void* b, void* stack);
 
 }
 

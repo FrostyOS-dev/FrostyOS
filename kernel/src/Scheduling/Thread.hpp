@@ -44,6 +44,11 @@ public:
         spinlock_t lock;
     };
 
+    struct YieldCallback {
+        void (*func)(Thread*, void*);
+        void* data;
+    };
+
     Thread();
     Thread(ThreadEntryPoint entryPoint, Process* parent = nullptr, uint64_t tid = UINT64_MAX);
     ~Thread();
@@ -77,13 +82,26 @@ public:
     void SetThreadListData(ThreadListItemInternalData& data);
     ThreadListItemInternalData& GetThreadListData();
 
+    void SetProcThreadListData(ThreadListItemInternalData& data);
+    ThreadListItemInternalData& GetProcThreadListData();
+
     void SetTimeRemaining(uint64_t timeRemaining);
     uint64_t GetTimeRemaining() const;
 
     CPUInfo* GetCPUInfo();
 
+    void SetInSchedList(bool inList);
+    bool IsInSchedList() const;
+
+    void SetInProcList(bool inList);
+    bool IsInProcList() const;
+
     void SetDeleteProp(bool deleteSelf);
     bool ShouldDelete() const;
+    int64_t GetIntState() const;
+
+    uint64_t sleepRemainingTime;
+    YieldCallback yieldCallback;
 
 private:
     ThreadEntryPoint m_EntryPoint;
@@ -93,11 +111,17 @@ private:
     uint64_t m_Stack;
     uint64_t m_KernelStack;
     ThreadListItemInternalData m_ThreadListData;
+    ThreadListItemInternalData m_ProcThreadListData;
     uint64_t m_TimeRemaining;
     CPUInfo m_CPUInfo;
 
+    bool m_InSchedList;
+    bool m_InProcList;
+    bool m_IsSleeping;
+
     struct {
         bool deleteThis;
+        int64_t intState;
     } m_deleteProp;
 };
 

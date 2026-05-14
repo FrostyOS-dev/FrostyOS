@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Scheduler.hpp"
 #include "Semaphore.hpp"
 #include "Thread.hpp"
+#include "ThreadList.hpp"
 
 #include <spinlock.h>
 #include <string.h>
@@ -30,6 +31,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <HAL/HAL.hpp>
 #include <HAL/Processor.hpp>
+#include <HAL/Time.hpp>
 
 #ifdef __x86_64__
 #include <arch/x86_64/Memory/PagingInit.hpp>
@@ -37,6 +39,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <arch/x86_64/Scheduling/Task.hpp>
 #include <arch/x86_64/Scheduling/TaskUtil.hpp>
 #endif
+
+#define MAX_RUN_COUNT 2
 
 namespace Scheduler {
 
@@ -47,6 +51,7 @@ namespace Scheduler {
     spinlock_t g_PIDLock;
     uint64_t g_isRunning = 0;
     spinlock_t g_ProcessorsLock = SPINLOCK_DEFAULT_VALUE;
+    spinlock_t g_StealLock = SPINLOCK_DEFAULT_VALUE;
     uint64_t g_processorCount = 1;
 
     ThreadList g_deadThreads;
@@ -54,24 +59,12 @@ namespace Scheduler {
 
     // private functions
 
-    [[noreturn]] void RunThread(Thread* thread) {
-        dbgprintf("Running thread %lu on CPU %lu, new RIP = %lx\n", thread->GetTID(), GetCurrentProcessorState()->id, thread->GetRegisters().RIP);
+    [[noreturn]] void RunThread(Thread* thread, bool interrupt) {
 #ifdef __x86_64__
-        x86_64_KernelSwitchTask(&(thread->GetRegisters()));
-#endif
-    }
-
-    void RunThreadOnINTReturn(Thread* thread, Thread* oldThread, void* data) {
-        if (GetCurrentProcessorState()->isIdle == 0)
-            dbgprintf("Running int thread %lu on CPU %lu. new RIP = %lx", thread->GetTID(), GetCurrentProcessorState()->id, thread->GetRegisters().RIP);
-#ifdef __x86_64__
-        if (oldThread != nullptr) {
-            x86_64_CopyFromISRFrame((x86_64_ISR_Frame*)data, &(oldThread->GetMutableRegisters()));
-            dbgprintf(", old thread = %lu, RIP = %lx\n", oldThread->GetTID(), oldThread->GetRegisters().RIP);
-        }
+        if (interrupt)
+            x86_64_SwitchTask(&thread->GetRegisters());
         else
-            dbgputc('\n');
-        x86_64_CopyToISRFrame(&(thread->GetRegisters()), (x86_64_ISR_Frame*)data);
+            x86_64_KernelSwitchTask(&(thread->GetRegisters()));
 #endif
     }
 
@@ -192,6 +185,7 @@ namespace Scheduler {
             return;
 
         thread->SetTimeRemaining(DEFAULT_TIMESLICE);
+        thread->sleepRemainingTime = 0;
 
 #ifdef __x86_64__
         x86_64_SetThreadRegisters(&(thread->GetMutableRegisters()), thread->GetStack(), thread->GetEntryPoint(), process->GetMode(), from_HHDM(g_KernelRootPageTable));
@@ -200,13 +194,11 @@ namespace Scheduler {
         if (state == nullptr)
             state = GetCurrentProcessorState();
 
-        spinlock_acquire(&thread->GetCPUInfo()->lock);
-        thread->GetCPUInfo()->state = state;
-        // dbgprintf("Assigning new thread %lu to proc %lu (current = %lu)\n", thread->GetTID(), state->id, GetCurrentProcessorState()->id);
-        spinlock_release(&thread->GetCPUInfo()->lock);
-
         ThreadList& list = state->threads[nice];
         list.lock();
+        spinlock_acquire(&thread->GetCPUInfo()->lock);
+        thread->GetCPUInfo()->state = state;
+        spinlock_release(&thread->GetCPUInfo()->lock);
         list.pushBack(thread);
         list.unlock();
     }
@@ -225,9 +217,16 @@ namespace Scheduler {
             return false;
 
         thread->SetTimeRemaining(DEFAULT_TIMESLICE);
+        thread->sleepRemainingTime = 0;
 
         ThreadList& list = state->threads[nice];
         list.lock();
+        spinlock_acquire(&thread->GetCPUInfo()->lock);
+        thread->GetCPUInfo()->state = state;
+        spinlock_release(&thread->GetCPUInfo()->lock);
+        // Clear the thread's link pointers before adding to ensure clean state
+        ThreadListItemInternalData cleanData = {nullptr, nullptr};
+        thread->SetThreadListData(cleanData);
         list.pushBack(thread);
         list.unlock();
 
@@ -259,96 +258,12 @@ namespace Scheduler {
         spinlock_release(&state->lock);
     }
 
-    // Assumes that if state is not the current state, then the CPU is already stopped. If it is, and the thread is running, this assumes the stack is already swapped.
-    bool RemoveThreadFromState(Thread* thread, ProcessorState* state, bool stop) {
-        if (thread == state->currentThread) {
-            bool current = state == GetCurrentProcessorState();
-            if (!current && stop) {
-                if (state->processor == nullptr)
-                    PANIC("ProcessorState doesn't have a Processor!");
-                state->processor->Halt(true);
-            }
-            spinlock_acquire(&state->lock);
-            state->currentThread = nullptr;
-            if (current)
-                PickNext(false);
-            spinlock_release(&state->lock);
-            if (!current && stop)
-                state->processor->Yield(false);
-        } else if (thread == state->idleThread) {
-            spinlock_acquire(&state->lock);
-            state->idleThread = nullptr;
-            state->isIdle = 0; // should already be 0, but just to be safe
-            spinlock_release(&state->lock);
-        } else {
-            bool found = false;
-            
-            // go forwards through nice levels
-            for (int i = 0; i < NICE_LEVELS; i++) {
-                ThreadList& list = state->threads[i];
-                list.lock();
-                if (list.getCount() == 0) {
-                    list.unlock();
-                    continue;
-                }
-
-                Thread* t = list.getHead();
-                
-                for (uint64_t j = 0; j < list.getCount(); j++) {
-                    if (t == nullptr)
-                        break;
-                    if (t == thread) {
-                        list.remove(t);
-                        found = true;
-                        break;
-                    }
-                    t = t->GetThreadListData().next;
-                }
-
-                list.unlock();
-
-                if (found)
-                    break;
-            }
-
-            return found;
-        }
-        return true;
-    }
-
-    bool RemoveThread(Thread* thread, ProcessorState* state, bool stop, bool lockCPUInfo) {
-        if (state != nullptr) {
-            bool current = true;
-            if (state != GetCurrentProcessorState()) {
-                if (state->processor == nullptr)
-                    PANIC("ProcessorState doesn't have a Processor!");
-                state->processor->Halt(true);
-                current = false;
-            }
-            if (!RemoveThreadFromState(thread, state, stop))
-                return false;
-            if (!current)
-                state->processor->Yield(false);
-            return true;
-        } else {
-            Thread::CPUInfo* info = thread->GetCPUInfo();
-            if (lockCPUInfo)
-                spinlock_acquire(&info->lock);
-            state = info->state;
-            bool found = RemoveThreadFromState(thread, state, stop);
-            if (lockCPUInfo)
-                spinlock_release(&info->lock);
-            return found;
-        }
-    }
-
     Thread* RemoveCurrentThread(bool lock) {
         ProcessorState* state = GetCurrentProcessorState();
         if (lock)
             spinlock_acquire(&state->lock);
         Thread* thread = state->currentThread;
         state->currentThread = nullptr;
-        PickNext(false);
         if (lock)
             spinlock_release(&state->lock);
         return thread;
@@ -362,33 +277,65 @@ namespace Scheduler {
         return true;
     }
 
+    void SleepCurrentThread(uint64_t ms) {
+        if (ms == 0)
+            return;
+        int intState = Processor::DisableInterrupts();
+        Thread* thread = RemoveCurrentThread(true);
+        if (thread == nullptr) {
+            Processor::EnableInterrupts(intState);
+            return;
+        }
+
+        thread->sleepRemainingTime = ms;
+
+        Scheduler_SaveAndYield(thread);
+        Processor::EnableInterrupts(intState);
+    }
+
     void TimerTick(uint64_t msSinceLast, void* data) {
         ProcessorState* state = GetCurrentProcessorState();
         if (state == nullptr)
             return;
 
-        // spinlock_acquire(&(state->lock));
-
-        if (state->startAllowed == 0) {
-            // spinlock_release(&(state->lock));
+        if (state->startAllowed == 0)
             return;
-        }
+
+        state->sleepingThreads.lock();
+        state->sleepingThreads.Enumerate([](Thread* thread, void* data) -> ThreadList::IteratorDecision {
+            uint64_t msSinceLast = *static_cast<uint64_t*>(data);
+            ProcessorState* state = GetCurrentProcessorState();
+            if (msSinceLast >= thread->sleepRemainingTime) {
+                thread->sleepRemainingTime = 0;
+                state->sleepingThreads.remove(thread);
+
+                int oldNice = thread->GetParent()->GetNice();
+
+                ThreadList& list = state->threads[oldNice];
+                list.lock();
+                list.pushBack(thread);
+                list.unlock();
+            } else
+                thread->sleepRemainingTime -= msSinceLast;
+            return ThreadList::IteratorDecision::Continue;
+        }, &msSinceLast);
+        state->sleepingThreads.unlock();
 
         int oldNice = -1;
         
         Thread* oldThread = state->currentThread;
         if (oldThread != nullptr) {
-            oldThread->SetTimeRemaining(oldThread->GetTimeRemaining() - msSinceLast);
-            if (oldThread->GetTimeRemaining() > 0 && state->isIdle == 0) {
-                SaveThreadFromINT(oldThread, data);
-                // spinlock_release(&(state->lock));
+            SaveThreadFromINT(oldThread, data);
+            uint64_t timeRemaining = oldThread->GetTimeRemaining();
+            if (msSinceLast >= timeRemaining)
+                oldThread->SetTimeRemaining(0);
+            else
+                oldThread->SetTimeRemaining(timeRemaining - msSinceLast);
+            if (oldThread->GetTimeRemaining() > 0 && state->isIdle == 0)
                 return;
-            }
 
             if (state->isIdle == 0) {
                 oldNice = oldThread->GetParent()->GetNice();
-
-                // TODO: should be swapping stack here
 
                 ThreadList& list = state->threads[oldNice];
                 list.lock();
@@ -405,9 +352,8 @@ namespace Scheduler {
 
         state->currentThread->SetTimeRemaining(DEFAULT_TIMESLICE);
 
-        RunThreadOnINTReturn(state->currentThread, oldThread, data);
-
-        // spinlock_release(&(state->lock));
+        HAL_EndTimerTick();
+        RunThread(state->currentThread, true);
     }
 
     bool SaveOnInt(void *data) {
@@ -418,44 +364,68 @@ namespace Scheduler {
         return true;
     }
 
-    void Yield(bool forceSwitch, void* data) {
-        ProcessorState* state = GetCurrentProcessorState();
-        if (state == nullptr)
-            return;
+    struct YieldData {
+        void* data;
+        Thread* oldThread;
+    };
 
-        dbgprintf("Yielding on proc %lu\n", state->id);
+    void Yield_Internal(uint64_t, void*);
+
+    void Yield(Thread* oldThread, bool forceSwitch, void* data) {
+        ProcessorState* state = GetCurrentProcessorState();
+        YieldData d = {data, oldThread};
+        Processor::SwapStackWithReturn(&Yield_Internal, forceSwitch, &d, state->kernelStack);
+    }
+
+    void Yield_Internal(uint64_t forceSwitchInt, void* fullData) {
+        ProcessorState* state = GetCurrentProcessorState();
+        assert(state != nullptr);
+
+        YieldData* d = static_cast<YieldData*>(fullData);
+        bool forceSwitch = forceSwitchInt > 0;
+        Thread* oldThread = d->oldThread;
+        void* data = d->data;
+
+        __asm__ volatile ("" ::: "memory");
 
         spinlock_acquire(&state->lock);
 
-        Thread* oldThread = state->currentThread;
-        if (oldThread != nullptr && forceSwitch) {
-            int oldNice = oldThread->GetParent()->GetNice();
+        if (oldThread != nullptr) {
+            if (oldThread->sleepRemainingTime > 0) {
+                state->sleepingThreads.lock();
+                state->sleepingThreads.pushBack(oldThread);
+                state->sleepingThreads.unlock();
+            } else if (oldThread->yieldCallback.func != nullptr)
+                oldThread->yieldCallback.func(oldThread, oldThread->yieldCallback.data);
+            oldThread = nullptr;
+        } else {
+            oldThread = state->currentThread;
+            if (oldThread != nullptr && forceSwitch) {
+                if (data != nullptr)
+                    SaveThreadFromINT(oldThread, data);
 
-            ThreadList& list = state->threads[oldNice];
-            list.lock();
-            list.pushBack(oldThread);
-            list.unlock();
-            state->currentThread = nullptr;
+                int oldNice = oldThread->GetParent()->GetNice();
+                ThreadList& list = state->threads[oldNice];
+                list.lock();
+                list.pushBack(oldThread);
+                list.unlock();
+                state->currentThread = nullptr;
+            }
         }
 
         if (oldThread == nullptr || forceSwitch)
             PickNext(false);
 
         if (state->currentThread == nullptr) {
-            // No thread was selected to run; release the lock and return.
+            // No thread was selected to run; release the lock and panic.
             spinlock_release(&(state->lock));
-            return;
+            PANIC("Scheduler::Yield: Nothing to run!");
         }
 
         state->currentThread->SetTimeRemaining(DEFAULT_TIMESLICE);
 
-        if (data != nullptr) {
-            RunThreadOnINTReturn(state->currentThread, oldThread, data);
-            spinlock_release(&(state->lock));
-        } else {
-            spinlock_release(&(state->lock));
-            RunThread(state->currentThread);
-        }
+        spinlock_release(&(state->lock));
+        RunThread(state->currentThread, data != nullptr);
     }
 
     void PickNext(bool lockState) { // the actual algorithm
@@ -465,23 +435,26 @@ namespace Scheduler {
 
         Thread* thread = nullptr;
         int nice = -1;
+        int lastNice = -1;
         
         // go forwards through nice levels
         for (int i = 0; i < NICE_LEVELS; i++) {
             ThreadList& list = state->threads[i];
             list.lock();
-            if (list.getCount() == 0 || (state->runCounts[i] >= 2 && i != 0 && thread != nullptr)) {
+            if (list.getCount() == 0 || (state->runCounts[i] >= MAX_RUN_COUNT && i != 0 && thread != nullptr)) {
                 list.unlock();
                 continue;
             }
             
             if (thread != nullptr)
                 state->threads[nice].unlock();
-            else if (state->runCounts[i] >= 2)
+            else if (state->runCounts[i] >= MAX_RUN_COUNT)
                 state->runCounts[i] = 0;
             thread = list.getHead();
             nice = i;
         }
+
+        lastNice = nice;
 
         bool normal = true;
         bool idle = false;
@@ -493,7 +466,6 @@ namespace Scheduler {
                 idle = true;
             } else {
                 Thread::CPUInfo* info = thread->GetCPUInfo(); // already locked by above function
-                dbgprintf("Thread %lu moving from %lu to %lu\n", thread->GetTID(), info->state->id, state->id);
                 info->state = state;
                 spinlock_release(&info->lock);
             }
@@ -502,25 +474,20 @@ namespace Scheduler {
             normal = false;
         }
         
-        if (!idle)
+        if (!idle && nice >= 0)
             state->runCounts[nice]++;
-        if (normal) {
+        if (normal)
             state->threads[nice].popFront();
-            state->threads[nice].unlock();
-        }
+        if (lastNice >= 0)
+            state->threads[lastNice].unlock();
 
         for (int i = nice + 1; i < NICE_LEVELS; i++) {
-            if (state->runCounts[i] >= 2)
+            if (state->runCounts[i] >= MAX_RUN_COUNT)
                 state->runCounts[i] = 0;
         }
 
         if (lockState)
             spinlock_acquire(&(state->lock));
-
-        if (state->isIdle == 0 && thread == state->idleThread)
-            dbgprintf("Entering idle thread on CPU %lu\n", state->id);
-        else if (state->isIdle && thread != state->idleThread)
-            dbgprintf("Exiting idle thread on CPU %lu\n", state->id);
 
         state->isIdle = thread == state->idleThread ? 1 : 0;
 
@@ -531,28 +498,27 @@ namespace Scheduler {
     }
 
     Thread* StealThreadFromOther(ProcessorState* current, int* niceOut) {
+        spinlock_acquire(&g_StealLock);
         ProcessorState* state;
         for (state = &g_BSPState; state != nullptr; state = state->next) {
             if (state->id == current->id)
-            continue;
-        
-        spinlock_acquire(&state->lock);
-        
-        Thread* thread = nullptr;
-        int nice = -1;
+                continue;
+            
+            Thread* thread = nullptr;
+            int nice = -1;
             
             // go forwards through nice levels
             for (int i = 0; i < NICE_LEVELS; i++) {
                 ThreadList& list = state->threads[i];
                 list.lock();
-                if (list.getCount() == 0 || (current->runCounts[i] == 2 && i != 0 && thread != nullptr)) {
+                if (list.getCount() == 0 || (current->runCounts[i] >= MAX_RUN_COUNT && i != 0 && thread != nullptr)) {
                     list.unlock();
                     continue;
                 }
                 
                 if (thread != nullptr)
-                state->threads[nice].unlock();
-                else if (current->runCounts[i] == 2)
+                    state->threads[nice].unlock();
+                else if (current->runCounts[i] >= MAX_RUN_COUNT)
                     current->runCounts[i] = 0;
                 thread = list.getHead();
                 nice = i;
@@ -565,13 +531,12 @@ namespace Scheduler {
                 Thread* t2 = state->threads[nice].popFront();
                 assert(t2 == thread);
                 state->threads[nice].unlock();
-                spinlock_release(&state->lock);
-                dbgprintf("steal\n");
+                spinlock_release(&g_StealLock);
                 return thread;
-            }
-
-            spinlock_release(&state->lock);
+            } else if (nice >= 0)
+                state->threads[nice].unlock();
         }
+        spinlock_release(&g_StealLock);
         return nullptr;
     }
 
@@ -587,8 +552,7 @@ namespace Scheduler {
     }
 
     ProcessorState* InitNewProcessor(Processor* proc) {
-        ProcessorState* state = new ProcessorState;
-        memset((void*)state, 0, sizeof(ProcessorState));
+        ProcessorState* state = new ProcessorState();
         state->self = state;
         state->processor = proc;
         AddProcessor(state);
@@ -616,7 +580,7 @@ namespace Scheduler {
 
         }
 
-        RunThread(current->currentThread);
+        RunThread(current->currentThread, false);
     }
 
     void WaitForStart(ProcessorState* state) {
@@ -633,26 +597,29 @@ namespace Scheduler {
 
     [[noreturn]] void HandleDeadThreads(void*) {
         while (true) {
-            g_deadThreadsSemaphore.Wait();
-            g_deadThreads.lock();
-            for (uint64_t i = 0; i < g_deadThreads.getCount(); i++) {
-                Thread* thread = g_deadThreads.popFront();
+            Thread* thread = nullptr;
+            while (true) {
+                g_deadThreads.lock();
+                thread = g_deadThreads.popFront();
+                g_deadThreads.unlock();
+                
                 if (thread == nullptr)
-                    continue;
+                    break;
+
                 if (Process* proc = thread->GetParent(); proc != nullptr)
-                    proc->RemoveThread(thread->GetTID());
+                    proc->RemoveThread(thread);
                 thread->Delete();
                 if (thread->ShouldDelete())
                     delete thread;
             }
-            g_deadThreads.unlock();
+            g_deadThreadsSemaphore.Wait(); // nothing to delete, wait until next is ready
         }
     }
 
 } // namespace Scheduler
 
-void Scheduler_YieldAfterSave(Thread* currentThread, CPU_Registers* regs) {
+[[noreturn]] void Scheduler_YieldAfterSave(Thread* currentThread, CPU_Registers* regs) {
     memcpy(&currentThread->GetMutableRegisters(), regs, sizeof(CPU_Registers));
-    Scheduler::Yield();
+    Scheduler::Yield(currentThread);
     PANIC("Scheduler::Yield returned");
 }

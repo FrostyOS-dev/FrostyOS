@@ -29,8 +29,15 @@ struct ThreadListItemInternalData {
     Thread* next;
 };
 
-class [[gnu::packed]] ThreadList {
+class ThreadList {
 public:
+    enum class IteratorDecision {
+        Break,
+        Continue,
+        Delete_Break,
+        Delete
+    };
+
     ThreadList();
     ~ThreadList();
 
@@ -44,8 +51,16 @@ public:
 
     uint64_t getCount() const;
 
+    void Enumerate(IteratorDecision (*func)(Thread*, void*), void* data); // Deletion of the current and previous threads is allowed during the provided function.
+    void EnumerateConst(IteratorDecision (*func)(Thread*, void*), void* data) const; // Does not support deletion, will just break/continue depending on type
+
     void lock() const;
     void unlock() const;
+
+    virtual bool IsProcList() const;
+
+protected:
+    virtual ThreadListItemInternalData& GetDataFromThread(Thread* thread) const;
 
 private:
     Thread* m_Head;
@@ -53,6 +68,12 @@ private:
     uint64_t m_Count;
     mutable spinlock_t m_Lock;
     mutable int m_intState;
+};
+
+class ProcThreadList : public ThreadList {
+protected:
+    ThreadListItemInternalData& GetDataFromThread(Thread* thread) const override;
+    bool IsProcList() const override;
 };
 
 

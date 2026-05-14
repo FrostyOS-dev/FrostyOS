@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Memory/VMM.hpp>
 
 #include "Thread.hpp"
+#include "ThreadList.hpp"
 
 enum class ProcessMode {
     KERNEL,
@@ -45,9 +46,7 @@ public:
     uint64_t AddThread(Thread* thread);
     Thread* GetThread(uint64_t tid) const;
     void RemoveThread(uint64_t tid, bool lock = true);
-
-    void LockThreadList() const;
-    void UnlockThreadList() const;
+    void RemoveThread(Thread* thread);
 
     void SwitchToThread(Thread* thread);
 
@@ -71,12 +70,9 @@ private:
     uint64_t m_PPID;
     uint64_t m_nextTID;
     Thread* m_MainThread;
-    LinkedList::RearInsertLinkedList<Thread> m_Threads;
-    mutable spinlock_t m_threadsLock;
-    mutable int m_intState;
+    ProcThreadList m_Threads;
 };
 
 extern Process* g_KProcess;
-extern Process* g_KLowestPriorityProcess;
 
 #endif /* _PROCESS_HPP */

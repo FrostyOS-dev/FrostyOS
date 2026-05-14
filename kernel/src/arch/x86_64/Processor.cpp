@@ -108,7 +108,6 @@ void x86_64_Processor::Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uin
     x86_64_IRQ_EarlyInit();
     x86_64_InitPaging(HHDMOffset, memoryMap, memoryMapEntryCount, pagingMode, kernelVirtual, kernelPhysical);
     g_KProcess->SetVMM(VMM::g_KVMM);
-    g_KLowestPriorityProcess->SetVMM(VMM::g_KVMM);
 
     uint64_t kernelStack = (uint64_t)VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::Protection::READ_WRITE, true) + KERNEL_STACK_SIZE;
     Scheduler::g_BSPState.kernelStack = (void*)kernelStack;
@@ -163,7 +162,7 @@ void x86_64_Processor::Halt(bool wait) {
 void x86_64_Processor::Yield(bool forceSwitch) {
     x86_64_Processor* proc = static_cast<x86_64_Processor*>(GetCurrentProcessor());
     if (this == proc)
-        Scheduler::Yield(forceSwitch, nullptr);
+        Scheduler::Yield(nullptr, forceSwitch, nullptr);
 
     x86_64_LocalNMI::Raise(proc, this, x86_64_NMIType::YIELD, &forceSwitch, true);
 }
@@ -281,14 +280,12 @@ const x86_64_CPUInfo* x86_64_Processor::GetCPUInfo() const {
 int Processor::DisableInterrupts() {
     int64_t state = 0;
     __asm__ volatile ("pushf; pop %0; cli;" : "=r"(state));
-    return state;
+    return state & (1 << 9);
 }
 
 void Processor::EnableInterrupts(int state) {
-    if (state == -1 || (state & (1 << 9)) > 0) {
-        dbgprintf("Enabling interrupts (state = %u)\n", state);
+    if (state == -1 || (state & (1 << 9)) > 0)
         x86_64_EnableInterrupts();
-    }
 }
 
 void Processor::SwapStack(void (*func)(void*), void* data, void* stack) {
@@ -296,6 +293,13 @@ void Processor::SwapStack(void (*func)(void*), void* data, void* stack) {
         return;
     x86_64_SwapStack(func, data, stack);
 }
+
+void Processor::SwapStackWithReturn(void (*func)(uint64_t, void*), uint64_t a, void* b, void* stack) {
+    if (func == nullptr || stack == nullptr)
+        return;
+    x86_64_SwapStackWithReturn(func, a, b, stack);
+}
+
 
 
 void x86_64_AP_Init(x86_64_Processor* proc, uint64_t stackTop) {

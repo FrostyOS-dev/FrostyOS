@@ -55,8 +55,7 @@ TTYBackendVGA g_KVGABackend;
 TTY g_KTTY;
 
 Process KProcess(ProcessMode::KERNEL, nullptr, NICE_LEVELS - 1);
-Process KLowestPriProc(ProcessMode::KERNEL, nullptr, 0);
-Thread KThread;
+Thread KDeadThreadHandler;
 
 FrameBuffer g_KFramebuffer;
 
@@ -84,25 +83,23 @@ void StartKernel() {
     g_CurrentTTY = &g_KTTY;
 
     g_KProcess = &KProcess;
-    g_KLowestPriorityProcess = &KLowestPriProc;
 
     HAL_EarlyInit(g_kernelParams.HHDMStart, g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.pagingMode, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical, g_kernelParams.RSDP);
 
     memcpy(&g_KFramebuffer, &g_kernelParams.framebuffer, sizeof(FrameBuffer));
-    // g_KFramebuffer.BaseAddress = VMM::g_KVMM->AllocatePages(DIV_ROUNDUP(g_KFramebuffer.pitch * g_KFramebuffer.height, PAGE_SIZE), VMM::Protection::READ_WRITE, true);
-    // g_KVGA.EnableDoubleBuffering(&g_KFramebuffer);
+    g_KFramebuffer.BaseAddress = VMM::g_KVMM->AllocatePages(DIV_ROUNDUP(g_KFramebuffer.pitch * g_KFramebuffer.height, PAGE_SIZE), VMM::Protection::READ_WRITE, true);
+    g_KVGA.EnableDoubleBuffering(&g_KFramebuffer);
 
     if (!KProcess.CreateMainThread({Kernel_Stage2, nullptr}))
         PANIC("Failed to create kernel stage 2 main thread");
 
+    if (!KDeadThreadHandler.Init({Scheduler::HandleDeadThreads, nullptr}, g_KProcess))
+        PANIC("Failed to init deleted thread handler thread");
+
+    KProcess.AddThread(&KDeadThreadHandler);
+
     if (!KProcess.Start())
         PANIC("Failed to start kernel stage 2");
-
-    if (!KLowestPriProc.CreateMainThread({Scheduler::HandleDeadThreads, nullptr}))
-        PANIC("Failed to create cleanup thread");
-
-    if (!KLowestPriProc.Start())
-        PANIC("Failed to start cleanup thread");
 
     Scheduler::Start();
 
@@ -116,8 +113,6 @@ void Kernel_Stage2(void*) {
     dbgputs("Starting FrostyOS\n");
 
     HAL_Stage2();
-
-    PerformFireworksTest();
 
     while (true) {
         __asm__ volatile("hlt");

@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Process.hpp"
 #include "Scheduler.hpp"
 #include "Thread.hpp"
+#include "ThreadList.hpp"
 
 #include <spinlock.h>
 #include <string.h>
@@ -25,12 +26,20 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Memory/VMM.hpp>
 
-Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_deleteProp(false) {
+Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, -1) {
+    sleepRemainingTime = 0;
+    yieldCallback = {nullptr, nullptr};
+    m_InSchedList = false;
+    m_InProcList = false;
 
 }
 
-Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_deleteProp(false) {
+Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, -1) {
+    sleepRemainingTime = 0;
+    yieldCallback = {nullptr, nullptr};
 
+    m_InSchedList = false;
+    m_InProcList = false;
 }
 
 Thread::~Thread() {
@@ -72,11 +81,13 @@ bool Thread::Delete() {
 }
 
 bool Thread::ExitCurrentThread(bool deleteThis) {
-    Processor::DisableInterrupts();
+    int exitIntState = Processor::DisableInterrupts();
     Thread* thread = Scheduler::RemoveCurrentThread(true);
     if (thread == nullptr)
         return false;
-    thread->m_deleteProp.deleteThis = deleteThis;
+    // Clear any pending yield callback to prevent use-after-free when thread is deleted
+    thread->yieldCallback = {};
+    thread->m_deleteProp = {deleteThis, exitIntState};
     Scheduler::ProcessorState* state = GetCurrentProcessorState();
     Processor::SwapStack(Thread_ExitHelper, thread, state->kernelStack);
     return false;
@@ -162,8 +173,32 @@ void Thread::SetThreadListData(ThreadListItemInternalData& data) {
     m_ThreadListData = data;
 }
 
+void Thread::SetInSchedList(bool inList) {
+    m_InSchedList = inList;
+}
+
+bool Thread::IsInSchedList() const {
+    return m_InSchedList;
+}
+
+void Thread::SetInProcList(bool inList) {
+    m_InProcList = inList;
+}
+
+bool Thread::IsInProcList() const {
+    return m_InProcList;
+}
+
 ThreadListItemInternalData& Thread::GetThreadListData() {
     return m_ThreadListData;
+}
+
+void Thread::SetProcThreadListData(ThreadListItemInternalData& data) {
+    m_ProcThreadListData = data;
+}
+
+ThreadListItemInternalData& Thread::GetProcThreadListData() {
+    return m_ProcThreadListData;
 }
 
 void Thread::SetTimeRemaining(uint64_t timeRemaining) {
@@ -184,6 +219,10 @@ void Thread::SetDeleteProp(bool deleteSelf) {
 
 bool Thread::ShouldDelete() const {
     return m_deleteProp.deleteThis;
+}
+
+int64_t Thread::GetIntState() const {
+    return m_deleteProp.intState;
 }
 
 [[noreturn]] void Thread_ExitHelper(void* data) {

@@ -27,6 +27,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Memory/PagingUtil.hpp>
 
+#include <Scheduling/Scheduler.hpp>
+
 void x86_64_CopyToISRFrame(const x86_64_Registers* regs, x86_64_ISR_Frame* frame) {
     frame->RAX = regs->RAX;
     frame->RBX = regs->RBX;
@@ -123,4 +125,9 @@ namespace Scheduler {
         while (true)
             __asm__ volatile("hlt");
     }
+}
+
+extern "C" void Scheduler_PrepForTimerTick(uint64_t msSinceLast, void* data) {
+    Scheduler::ProcessorState* state = GetCurrentProcessorState();
+    x86_64_SwapStackWithReturn(&Scheduler::TimerTick, msSinceLast, data, state->kernelStack);
 }

@@ -18,6 +18,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "ThreadList.hpp"
 #include "Thread.hpp"
 
+#include <spinlock.h>
+#include <stdint.h>
+
 #include <HAL/Processor.hpp>
 
 ThreadList::ThreadList() : m_Head(nullptr), m_Tail(nullptr), m_Count(0) {
@@ -27,19 +30,31 @@ ThreadList::~ThreadList() {
 }
 
 void ThreadList::pushBack(Thread* thread) {
+    assert(thread != nullptr);
+    ThreadListItemInternalData& data = GetDataFromThread(thread);
+    // A thread can only be linked into one scheduler list at a time.
+    assert(!(data.previous != nullptr || data.next != nullptr || thread == m_Head || thread == m_Tail));
     if (m_Head == nullptr) {
         m_Head = thread;
         m_Tail = thread;
         m_Count++;
-        thread->GetThreadListData() = {nullptr, nullptr};
+        data = {nullptr, nullptr};
+        if (IsProcList())
+            thread->SetInProcList(true);
+        else
+            thread->SetInSchedList(true);
         return;
     }
 
-    m_Tail->GetThreadListData().next = thread;
-    thread->GetThreadListData().previous = m_Tail;
-    thread->GetThreadListData().next = nullptr;
+    GetDataFromThread(m_Tail).next = thread;
+    data.previous = m_Tail;
+    data.next = nullptr;
     m_Tail = thread;
     m_Count++;
+    if (IsProcList())
+        thread->SetInProcList(true);
+    else
+        thread->SetInSchedList(true);
 }
 
 Thread* ThreadList::popFront() {
@@ -47,29 +62,44 @@ Thread* ThreadList::popFront() {
         return nullptr;
 
     Thread* temp = m_Head;
-    m_Head = m_Head->GetThreadListData().next;
+    m_Head = GetDataFromThread(m_Head).next;
     if (m_Head != nullptr)
-        m_Head->GetThreadListData().previous = nullptr;
+        GetDataFromThread(m_Head).previous = nullptr;
     else
         m_Tail = nullptr;
     m_Count--;
-    temp->GetThreadListData() = {nullptr, nullptr};
+    GetDataFromThread(temp) = {nullptr, nullptr};
+    if (IsProcList())
+        temp->SetInProcList(false);
+    else
+        temp->SetInSchedList(false);
     return temp;
 }
 
 void ThreadList::remove(Thread* thread) {
-    if (thread->GetThreadListData().previous != nullptr)
-        thread->GetThreadListData().previous->GetThreadListData().next = thread->GetThreadListData().next;
-    else
-        m_Head = thread->GetThreadListData().next;
+    if (thread == nullptr)
+        return;
+    ThreadListItemInternalData& data = GetDataFromThread(thread);
+    // Ignore invalid removals; they would corrupt head/tail/count and lose unrelated threads.
+    assert((data.previous != nullptr || m_Head == thread) && (data.next != nullptr || m_Tail == thread) && (data.previous == nullptr || GetDataFromThread(data.previous).next == thread) && (data.next == nullptr || GetDataFromThread(data.next).previous == thread));
+    if (data.previous != nullptr) {
+        Thread* temp = data.previous;
+        GetDataFromThread(temp).next = data.next;
+    } else
+        m_Head = data.next;
 
-    if (thread->GetThreadListData().next != nullptr)
-        thread->GetThreadListData().next->GetThreadListData().previous = thread->GetThreadListData().previous;
-    else
-        m_Tail = thread->GetThreadListData().previous;
+    if (data.next != nullptr) {
+        Thread* temp = data.next;
+        GetDataFromThread(temp).previous = data.previous;
+    } else
+        m_Tail = data.previous;
 
-    thread->GetThreadListData() = {nullptr, nullptr};
+    data = {nullptr, nullptr};
     m_Count--;
+    if (IsProcList())
+        thread->SetInProcList(false);
+    else
+        thread->SetInSchedList(false);
 }
 
 Thread* ThreadList::getHead() const {
@@ -84,6 +114,50 @@ uint64_t ThreadList::getCount() const {
     return m_Count;
 }
 
+void ThreadList::Enumerate(IteratorDecision (*func)(Thread*, void*), void* data) {
+    Thread* thread = m_Head;
+    uint64_t originalCount = m_Count;
+    for (uint64_t i = 0; i < originalCount; i++) {
+        if (thread == nullptr)
+            break;
+        Thread* next = GetDataFromThread(thread).next;
+        switch (func(thread, data)) {
+        case IteratorDecision::Break:
+            return;
+        case IteratorDecision::Continue:
+            break;
+        case IteratorDecision::Delete_Break:
+            remove(thread);
+            return;
+        case IteratorDecision::Delete: {
+            remove(thread);
+            thread = next;
+            continue;
+        }
+        }
+
+        thread = next;
+    }
+}
+
+void ThreadList::EnumerateConst(IteratorDecision (*func)(Thread*, void*), void* data) const {
+    Thread* thread = m_Head;
+    for (uint64_t i = 0; i < m_Count; i++) {
+        if (thread == nullptr)
+            break;
+        switch (func(thread, data)) {
+        case IteratorDecision::Break:
+        case IteratorDecision::Delete_Break:
+            return;
+        case IteratorDecision::Continue:
+        case IteratorDecision::Delete:
+            break;
+        }
+
+        thread = GetDataFromThread(thread).next;
+    }
+}
+
 void ThreadList::lock() const {
     int intState = Processor::DisableInterrupts();
     spinlock_acquire(&m_Lock);
@@ -94,4 +168,21 @@ void ThreadList::unlock() const {
     int intState = m_intState;
     spinlock_release(&m_Lock); // only access member variable while lock is held
     Processor::EnableInterrupts(intState);
+}
+
+ThreadListItemInternalData& ThreadList::GetDataFromThread(Thread* thread) const {
+    return thread->GetThreadListData();
+}
+
+
+ThreadListItemInternalData& ProcThreadList::GetDataFromThread(Thread* thread) const {
+    return thread->GetProcThreadListData();
+}
+
+bool ProcThreadList::IsProcList() const {
+    return true;
+}
+
+bool ThreadList::IsProcList() const {
+    return false;
 }

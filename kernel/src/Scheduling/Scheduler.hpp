@@ -35,7 +35,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 namespace Scheduler {
     
-    struct [[gnu::packed]] ProcessorState {
+    struct ProcessorState {
         ProcessorState* self;
         uint64_t id;
         Processor* processor;
@@ -45,6 +45,7 @@ namespace Scheduler {
         Thread* idleThread;
         uint32_t runCounts[NICE_LEVELS]; // share locks with thread lists
         ThreadList threads[NICE_LEVELS];
+        ThreadList sleepingThreads;
         uint32_t isIdle;
         uint32_t startAllowed;
         spinlock_t lock;
@@ -74,10 +75,12 @@ namespace Scheduler {
 
     bool DeleteThread(Thread* thread); // Adds the thread to a list of threads to be deleted, already assumed to be removed
 
+    void SleepCurrentThread(uint64_t ms);
+
     void TimerTick(uint64_t msSinceLast, void* data);
     bool SaveOnInt(void* data);
 
-    void Yield(bool forceSwitch = false, void* data = nullptr); // data != nullptr means this is run in an interrupt context
+    void Yield(Thread* oldThread = nullptr, bool forceSwitch = false, void* data = nullptr); // data != nullptr means this is run in an interrupt context
     
     void PickNext(bool lockState = true);
     Thread* StealThreadFromOther(ProcessorState* current, int* niceOut = nullptr);
@@ -99,6 +102,8 @@ namespace Scheduler {
 extern "C" Scheduler::ProcessorState* GetCurrentProcessorState(); // implemented in arch-specific code
 extern "C" void Scheduler_SaveAndYield(Thread* currentThread); // implemented in arch-specific code
 
-extern "C" void Scheduler_YieldAfterSave(Thread* currentThread, CPU_Registers* regs); // wrapper around Scheduler::Yield that can be called more easily from assembly
+extern "C" [[noreturn]] void Scheduler_YieldAfterSave(Thread* currentThread, CPU_Registers* regs); // wrapper around Scheduler::Yield that can be called more easily from assembly
+
+extern "C" void Scheduler_PrepForTimerTick(uint64_t msSinceLast, void* data); // implemented in arch-specific code, should be called with interrupts disabled.
 
 #endif /* _SCHEDULER_HPP */

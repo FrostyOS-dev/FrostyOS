@@ -24,10 +24,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 void HAL_InitTime();
 void HAL_TimerTick(Processor* proc, uint64_t ticks, void* data);
+void HAL_EndTimerTick();
 
 uint64_t HAL_GetTicks();
 uint64_t HAL_GetNSTicks();
 
+void HAL_Sleep(uint64_t ms);
 void HAL_SleepNS(uint64_t ns);
 
 #endif /* _HAL_TIME_HPP */

@@ -50,7 +50,7 @@ public:
     static void EnableInterrupts(int prevState = -1);
 
     static void SwapStack(void (*func)(void*), void* data, void* stack); // Should only return on error
-
+    static void SwapStackWithReturn(void (*func)(uint64_t, void*), uint64_t a, void* b, void* stack);
 
 protected:
     bool m_BSP;
