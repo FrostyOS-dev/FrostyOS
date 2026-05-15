@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Copyright (©) 2024  Frosty515
+# Copyright (©) 2024-2026  Frosty515
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -30,9 +30,9 @@ if [ -f "$TOOLCHAIN_PREFIX/bin/x86_64-frostyos-gcc" ]; then
 fi
 
 # Install kernel and LibC headers
-mkdir -p $SYSROOT/data/include/kernel
-cp -r kernel/headers/* $SYSROOT/data/include/kernel/
-cp -r Userland/Libraries/LibC/include/* $SYSROOT/data/include/
+# mkdir -p $SYSROOT/data/include/kernel
+# cp -r kernel/headers/* $SYSROOT/data/include/kernel/
+# cp -r Userland/Libraries/LibC/include/* $SYSROOT/data/include/
 
 # Install x86_64-frostyos-gcc
 
