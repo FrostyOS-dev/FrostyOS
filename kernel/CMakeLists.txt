@@ -109,7 +109,6 @@ endif()
 
 set(kernel_sources
     ${kernel_sources}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/debug.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Colour.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Framebuffer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGA.cpp
@@ -135,12 +134,14 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Semaphore.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Thread.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/ThreadList.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/kernel.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/limine_entry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/DebugBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/VGABackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTYBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTY.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/debug.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/kernel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/KernelSymbols.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/limine_entry.cpp
 )
 
 set(kernel_lib_sources
@@ -231,8 +232,9 @@ if (FROSTYOS_BUILD_TARGET STREQUAL "kernel")
 
     add_custom_target(install_kernel
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS
+        COMMAND ${CMAKE_SOURCE_DIR}/build-scripts/generate_symbol_map.sh ${CMAKE_NM} ${CMAKE_SOURCE_DIR} $<TARGET_FILE:kernel>
         COMMAND ${CMAKE_STRIP} --strip-debug $<TARGET_FILE:kernel> -o ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/kernel.elf
-        BYPRODUCTS ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/kernel.elf ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS ${CMAKE_SOURCE_DIR}/dist/boot ${CMAKE_SOURCE_DIR}/dist
+        BYPRODUCTS ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/kernel.elf ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/ksymbols.map ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS ${CMAKE_SOURCE_DIR}/dist/boot ${CMAKE_SOURCE_DIR}/dist
     )
 
 endif()

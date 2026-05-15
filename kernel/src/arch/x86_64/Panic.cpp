@@ -25,6 +25,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdio.h>
 
+#include <KernelSymbols.hpp>
+
 #include <Scheduling/Scheduler.hpp>
 
 char const* g_x86_64_PanicReason;
@@ -80,9 +82,27 @@ extern "C" [[noreturn]] void __attribute__((no_sanitize("undefined"))) x86_64_Pa
             dbgprintf("CR2=%016lx  ", isrFrame->CR2);
     }
     dbgprintf("CR3=%016lx\n", regs->CR3);
-    dbgprintf("Stack trace:\n%016lx\n", regs->RIP);
+    dbgprintf("Stack trace:\n%016lx", regs->RIP);
+    if (g_KSymTable != nullptr) {
+        void* baseAddress = nullptr;
+        const char* symbol = g_KSymTable->FindSymbol((void*)regs->RIP, &baseAddress);
+        if (symbol != nullptr)
+            dbgprintf(": <%s+0x%lx>\n", symbol, (uint64_t)regs->RIP - (uint64_t)baseAddress);
+        else
+            dbgputc('\n');
+    } else
+        dbgputc('\n');
     x86_64_WalkStackFrames(regs->RBP, [](x86_64_StackFrame* frame) __attribute__((no_sanitize("undefined"))) -> void {
-        dbgprintf("%016lx\n", frame->RIP); 
+        dbgprintf("%016lx", frame->RIP);
+        if (g_KSymTable != nullptr) {
+            void* baseAddress = nullptr;
+            const char* symbol = g_KSymTable->FindSymbol((void*)frame->RIP, &baseAddress);
+            if (symbol != nullptr)
+                dbgprintf(": <%s+0x%lx>\n", symbol, (uint64_t)frame->RIP - (uint64_t)baseAddress);
+            else
+                dbgputc('\n');
+        } else
+            dbgputc('\n');
     });
     
     
@@ -104,9 +124,27 @@ extern "C" [[noreturn]] void __attribute__((no_sanitize("undefined"))) x86_64_Pa
             printf("CR2=%016lx  ", isrFrame->CR2);
     }
     printf("CR3=%016lx\n", regs->CR3);
-    printf("Stack trace:\n%016lx\n", regs->RIP);
-    x86_64_WalkStackFrames(regs->RBP, [](x86_64_StackFrame* frame) {
-        printf("%016lx\n", frame->RIP);
+    printf("Stack trace:\n%016lx", regs->RIP);
+    if (g_KSymTable != nullptr) {
+        void* baseAddress = nullptr;
+        const char* symbol = g_KSymTable->FindSymbol((void*)regs->RIP, &baseAddress);
+        if (symbol != nullptr)
+            printf(": <%s+0x%lx>\n", symbol, (uint64_t)regs->RIP - (uint64_t)baseAddress);
+        else
+            putc('\n');
+    } else
+        putc('\n');
+    x86_64_WalkStackFrames(regs->RBP, [](x86_64_StackFrame* frame) __attribute__((no_sanitize("undefined"))) -> void {
+        printf("%016lx", frame->RIP);
+        if (g_KSymTable != nullptr) {
+            void* baseAddress = nullptr;
+            const char* symbol = g_KSymTable->FindSymbol((void*)frame->RIP, &baseAddress);
+            if (symbol != nullptr)
+                printf(": <%s+0x%lx>\n", symbol, (uint64_t)frame->RIP - (uint64_t)baseAddress);
+            else
+                putc('\n');
+        } else
+            putc('\n');
     });
 
     while (true) {

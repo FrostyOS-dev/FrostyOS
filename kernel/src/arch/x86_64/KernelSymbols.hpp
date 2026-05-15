@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -36,6 +36,7 @@ extern uint8_t __ctors_end;
 extern uint8_t __dtors_start;
 extern uint8_t __dtors_end;
 
+extern const void* _kernel_start_addr;
 extern const void* _text_start_addr;
 extern const void* _text_end_addr;
 extern const void* _rodata_start_addr;

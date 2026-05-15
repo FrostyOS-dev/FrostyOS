@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "kernel.hpp"
+#include "KernelSymbols.hpp"
 
 #include <stddef.h>
 #include <stdio.h>
@@ -89,6 +90,13 @@ void StartKernel() {
     memcpy(&g_KFramebuffer, &g_kernelParams.framebuffer, sizeof(FrameBuffer));
     g_KFramebuffer.BaseAddress = VMM::g_KVMM->AllocatePages(DIV_ROUNDUP(g_KFramebuffer.pitch * g_KFramebuffer.height, PAGE_SIZE), VMM::Protection::READ_WRITE, true);
     g_KVGA.EnableDoubleBuffering(&g_KFramebuffer);
+
+    if (g_kernelParams.symbolTable != nullptr && g_kernelParams.symbolTableSize > 0) {
+        SymbolTable* table = new SymbolTable();
+        table->SetMemRegion(_kernel_start_addr, _kernel_end_addr);
+        table->FillFromRawStringData((const char*)g_kernelParams.symbolTable, g_kernelParams.symbolTableSize);
+        g_KSymTable = table;
+    }
 
     if (!KProcess.CreateMainThread({Kernel_Stage2, nullptr}))
         PANIC("Failed to create kernel stage 2 main thread");

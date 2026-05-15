@@ -66,6 +66,14 @@ static volatile struct limine_executable_address_request executable_address_requ
     .response = nullptr
 };
 
+static volatile struct limine_module_request module_request = {
+    .id = LIMINE_MODULE_REQUEST_ID,
+    .revision = 0,
+    .response = nullptr,
+    .internal_module_count = 0,
+    .internal_modules = nullptr
+};
+
 void limine_request_fail(const char* request_name) {
     debug_puts("limine_request_fail: ");
     debug_puts(request_name);
@@ -125,6 +133,14 @@ void _start() {
 #endif
         default:
             limine_request_fail("paging_mode");
+    }
+
+    if (module_request.response != nullptr && module_request.response->module_count > 0) {
+        g_kernelParams.symbolTable = module_request.response->modules[0]->address;
+        g_kernelParams.symbolTableSize = module_request.response->modules[0]->size;
+    } else {
+        g_kernelParams.symbolTable = nullptr;
+        g_kernelParams.symbolTableSize = 0;
     }
 
     StartKernel();
