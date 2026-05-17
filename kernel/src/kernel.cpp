@@ -114,8 +114,6 @@ void StartKernel() {
     PANIC("Scheduler returned");
 }
 
-extern void PerformFireworksTest();
-
 void Kernel_Stage2(void*) {
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");
