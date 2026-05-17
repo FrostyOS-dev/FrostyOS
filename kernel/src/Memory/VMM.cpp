@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "PageMapper.hpp"
 #include "Pager.hpp"
+#include "PagingUtil.hpp"
 #include "VMM.hpp"
 #include "VMRegionAllocator.hpp"
 
@@ -63,8 +64,10 @@ namespace VMM {
         // allocate first one outside loop to save a check on each loop iteration
         memObj->pages = (Page*)kcalloc_vmm(1, sizeof(Page));
         memObj->pages->protection = Protection::READ_WRITE_EXECUTE;
-        if (allocPhys)
+        if (allocPhys) {
             memObj->pages->physAddr = reinterpret_cast<uint64_t>(memObj->pager->AllocatePage());
+            memset(reinterpret_cast<void*>(to_HHDM(memObj->pages->physAddr)), 0, PAGE_SIZE);
+        }
 
         Page* prevPage = memObj->pages;
 
@@ -72,8 +75,10 @@ namespace VMM {
             Page* page = (Page*)kcalloc_vmm(1, sizeof(Page));
             page->protection = Protection::READ_WRITE_EXECUTE;
 
-            if (allocPhys)
+            if (allocPhys) {
                 page->physAddr = reinterpret_cast<uint64_t>(memObj->pager->AllocatePage());
+                memset(reinterpret_cast<void*>(to_HHDM(page->physAddr)), 0, PAGE_SIZE);
+            }
 
             prevPage->next = page;
             prevPage = page;
@@ -451,6 +456,7 @@ namespace VMM {
         bool result = false;
         if (!code.present) {
             page->physAddr = reinterpret_cast<uint64_t>(obj->pager->AllocatePage());
+            memset(reinterpret_cast<void*>(to_HHDM(page->physAddr)), 0, PAGE_SIZE);
             result = m_pageMapper->MapPage(virtAddr, page->physAddr, prot, cacheType);
         }
 
