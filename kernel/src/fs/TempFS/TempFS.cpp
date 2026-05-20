@@ -47,12 +47,14 @@ namespace FS {
     int TempFS::Mount(int flags, void* backing, Credential cred) {
         VAttr attr = {VType::DIR, ROOT_DIR_MODE, cred.euid, cred.egid, FSType::TempFS, -1, 0, 0, PAGE_SIZE, 0, 0, 0, 0};
 
-        TempFSVNode* root = new TempFSVNode();
+        TempFSVNode* root = new TempFSVNode(this);
         int rc = root->Create(nullptr, nullptr, 0, &attr, cred);
         if (rc < 0) {
             delete root;
             return rc;
         }
+
+        RefVNode(root);
 
         m_root = root;
         m_nodeCovered = nullptr;
@@ -79,7 +81,7 @@ namespace FS {
     }
 
     
-    TempFSVNode::TempFSVNode() : VNode(), m_name(nullptr), m_nameLen(0), m_blocks(), m_children() {
+    TempFSVNode::TempFSVNode(VFS* vfs) : VNode(vfs), m_name(nullptr), m_nameLen(0), m_blocks(), m_children() {
 
     }
 
@@ -271,7 +273,6 @@ namespace FS {
             m_nameLen = nameLen;
         }
 
-        m_vfs = m_vfs;
         m_vfsMounted = nullptr;
         m_refCount = 1;
 
@@ -283,6 +284,10 @@ namespace FS {
             fsVNode->m_children.insert(this);
             fsVNode->m_children.unlock();
         }
+
+        m_parent = parent;
+        if (parent != nullptr)
+            parent->GetRefCount()++;
 
         return ESUCCESS;
     }

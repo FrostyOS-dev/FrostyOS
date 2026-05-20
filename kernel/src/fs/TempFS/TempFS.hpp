@@ -44,7 +44,7 @@ namespace FS {
 
     class TempFSVNode : public VNode {
     public:
-        TempFSVNode();
+        TempFSVNode(VFS* vfs);
         virtual ~TempFSVNode() override;
 
         virtual int Open(int flags, Credential cred) override;

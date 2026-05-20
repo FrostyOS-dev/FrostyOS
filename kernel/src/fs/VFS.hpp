@@ -33,7 +33,8 @@ namespace FS {
     class VNode;
 
     enum class FSType {
-        TempFS
+        TempFS,
+        Invalid
     };
 
     enum class VType {
@@ -51,8 +52,8 @@ namespace FS {
     struct VAttr {
         VType type;           // vnode type
         uint16_t mode;        // access mode
-        uint64_t uid;         // owner uid
-        uint64_t gid;         // owner gid
+        uint32_t uid;         // owner uid
+        uint32_t gid;         // owner gid
         FSType fsid;             // fs id
         int64_t inode;        // inode number
         int nlinks;           // number of links
@@ -88,7 +89,7 @@ namespace FS {
 
     class VNode {
     public:
-        VNode();
+        VNode(VFS* vfs);
         virtual ~VNode();
 
         virtual int Open(int flags, Credential cred) = 0;
@@ -112,6 +113,8 @@ namespace FS {
         virtual VFS* GetVFS();
         virtual VFS* GetMountedVFS();
         virtual VType GetType();
+        virtual int& GetRefCount();
+        virtual VNode* GetParent();
 
     protected:
         VAttr m_attr;
@@ -119,17 +122,20 @@ namespace FS {
         int m_refCount;
         VFS* m_vfs; // Parent VFS
         VFS* m_vfsMounted; // VFS that is mounted here
+        VNode* m_parent;
     };
 
+    void RefVNode(VNode* node); // Increment refCount of a VNode
     void UnrefVNode(VNode* node); // Decrement refCount of a VNode, and delete it if refCount is 0.
 
     int VFS_Init();
     int VFS_MountRoot(FSType type, int flags, void* backing, Credential cred); // flags and backing are currently unusued
-    int VFS_LookupPath(const char* path, VNode** vnode, VFS** vfs, Credential cred);
+    int VFS_LookupPath(const char* path, VNode** vnode, VFS** vfs, VNode* cwd, Credential cred);
 
-    int VFS_CreateDir(const char* path, const char* name, Credential cred);
-    int VFS_CreateFile(const char* path, const char* name, Credential cred);
-    int VFS_Open(const char* path, VNode** out, Credential cred);
+    int VFS_CreateDir(const char* path, const char* name, VNode* cwd, Credential cred);
+    int VFS_CreateFile(const char* path, const char* name, VNode* cwd, Credential cred);
+    int VFS_Open(const char* path, VNode** out, VNode* cwd, Credential cred);
+    int VFS_Close(VNode* vnode, Credential cred);
 
     extern VFS* g_rootVFS;
 

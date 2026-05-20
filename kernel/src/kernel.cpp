@@ -131,6 +131,8 @@ void Kernel_Stage2(void*) {
     const char* test = "Hello from a tempfs file!";
     char buffer[64];
     size_t bytes = 0;
+    FS::VNode* cwd = nullptr;
+    FS::VFS* vfs = nullptr;
 
     int rc = FS::VFS_Init();
     if (rc < 0) {
@@ -146,19 +148,25 @@ void Kernel_Stage2(void*) {
 
     dbgprintf("VFS root mounted!\n");
 
-    rc = FS::VFS_CreateDir("/", "folder", cred);
+    rc = FS::VFS_CreateDir("/", "folder", nullptr, cred);
     if (rc < 0) {
         dbgprintf("VFS CreateDir failed: %s\n", strerror(-rc));
         goto end;
     }
 
-    rc = FS::VFS_CreateFile("/folder/", "test.txt", cred);
+    rc = FS::VFS_LookupPath("/folder", &cwd, &vfs, nullptr, cred);
+    if (rc < 0) {
+        dbgprintf("VFS LookupPath failed: %s\n", strerror(-rc));
+        goto end;
+    }
+
+    rc = FS::VFS_CreateFile("", "test.txt", cwd, cred);
     if (rc < 0) {
         dbgprintf("VFS CreateFile failed: %s\n", strerror(-rc));
         goto end;
     }
 
-    rc = FS::VFS_Open("/folder/test.txt", &vnode, cred);
+    rc = FS::VFS_Open("test.txt", &vnode, cwd, cred);
     if (rc < 0 || vnode == nullptr) {
         dbgprintf("VFS Open failed: %s\n", strerror(-rc));
         goto end;

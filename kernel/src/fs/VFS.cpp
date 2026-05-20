@@ -26,7 +26,7 @@ namespace FS {
 
     VFS* g_rootVFS = nullptr;
 
-    VFS::VFS() {
+    VFS::VFS() : m_next(nullptr), m_nodeCovered(nullptr), m_root(nullptr), m_flags(0) {
 
     }
 
@@ -47,7 +47,7 @@ namespace FS {
     }
 
 
-    VNode::VNode() {
+    VNode::VNode(VFS* vfs) : m_attr{VType::BAD, 0, 0, 0, FSType::Invalid, -1, 0, 0, 0, 0, 0, 0, 0}, m_lock(), m_refCount(0), m_vfs(vfs), m_vfsMounted(nullptr), m_parent(nullptr) {
 
     }
 
@@ -67,10 +67,25 @@ namespace FS {
         return m_attr.type;
     }
 
+    int& VNode::GetRefCount() {
+        return m_refCount;
+    }
+
+    VNode* VNode::GetParent() {
+        return m_parent;
+    }
+
+    // Increment refCount of a VNode, and delete it if refCount is 0.
+    void RefVNode(VNode* node) {
+        node->GetRefCount()++;
+    }
 
     // Decrement refCount of a VNode, and delete it if refCount is 0.
     void UnrefVNode(VNode* node) {
-
+        int& refCount = node->GetRefCount();
+        refCount--;
+        if (refCount == 0)
+            delete node;
     }
 
     int VFS_Init() {
@@ -97,22 +112,33 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int VFS_LookupPath(const char* path, VNode** vnode, VFS** vfs, Credential cred) {
+    int VFS_LookupPath(const char* path, VNode** vnode, VFS** vfs, VNode* cwd, Credential cred) {
         if (path == nullptr || vnode == nullptr || vfs == nullptr)
             return -EINVAL;
 
-        if (path[0] != '/')
-            return -ENOSYS;
+        VFS* currentVFS = g_rootVFS;
+        VNode* currentVNode = g_rootVFS->GetRoot();
+        char const* currentPath = path;
 
-        char const* currentPath = &path[1];
+        if (currentPath[0] != '/' && currentPath[0] != '\0') {
+            if (cwd == nullptr)
+                return -EINVAL;
+            if (VFS* mounted = cwd->GetMountedVFS(); mounted != nullptr) {
+                currentVFS = mounted;
+                currentVNode = currentVFS->GetRoot();
+            } else {
+                currentVFS = cwd->GetVFS();
+                currentVNode = cwd;
+            }
+        } else if (currentPath[0] == '/')
+            currentPath = &path[1];
+
         if (currentPath[0] == '\0') {
-            *vfs = g_rootVFS;
-            *vnode = g_rootVFS->GetRoot();
+            *vfs = currentVFS;
+            *vnode = currentVNode;
             return ESUCCESS;
         }
 
-        VFS* currentVFS = g_rootVFS;
-        VNode* currentVNode = g_rootVFS->GetRoot();
         char const* next = strchr(currentPath, '/');
         while (true) {
             if (currentVFS == nullptr || currentVNode == nullptr)
@@ -140,7 +166,16 @@ namespace FS {
             }
             size_t len = (size_t)(next - currentPath);
             if (len == 2 && strncmp(currentPath, "..", 2) == 0) {
-                assert(false);
+                if (currentVNode->GetType() != VType::DIR)
+                    return -ENOTDIR;
+                VNode* parent = currentVNode->GetParent();
+                if (parent == nullptr) { // must be the root of a VFS
+                    parent = currentVFS->GetCoveredVNode();
+                    if (parent == nullptr)
+                        return -ENOENT; // must be at the root, can't go up any higher
+                    currentVFS = parent->GetVFS();
+                }
+                currentVNode = parent;
             } else if (!(len == 1 && currentPath[0] == '.')) {
                 if (currentVNode->GetType() != VType::DIR)
                     return -ENOTDIR;
@@ -168,20 +203,20 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int VFS_CreateDir(const char* path, const char* name, Credential cred) {
+    int VFS_CreateDir(const char* path, const char* name, VNode* cwd, Credential cred) {
         if (path == nullptr || name == nullptr)
             return -EINVAL;
 
         VNode* parent = nullptr;
         VFS* vfs = nullptr;
-        int rc = VFS_LookupPath(path, &parent, &vfs, cred);
+        int rc = VFS_LookupPath(path, &parent, &vfs, cwd, cred);
         if (rc < 0)
             return rc;
 
         VNode* vnode = nullptr;
         switch (vfs->GetType()) {
         case FSType::TempFS:
-            vnode = new TempFSVNode();
+            vnode = new TempFSVNode(vfs);
             break;
         default:
             return -ENOSYS;
@@ -197,20 +232,20 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int VFS_CreateFile(const char* path, const char* name, Credential cred) {
+    int VFS_CreateFile(const char* path, const char* name, VNode* cwd, Credential cred) {
         if (path == nullptr || name == nullptr)
             return -EINVAL;
 
         VNode* parent = nullptr;
         VFS* vfs = nullptr;
-        int rc = VFS_LookupPath(path, &parent, &vfs, cred);
+        int rc = VFS_LookupPath(path, &parent, &vfs, cwd, cred);
         if (rc < 0)
             return rc;
 
         VNode* vnode = nullptr;
         switch (vfs->GetType()) {
         case FSType::TempFS:
-            vnode = new TempFSVNode();
+            vnode = new TempFSVNode(vfs);
             break;
         default:
             return -ENOSYS;
@@ -226,13 +261,13 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int VFS_Open(const char* path, VNode** out, Credential cred) {
+    int VFS_Open(const char* path, VNode** out, VNode* cwd, Credential cred) {
         if (path == nullptr || out == nullptr)
             return -EACCES;
 
         VNode* vnode = nullptr;
         VFS* vfs = nullptr;
-        int rc = VFS_LookupPath(path, &vnode, &vfs, cred);
+        int rc = VFS_LookupPath(path, &vnode, &vfs, cwd, cred);
         if (rc < 0)
             return rc;
 
@@ -240,8 +275,20 @@ namespace FS {
         if (rc < 0)
             return rc;
 
+        RefVNode(vnode);
+
         *out = vnode;
         return ESUCCESS;
+    }
+
+    int VFS_Close(VNode* vnode, Credential cred) {
+        if (vnode == nullptr)
+            return -EACCES;
+
+        int rc = vnode->Close(0, cred);
+        if (rc >= 0)
+            UnrefVNode(vnode);
+        return rc;
     }
 
 
