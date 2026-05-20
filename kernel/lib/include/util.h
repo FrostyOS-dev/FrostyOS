@@ -81,6 +81,9 @@ extern "C" {
 
 #define IN_BOUNDS(VALUE, LOW, HIGH) (LOW <= VALUE && VALUE <= HIGH)
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
 #define TODO() __assert_fail("TODO", __FILE__, __LINE__, __ASSERT_FUNCTION)
 
 void* memset(void* dst, const int value, const size_t n);

@@ -32,6 +32,15 @@ enum class ProcessMode {
     USER
 };
 
+struct Credential {
+    uint32_t uid;
+    uint32_t euid;
+    uint32_t suid;
+    uint32_t gid;
+    uint32_t egid;
+    uint32_t sgid;
+};
+
 class Process {
 public:
     Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice);
