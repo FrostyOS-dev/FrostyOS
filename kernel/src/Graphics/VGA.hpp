@@ -45,6 +45,7 @@ public:
 
     void PrintChar(char c);
     void PrintString(const char* str);
+    void PrintString(const char* str, uint64_t length);
 
     void Backspace();
     void NewLine();

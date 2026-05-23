@@ -140,6 +140,12 @@ void VGA::PrintString(const char* str) {
     }
 }
 
+void VGA::PrintString(const char* str, uint64_t length) {
+    for (uint64_t i = 0; i < length; i++) {
+        PrintChar(str[i]);
+    }
+}
+
 void VGA::Backspace() {
     if (m_cursorX == 0) {
         if (m_cursorY > 0) {
