@@ -99,7 +99,7 @@ namespace FS {
         virtual int Lookup(const char* name, size_t nameLen, VNode** out, Credential cred) = 0;
         virtual int Create(VNode* parent, const char* name, size_t nameLen, VAttr* attr, Credential cred) = 0;
         virtual int GetAttr(VAttr* out) = 0;
-        virtual int SetAttr() = 0;
+        virtual int SetAttr(const VAttr& attr) = 0;
         virtual int Access() = 0;
         virtual int Link() = 0;
         virtual int Unlink() = 0;

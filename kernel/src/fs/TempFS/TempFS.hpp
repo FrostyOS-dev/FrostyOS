@@ -54,7 +54,7 @@ namespace FS {
         virtual int Lookup(const char* name, size_t nameLen, VNode** out, Credential cred) override;
         virtual int Create(VNode* parent, const char* name, size_t nameLen, VAttr* attr, Credential cred) override; // Verifying that a child vnode with the same name doesn't already exist is up to the caller.
         virtual int GetAttr(VAttr* out) override;
-        virtual int SetAttr() override;
+        virtual int SetAttr(const VAttr& attr) override;
         virtual int Access() override;
         virtual int Link() override;
         virtual int Unlink() override;
