@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -42,6 +42,11 @@ void TTYBackendVGA::WriteChar(char c) {
 void TTYBackendVGA::WriteString(const char* str) {
     if (m_vga != nullptr)
         m_vga->PrintString(str);
+}
+
+void TTYBackendVGA::WriteString(const char* str, uint64_t length) {
+    if (m_vga != nullptr)
+        m_vga->PrintString(str, length);
 }
 
 void TTYBackendVGA::SetCursor(uint64_t x, uint64_t y) {

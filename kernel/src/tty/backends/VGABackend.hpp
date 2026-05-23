@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -31,6 +31,7 @@ public:
 
     void WriteChar(char c) override;
     void WriteString(const char* str) override;
+    void WriteString(const char* str, uint64_t length) override;
 
     void SetCursor(uint64_t x, uint64_t y) override;
     void GetCursor(uint64_t& x, uint64_t& y) override;

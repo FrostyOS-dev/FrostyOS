@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -29,4 +29,9 @@ void TTYBackendDebug::WriteChar(char c) {
 
 void TTYBackendDebug::WriteString(const char* str) {
     debug_puts(str);
+}
+
+void TTYBackendDebug::WriteString(const char* str, uint64_t length) {
+    for (uint64_t i = 0; i < length; i++)
+        debug_putc(str[i]);
 }
