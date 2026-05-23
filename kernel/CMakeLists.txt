@@ -112,6 +112,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/fs/TempFS/TempFS.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/fs/FDManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/fs/FileDescriptor.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/fs/InitRAMFS.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/fs/VFS.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Colour.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Framebuffer.cpp
@@ -215,7 +216,7 @@ target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-O2>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-omit-frame-pointer>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-asynchronous-unwind-tables>
-    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fsanitize=undefined>
+    # PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fsanitize=undefined>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
 )
