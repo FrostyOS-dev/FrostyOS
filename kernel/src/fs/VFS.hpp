@@ -98,7 +98,7 @@ namespace FS {
         virtual int Write(const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, Credential cred) = 0;
         virtual int Lookup(const char* name, size_t nameLen, VNode** out, Credential cred) = 0;
         virtual int Create(VNode* parent, const char* name, size_t nameLen, VAttr* attr, Credential cred) = 0;
-        virtual int GetAttr() = 0;
+        virtual int GetAttr(VAttr* out) = 0;
         virtual int SetAttr() = 0;
         virtual int Access() = 0;
         virtual int Link() = 0;

@@ -292,8 +292,11 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int TempFSVNode::GetAttr() {
-        return -ENOSYS;
+    int TempFSVNode::GetAttr(VAttr* out) {
+        if (out == nullptr)
+            return -EINVAL;
+        memcpy(out, &m_attr, sizeof(VAttr));
+        return -ESUCCESS;
     }
 
     int TempFSVNode::SetAttr() {
