@@ -18,7 +18,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "kernel.hpp"
 #include "KernelSymbols.hpp"
 
-#include <errno.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -129,68 +128,14 @@ void Kernel_Stage2(void*) {
 
     HAL_Stage2();
 
-    Credential cred = {0, 0, 0, 0, 0, 0};
-    FS::VNode* vnode = nullptr;
-    const char* test = "Hello from a tempfs file!";
-    char buffer[64];
-    size_t bytes = 0;
-    FS::VNode* cwd = nullptr;
-    FS::VFS* vfs = nullptr;
+    if (FS::VFS_Init() < 0)
+        PANIC("VFS Init failed!");
 
-    int rc = FS::VFS_Init();
-    if (rc < 0) {
-        dbgprintf("VFS Init failed: %s\n", strerror(-rc));
-        goto end;
-    }
-
-    rc = FS::VFS_MountRoot(FS::FSType::TempFS, 0, nullptr, cred);
-    if (rc < 0) {
-        dbgprintf("VFS MountRoot failed: %s\n", strerror(-rc));
-        goto end;
-    }
+    if (FS::VFS_MountRoot(FS::FSType::TempFS, 0, nullptr, KCred) < 0)
+        PANIC("VFS MountRoot failed!");
 
     dbgprintf("VFS root mounted!\n");
 
-    rc = FS::VFS_CreateDir("/", "folder", nullptr, cred);
-    if (rc < 0) {
-        dbgprintf("VFS CreateDir failed: %s\n", strerror(-rc));
-        goto end;
-    }
-
-    rc = FS::VFS_LookupPath("/folder", &cwd, &vfs, nullptr, cred);
-    if (rc < 0) {
-        dbgprintf("VFS LookupPath failed: %s\n", strerror(-rc));
-        goto end;
-    }
-
-    rc = FS::VFS_CreateFile("", "test.txt", cwd, cred);
-    if (rc < 0) {
-        dbgprintf("VFS CreateFile failed: %s\n", strerror(-rc));
-        goto end;
-    }
-
-    rc = FS::VFS_Open("test.txt", &vnode, cwd, cred);
-    if (rc < 0 || vnode == nullptr) {
-        dbgprintf("VFS Open failed: %s\n", strerror(-rc));
-        goto end;
-    }
-
-    rc = vnode->Write(test, 25, 0, 0, &bytes, cred);
-    if (rc < 0 || bytes != 25) {
-        dbgprintf("VNode Write failed: %s, bytesWritten = %lu\n", strerror(-rc), bytes);
-        goto end;
-    }
-
-    rc = vnode->Read(buffer, 25, 0, 0, &bytes, cred);
-    if (rc < 0 || bytes != 25) {
-        dbgprintf("VNode Read failed: %s, bytesRead = %lu\n", strerror(-rc), bytes);
-        goto end;
-    }
-
-    dbgprintf("%.25s\n", buffer);
-
-
-end:
     while (true) {
         __asm__ volatile("hlt");
     }
