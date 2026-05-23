@@ -162,6 +162,8 @@ namespace FS {
                 int rc = currentVNode->Lookup(currentPath, len, &next, cred);
                 if (rc < 0)
                     return rc;
+                currentVNode = next;
+                currentVFS = currentVNode->GetVFS();
                 break;
             }
             size_t len = (size_t)(next - currentPath);
