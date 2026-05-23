@@ -30,6 +30,13 @@ add_custom_target(build_boot
 
 add_dependencies(build_boot install_kernel)
 
+add_custom_target(build_initramfs
+	COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/root /bin/sh -c "tar -c --no-auto-compress --owner=0 --group=0 -f ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/initramfs.tar *"
+	BYPRODUCTS ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/initramfs.tar
+)
+
+add_dependencies(build_initramfs install_kernel)
+
 if (UNIX)
 	find_program(DD dd)
 	if (NOT DD)
@@ -68,13 +75,14 @@ if (UNIX)
 		COMMAND mmd -i ${CMAKE_SOURCE_DIR}/iso/fat.img ::/FrostyOS
 		COMMAND mcopy -i ${CMAKE_SOURCE_DIR}/iso/fat.img ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/kernel.elf ::/FrostyOS
 		COMMAND mcopy -i ${CMAKE_SOURCE_DIR}/iso/fat.img ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/ksymbols.map ::/FrostyOS
+		COMMAND mcopy -i ${CMAKE_SOURCE_DIR}/iso/fat.img ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/initramfs.tar ::/FrostyOS
 		COMMAND mcopy -i ${CMAKE_SOURCE_DIR}/iso/fat.img ${CMAKE_SOURCE_DIR}/dist/boot/limine.conf ::
 		COMMAND ${CMAKE_SOURCE_DIR}/depend/tools/bin/mkgpt -o ${CMAKE_SOURCE_DIR}/iso/hdimage.bin --image-size 24576 --part ${CMAKE_SOURCE_DIR}/iso/fat.img --type system
 		BYPRODUCTS ${CMAKE_SOURCE_DIR}/iso/hdimage.bin ${CMAKE_SOURCE_DIR}/iso/fat.img ${CMAKE_SOURCE_DIR}/iso
 	)
 endif()
 
-add_dependencies(build_iso build_boot build_mkgpt update_ovmf)
+add_dependencies(build_iso build_boot build_initramfs build_mkgpt update_ovmf)
 
 if(FROSTYOS_BUILD_CONFIG STREQUAL "Debug")
 	add_custom_target(run-qemu

@@ -138,9 +138,13 @@ void _start() {
     if (module_request.response != nullptr && module_request.response->module_count > 0) {
         g_kernelParams.symbolTable = module_request.response->modules[0]->address;
         g_kernelParams.symbolTableSize = module_request.response->modules[0]->size;
+        g_kernelParams.initramfs = module_request.response->modules[1]->address;
+        g_kernelParams.initramfsSize = module_request.response->modules[1]->size;
     } else {
         g_kernelParams.symbolTable = nullptr;
         g_kernelParams.symbolTableSize = 0;
+        g_kernelParams.initramfs = nullptr;
+        g_kernelParams.initramfsSize = 0;
     }
 
     StartKernel();

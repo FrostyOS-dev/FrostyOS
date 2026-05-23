@@ -28,6 +28,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <fs/TempFS/TempFS.hpp>
 
+#include <fs/InitRAMFS.hpp>
 #include <fs/VFS.hpp>
 
 #include <Graphics/VGA.hpp>
@@ -106,7 +107,11 @@ void StartKernel() {
         g_KSymTable = table;
     }
 
-    if (!KProcess.CreateMainThread({Kernel_Stage2, nullptr}))
+    KernelStage2Params* params = new KernelStage2Params;
+    params->initramfs = g_kernelParams.initramfs;
+    params->initramfsSize = g_kernelParams.initramfsSize;
+
+    if (!KProcess.CreateMainThread({Kernel_Stage2, params}))
         PANIC("Failed to create kernel stage 2 main thread");
 
     if (!KDeadThreadHandler.Init({Scheduler::HandleDeadThreads, nullptr}, g_KProcess))
@@ -122,11 +127,17 @@ void StartKernel() {
     PANIC("Scheduler returned");
 }
 
-void Kernel_Stage2(void*) {
+void Kernel_Stage2(void* data) {
     puts("Starting FrostyOS\n");
     dbgputs("Starting FrostyOS\n");
 
+    KernelStage2Params* params = (KernelStage2Params*)data;
+
+    __asm__ volatile ("cli");
+
     HAL_Stage2();
+
+    __asm__ volatile ("sti");
 
     if (FS::VFS_Init() < 0)
         PANIC("VFS Init failed!");
@@ -135,6 +146,11 @@ void Kernel_Stage2(void*) {
         PANIC("VFS MountRoot failed!");
 
     dbgprintf("VFS root mounted!\n");
+
+    if (params->initramfs != nullptr && params->initramfsSize > 0)
+        LoadInitRAMFS(params->initramfs, params->initramfsSize);
+    else
+        dbgprintf("No InitRAMFS!\n");
 
     while (true) {
         __asm__ volatile("hlt");

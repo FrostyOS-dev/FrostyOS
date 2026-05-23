@@ -37,12 +37,19 @@ struct KernelParams {
     PagingMode pagingMode;
     void* symbolTable;
     uint64_t symbolTableSize;
+    void* initramfs;
+    uint64_t initramfsSize;
+};
+
+struct KernelStage2Params {
+    void* initramfs;
+    uint64_t initramfsSize;
 };
 
 extern KernelParams g_kernelParams;
 extern FrameBuffer g_KFramebuffer;
 
 void StartKernel();
-void Kernel_Stage2(void*);
+void Kernel_Stage2(void* data);
 
 #endif /* _KERNEL_HPP */
