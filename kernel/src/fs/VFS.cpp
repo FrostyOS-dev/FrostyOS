@@ -263,7 +263,7 @@ namespace FS {
 
     int VFS_Open(const char* path, VNode** out, VNode* cwd, Credential cred) {
         if (path == nullptr || out == nullptr)
-            return -EACCES;
+            return -EINVAL;
 
         VNode* vnode = nullptr;
         VFS* vfs = nullptr;
@@ -283,7 +283,7 @@ namespace FS {
 
     int VFS_Close(VNode* vnode, Credential cred) {
         if (vnode == nullptr)
-            return -EACCES;
+            return -EINVAL;
 
         int rc = vnode->Close(0, cred);
         if (rc >= 0)
