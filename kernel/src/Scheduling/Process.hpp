@@ -71,6 +71,9 @@ public:
     void SetVMM(VMM::VMM* vmm);
     VMM::VMM* GetVMM() const;
 
+    const Credential& GetCred() const;
+    void SetCred(const Credential& cred);
+
 private:
     ProcessMode m_Mode;
     VMM::VMM* m_VMM;
@@ -80,6 +83,7 @@ private:
     uint64_t m_nextTID;
     Thread* m_MainThread;
     ProcThreadList m_Threads;
+    Credential m_cred;
 };
 
 extern Process* g_KProcess;

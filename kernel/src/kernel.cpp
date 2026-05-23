@@ -61,6 +61,8 @@ TTYBackendVGA g_KVGABackend;
 
 TTY g_KTTY;
 
+Credential KCred = {0, 0, 0, 0, 0, 0};
+
 Process KProcess(ProcessMode::KERNEL, nullptr, NICE_LEVELS - 1);
 Thread KDeadThreadHandler;
 
@@ -90,6 +92,7 @@ void StartKernel() {
     g_CurrentTTY = &g_KTTY;
 
     g_KProcess = &KProcess;
+    KProcess.SetCred(KCred);
 
     HAL_EarlyInit(g_kernelParams.HHDMStart, g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.pagingMode, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical, g_kernelParams.RSDP);
 

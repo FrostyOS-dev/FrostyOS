@@ -151,4 +151,13 @@ VMM::VMM* Process::GetVMM() const {
     return m_VMM;
 }
 
+const Credential& Process::GetCred() const {
+    return m_cred;
+}
+
+void Process::SetCred(const Credential& cred) {
+    m_cred = cred;
+}
+
+
 Process* g_KProcess = nullptr;
