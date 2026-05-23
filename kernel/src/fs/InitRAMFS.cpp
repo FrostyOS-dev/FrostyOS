@@ -16,14 +16,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "InitRAMFS.hpp"
-#include "Scheduling/Process.hpp"
 #include "VFS.hpp"
 
-#include <cerrno>
+#include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 #include <util.h>
+
+#include <Scheduling/Process.hpp>
 
 uint64_t StringOctalToNum(char* str, size_t len) {
     uint64_t n = 0;
