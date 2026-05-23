@@ -73,7 +73,7 @@ enum class x86_64_LAPIC_Register {
 };
 
 
-#define LAPIC_TIMER_PERIOD 1'000'000'000 // 1ms in picoseconds, 1kHz
+#define LAPIC_TIMER_PERIOD 2'000'000'000 // 2ms in picoseconds, 500Hz
 #define LAPIC_TIMER_INT 0xFE
 
 class x86_64_Processor;
