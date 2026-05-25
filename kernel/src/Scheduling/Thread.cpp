@@ -137,13 +137,13 @@ bool Thread::CreateStacks() {
     if (vmm == nullptr)
         return false;
 
-    void* stack = vmm->AllocatePages(DIV_ROUNDUP(KERNEL_STACK_SIZE, PAGE_SIZE), VMM::Protection::READ_WRITE, true);
+    void* stack = VMM::g_KVMM->AllocatePages(DIV_ROUNDUP(KERNEL_STACK_SIZE, PAGE_SIZE), VMM::Protection::READ_WRITE, false, true);
     if (stack == nullptr)
         return false;
     m_KernelStack = reinterpret_cast<uint64_t>(stack) + KERNEL_STACK_SIZE;
 
     if (m_Parent->GetMode() == ProcessMode::USER) {
-        stack = vmm->AllocatePages(DIV_ROUNDUP(DEFAULT_USER_STACK_SIZE, PAGE_SIZE), VMM::Protection::READ_WRITE, false);
+        stack = vmm->AllocatePages(DIV_ROUNDUP(DEFAULT_USER_STACK_SIZE, PAGE_SIZE), VMM::Protection::READ_WRITE, true, false);
         if (stack == nullptr)
             return false;
         m_Stack = reinterpret_cast<uint64_t>(stack) + DEFAULT_USER_STACK_SIZE;

@@ -74,7 +74,10 @@ namespace VMM {
         uint64_t startVirt;
         uint64_t endVirt;
         MemoryObject* memoryObject;
-        Protection protection;
+        struct {
+            Protection protection;
+            bool user;
+        } flags;
         CacheType cacheType;
         uint64_t memUsagePattern; // TODO
         uint64_t wireCount;
@@ -91,12 +94,13 @@ namespace VMM {
 
         void Init(PageMapper* pageMapper, VMRegionAllocator* vmRegionAllocator);
 
-        void* AllocatePages(uint64_t count, Protection prot = Protection::READ_WRITE, bool allocPhys = false, CacheType cacheType = CacheType::DEFAULT);
+        void* AllocatePages(uint64_t count, Protection prot = Protection::READ_WRITE, bool user = false, bool allocPhys = false, CacheType cacheType = CacheType::DEFAULT);
+        void* AllocatePages(uint64_t count, void* addr = nullptr, Protection prot = Protection::READ_WRITE, bool user = false, bool allocPhys = false, CacheType cacheType = CacheType::DEFAULT);
         bool FreePages(void* virtAddr);
 
-        bool MapMemory(uint64_t virtAddr, MemoryObject* memObj, Protection prot, CacheType cacheType);
+        bool MapMemory(uint64_t virtAddr, MemoryObject* memObj, Protection prot, bool user, CacheType cacheType);
         bool UnmapMemory(uint64_t virtAddr);
-        bool RemapMemory(uint64_t virtAddr, Protection prot, CacheType cacheType);
+        bool RemapMemory(uint64_t virtAddr, Protection prot, bool user, CacheType cacheType);
 
         bool HandlePageFault(PageFaultCode code, uint64_t virtAddr);
 

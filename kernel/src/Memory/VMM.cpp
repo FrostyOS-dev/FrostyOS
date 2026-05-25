@@ -47,14 +47,24 @@ namespace VMM {
         m_vmRegionAllocator = vmRegionAllocator;
     }
 
-    void* VMM::AllocatePages(uint64_t count, Protection prot, bool allocPhys, CacheType cacheType) {
+    void* VMM::AllocatePages(uint64_t count, Protection prot, bool user, bool allocPhys, CacheType cacheType) {
+        return AllocatePages(count, nullptr, prot, allocPhys, user, cacheType);
+    }
+
+    void* VMM::AllocatePages(uint64_t count, void* addr, Protection prot, bool allocPhys, bool user, CacheType cacheType) {
         if (count == 0 || g_defaultPager == nullptr)
             return nullptr;
 
         // Step 1: get a VM region. doing this first as it is more likely to fail (whilst still being quite unlikely), and easier to cleanup
-        void* pages = m_vmRegionAllocator->AllocatePages(count);
-        if (pages == nullptr)
+        void* pages = nullptr;
+        if (addr == nullptr)
+            pages = m_vmRegionAllocator->AllocatePages(count);
+        else
+            pages = m_vmRegionAllocator->AllocatePages(addr, count);
+        if (pages == nullptr) {
+            dbgprintf("Failed to allocate mem region at %p of %lu pages\n", addr, count);
             return nullptr;
+        }
 
         // Step 2: put together the memory object, including page list
         MemoryObject* memObj = (MemoryObject*)kcalloc_vmm(1, sizeof(MemoryObject));
@@ -85,7 +95,7 @@ namespace VMM {
         }
 
         // Step 3: Map the memory
-        if (!MapMemory(reinterpret_cast<uint64_t>(pages), memObj, prot, cacheType)) {
+        if (!MapMemory(reinterpret_cast<uint64_t>(pages), memObj, prot, user, cacheType)) {
             m_vmRegionAllocator->FreePages(pages, count);
 
             Page* page = memObj->pages;
@@ -167,7 +177,7 @@ namespace VMM {
         return true;
     }
 
-    bool VMM::MapMemory(uint64_t virtAddr, MemoryObject* memObj, Protection prot, CacheType cacheType) {
+    bool VMM::MapMemory(uint64_t virtAddr, MemoryObject* memObj, Protection prot, bool user, CacheType cacheType) {
         if (memObj == nullptr)
             return false; // Invalid memory object
 
@@ -230,7 +240,7 @@ namespace VMM {
         page = memObj->pages;
         for (i = 0; i < pageCount; i++) {
             if (page->physAddr != 0)
-                m_pageMapper->MapPage(virtAddr + i * PAGE_SIZE, page->physAddr, prot, cacheType);
+                m_pageMapper->MapPage(virtAddr + i * PAGE_SIZE, page->physAddr, prot, user, cacheType);
             page = page->next;
         }
 
@@ -239,7 +249,8 @@ namespace VMM {
         entry->startVirt = virtAddr;
         entry->endVirt = virtAddr + pageCount * PAGE_SIZE;
         entry->memoryObject = memObj;
-        entry->protection = prot;
+        entry->flags.protection = prot;
+        entry->flags.user = user;
         entry->cacheType = cacheType;
 
         m_mapEntries.lock();
@@ -287,7 +298,7 @@ namespace VMM {
         return true;
     }
 
-    bool VMM::RemapMemory(uint64_t virtAddr, Protection prot, CacheType cacheType) {
+    bool VMM::RemapMemory(uint64_t virtAddr, Protection prot, bool user, CacheType cacheType) {
         m_mapEntries.lock();
 
         MapEntry* entry = m_mapEntries.Find(virtAddr);
@@ -340,18 +351,22 @@ namespace VMM {
                 break;
 
             if (page->physAddr != 0)
-                m_pageMapper->RemapPage(virtAddr + i * PAGE_SIZE, prot, cacheType);
+                m_pageMapper->RemapPage(virtAddr + i * PAGE_SIZE, prot, user, cacheType);
 
             page = page->next;
         }
 
         spinlock_release(&entry->memoryObject->lock);
 
-        Protection oldProt = entry->protection;
+        Protection oldProt = entry->flags.protection;
+        bool wasUser = entry->flags.user;
+
+        entry->flags.protection = prot;
+        entry->flags.user = user;
 
         m_mapEntries.unlock(); // need to hold the lock for the whole function to ensure it can't be unmapped on us part way through
 
-        m_pageMapper->InvalidatePages(virtAddr, pageCount, m_pageMapper->isPermsReduction(oldProt, prot));
+        m_pageMapper->InvalidatePages(virtAddr, pageCount, (user ^ wasUser ) || m_pageMapper->isPermsReduction(oldProt, prot));
         return true;
     }
 
@@ -375,7 +390,8 @@ namespace VMM {
         virtAddr = ALIGN_DOWN(virtAddr, PAGE_SIZE);
         MemoryObject* obj = entry->memoryObject;
         uint64_t pageIndex = (virtAddr - entry->startVirt) >> PAGE_SIZE_SHIFT;
-        Protection prot = entry->protection;
+        Protection prot = entry->flags.protection;
+        bool user = entry->flags.user;
         CacheType cacheType = entry->cacheType;
 
         // need to validate that the page fault was actually caused by a mismatch in protection
@@ -420,9 +436,9 @@ namespace VMM {
         if (page->physAddr != 0) { // not mapped here, but is somewhere else
             bool result;
             if (code.present)
-                result = m_pageMapper->RemapPage(virtAddr, prot, cacheType);
+                result = m_pageMapper->RemapPage(virtAddr, prot, user, cacheType);
             else
-                result = m_pageMapper->MapPage(virtAddr, page->physAddr, prot, cacheType);
+                result = m_pageMapper->MapPage(virtAddr, page->physAddr, prot, user, cacheType);
             spinlock_release(&obj->lock);
             return result;
         }
@@ -457,7 +473,7 @@ namespace VMM {
         if (!code.present) {
             page->physAddr = reinterpret_cast<uint64_t>(obj->pager->AllocatePage());
             memset(reinterpret_cast<void*>(to_HHDM(page->physAddr)), 0, PAGE_SIZE);
-            result = m_pageMapper->MapPage(virtAddr, page->physAddr, prot, cacheType);
+            result = m_pageMapper->MapPage(virtAddr, page->physAddr, prot, user, cacheType);
         }
 
         spinlock_release(&obj->lock);

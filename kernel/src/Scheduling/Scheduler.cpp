@@ -60,8 +60,13 @@ namespace Scheduler {
     // private functions
 
     [[noreturn]] void RunThread(Thread* thread, bool interrupt) {
+        ProcessorState* state = GetCurrentProcessorState();
+        Process* parent = thread->GetParent();
 #ifdef __x86_64__
-        if (interrupt)
+        if (parent != nullptr && parent->GetMode() == ProcessMode::USER) {
+            state->processor->SwitchKernelStack(thread->GetKernelStack());
+            x86_64_SwitchTask(&thread->GetRegisters());
+        } else if (interrupt)
             x86_64_SwitchTask(&thread->GetRegisters());
         else
             x86_64_KernelSwitchTask(&(thread->GetRegisters()));
@@ -378,6 +383,7 @@ namespace Scheduler {
     }
 
     void Yield_Internal(uint64_t forceSwitchInt, void* fullData) {
+        Processor::DisableInterrupts();
         ProcessorState* state = GetCurrentProcessorState();
         assert(state != nullptr);
 

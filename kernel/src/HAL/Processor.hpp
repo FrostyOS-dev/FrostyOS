@@ -44,6 +44,8 @@ public:
 
     virtual inline bool isBSP() const { return m_BSP; }
 
+    virtual void SwitchKernelStack(uint64_t stack) = 0;
+
     // Following functions are implemented in arch-specific code
     
     static int DisableInterrupts(); // return value is an arch-specific state

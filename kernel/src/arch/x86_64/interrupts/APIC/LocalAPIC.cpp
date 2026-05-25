@@ -101,7 +101,7 @@ void x86_64_LAPIC::Init(bool started) {
         m_LAPICBase = to_HHDM(x86_64_ReadMSR(x86_64_MSR_APIC_BASE) & 0xFFFFF000);
 
     if (m_BSP)
-        g_KPageMapper->MapPage(m_LAPICBase, from_HHDM(m_LAPICBase), VMM::Protection::READ_WRITE, VMM::CacheType::UNCACHABLE);
+        g_KPageMapper->MapPage(m_LAPICBase, from_HHDM(m_LAPICBase), VMM::Protection::READ_WRITE, false, VMM::CacheType::UNCACHABLE);
 
     if (!started)
         return StartCPU();
@@ -230,7 +230,7 @@ void x86_64_LAPIC::StartCPU() {
 
     spinlock_acquire(&g_APTrampLock);
 
-    void* stack = VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE >> PAGE_SIZE_SHIFT, VMM::Protection::READ_WRITE, true);
+    void* stack = VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE >> PAGE_SIZE_SHIFT, VMM::Protection::READ_WRITE, false, true);
     if (stack == nullptr)
         PANIC("Failed to allocate stack for AP");
     memset(stack, 0, KERNEL_STACK_SIZE);
@@ -240,7 +240,7 @@ void x86_64_LAPIC::StartCPU() {
     Scheduler::ProcessorState* state = Scheduler::InitNewProcessor(proc);
     proc->SetCPUState(state);
 
-    g_KPageMapper->MapPage(AP_TRAMP_LOAD, AP_TRAMP_LOAD, VMM::Protection::READ_WRITE_EXECUTE, VMM::CacheType::DEFAULT);
+    g_KPageMapper->MapPage(AP_TRAMP_LOAD, AP_TRAMP_LOAD, VMM::Protection::READ_WRITE_EXECUTE, false, VMM::CacheType::DEFAULT);
 
     memcpy(AP_TRAMP_LOAD_ADDR, (void*)&x86_64_APTrampoline, PAGE_SIZE);
 

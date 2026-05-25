@@ -20,9 +20,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "PagingUtil.hpp"
 #include "PAT.hpp"
 
+#include "../interrupts/APIC/LocalAPIC.hpp"
+
 #include "../interrupts/NMI.hpp"
-#include "arch/x86_64/Processor.hpp"
-#include "arch/x86_64/interrupts/APIC/LocalAPIC.hpp"
+
+#include "../Processor.hpp"
 
 #include <util.h>
 
@@ -40,7 +42,7 @@ x86_64_PageMapper::~x86_64_PageMapper() {
 
 }
 
-bool x86_64_PageMapper::MapPage(uint64_t virt, uint64_t phys, VMM::Protection prot, VMM::CacheType cacheType) {
+bool x86_64_PageMapper::MapPage(uint64_t virt, uint64_t phys, VMM::Protection prot, bool user, VMM::CacheType cacheType) {
     uint32_t flags = 1; // Present
     switch (prot) {
     case VMM::Protection::READ:
@@ -58,6 +60,8 @@ bool x86_64_PageMapper::MapPage(uint64_t virt, uint64_t phys, VMM::Protection pr
     default:
         return false; // Invalid protection
     }
+    if (user)
+        flags |= 4;
     x86_64_PATOffset offset = x86_64_PATOffset::Default;
     switch (cacheType) {
     case VMM::CacheType::UNCACHABLE:
@@ -81,9 +85,9 @@ bool x86_64_PageMapper::MapPage(uint64_t virt, uint64_t phys, VMM::Protection pr
     return true;
 }
 
-bool x86_64_PageMapper::MapPages(uint64_t virt, uint64_t phys, size_t count, VMM::Protection prot, VMM::CacheType cacheType) {
+bool x86_64_PageMapper::MapPages(uint64_t virt, uint64_t phys, size_t count, VMM::Protection prot, bool user, VMM::CacheType cacheType) {
     for (size_t i = 0; i < count; i++) {
-        if (!MapPage(virt + i * PAGE_SIZE, phys + i * PAGE_SIZE, prot, cacheType))
+        if (!MapPage(virt + i * PAGE_SIZE, phys + i * PAGE_SIZE, prot, user, cacheType))
             return false;
     }
     return true;
@@ -102,7 +106,7 @@ bool x86_64_PageMapper::UnmapPages(uint64_t virt, size_t count) {
     return true;
 }
 
-bool x86_64_PageMapper::RemapPage(uint64_t virt, VMM::Protection prot, VMM::CacheType cacheType) {
+bool x86_64_PageMapper::RemapPage(uint64_t virt, VMM::Protection prot, bool user, VMM::CacheType cacheType) {
     uint32_t flags = 1; // Present
     switch (prot) {
     case VMM::Protection::READ:
@@ -120,6 +124,8 @@ bool x86_64_PageMapper::RemapPage(uint64_t virt, VMM::Protection prot, VMM::Cach
     default:
         return false; // Invalid protection
     }
+    if (user)
+        flags |= 4;
     x86_64_PATOffset offset = x86_64_PATOffset::Default;
     switch (cacheType) {
     case VMM::CacheType::UNCACHABLE:
@@ -143,9 +149,9 @@ bool x86_64_PageMapper::RemapPage(uint64_t virt, VMM::Protection prot, VMM::Cach
     return true;
 }
 
-bool x86_64_PageMapper::RemapPages(uint64_t virt, size_t count, VMM::Protection prot, VMM::CacheType cacheType) {
+bool x86_64_PageMapper::RemapPages(uint64_t virt, size_t count, VMM::Protection prot, bool user, VMM::CacheType cacheType) {
     for (size_t i = 0; i < count; i++) {
-        if (!RemapPage(virt + i * PAGE_SIZE, prot, cacheType))
+        if (!RemapPage(virt + i * PAGE_SIZE, prot, user, cacheType))
             return false;
     }
     return true;

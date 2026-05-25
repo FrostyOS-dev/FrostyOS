@@ -97,7 +97,7 @@ void StartKernel() {
     HAL_EarlyInit(g_kernelParams.HHDMStart, g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.pagingMode, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical, g_kernelParams.RSDP);
 
     memcpy(&g_KFramebuffer, &g_kernelParams.framebuffer, sizeof(FrameBuffer));
-    g_KFramebuffer.BaseAddress = VMM::g_KVMM->AllocatePages(DIV_ROUNDUP(g_KFramebuffer.pitch * g_KFramebuffer.height, PAGE_SIZE), VMM::Protection::READ_WRITE, true);
+    g_KFramebuffer.BaseAddress = VMM::g_KVMM->AllocatePages(DIV_ROUNDUP(g_KFramebuffer.pitch * g_KFramebuffer.height, PAGE_SIZE), VMM::Protection::READ_WRITE, false, true);
     g_KVGA.EnableDoubleBuffering(&g_KFramebuffer);
 
     if (g_kernelParams.symbolTable != nullptr && g_kernelParams.symbolTableSize > 0) {
@@ -133,11 +133,7 @@ void Kernel_Stage2(void* data) {
 
     KernelStage2Params* params = (KernelStage2Params*)data;
 
-    __asm__ volatile ("cli");
-
     HAL_Stage2();
-
-    __asm__ volatile ("sti");
 
     if (FS::VFS_Init() < 0)
         PANIC("VFS Init failed!");
@@ -150,7 +146,7 @@ void Kernel_Stage2(void* data) {
     if (params->initramfs != nullptr && params->initramfsSize > 0)
         LoadInitRAMFS(params->initramfs, params->initramfsSize);
     else
-        dbgprintf("No InitRAMFS!\n");
+        PANIC("No initramfs!");
 
     while (true) {
         __asm__ volatile("hlt");

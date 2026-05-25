@@ -40,7 +40,7 @@ x86_64_IOAPIC::x86_64_IOAPIC(uint64_t address, uint32_t GSIBase) : m_ID(0xFF), m
 }
 
 void x86_64_IOAPIC::Init() {
-    g_KPageMapper->MapPage(m_baseAddress, from_HHDM(m_baseAddress), VMM::Protection::READ_WRITE, VMM::CacheType::UNCACHABLE);
+    g_KPageMapper->MapPage(m_baseAddress, from_HHDM(m_baseAddress), VMM::Protection::READ_WRITE, false, VMM::CacheType::UNCACHABLE);
 
     m_ID = (ReadRegister(x86_64_IOAPIC_Register::ID) >> 24) & 0xFF;
     m_maxRedirectionEntries = ((ReadRegister(x86_64_IOAPIC_Register::VER) >> 16) & 0xFF) + 1;

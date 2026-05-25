@@ -30,6 +30,7 @@ public:
     void Init(uint64_t start, uint64_t end);
 
     void* AllocatePages(uint64_t numPages);
+    void* AllocatePages(void* ptr, uint64_t numPages);
     void FreePages(void* ptr, uint64_t numPages);
 
     void ReservePages(void* ptr, uint64_t numPages);

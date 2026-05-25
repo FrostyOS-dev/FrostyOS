@@ -37,7 +37,7 @@ HPET::~HPET() {
 }
 
 bool HPET::Init() {
-    if (!g_KPageMapper->MapPage(m_address, from_HHDM(m_address), VMM::Protection::READ_WRITE, VMM::CacheType::UNCACHABLE))
+    if (!g_KPageMapper->MapPage(m_address, from_HHDM(m_address), VMM::Protection::READ_WRITE, false, VMM::CacheType::UNCACHABLE))
         return false;
 
     uint64_t data = volatile_addr_read64(m_address + static_cast<uint64_t>(HPET_Register::CAP_ID));

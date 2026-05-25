@@ -130,6 +130,84 @@ void* VMRegionAllocator::AllocatePages(uint64_t numPages) {
     return (void*)start;
 }
 
+void* VMRegionAllocator::AllocatePages(void* ptr, uint64_t numPages) {
+    m_lock.Lock();
+
+    // Step 1: Find the all pages tree node
+    AVLTree::wAVLTreeNode* allPagesNode = m_allPagesTree.FindNodeOrLower((uint64_t)ptr);
+    if (allPagesNode == nullptr) {
+        dbgprintf("no node\n");
+        m_lock.Unlock();
+        return nullptr;
+    }
+    CompleteTreeNodeData nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
+    if (nodeData.isFree == 0 || allPagesNode->key + nodeData.size * PAGE_SIZE < (uint64_t)ptr + numPages * PAGE_SIZE) {
+        dbgprintf("too small\n");
+        m_lock.Unlock();
+        return nullptr;
+    }
+
+    // Step 2: Remove the free pages tree node
+    AVLTree::wAVLTreeNode* freePagesNode = m_freePagesTree.FindNode(nodeData.size);
+    if (freePagesNode == nullptr) {
+        dbgprintf("no free node\n");
+        m_lock.Unlock();
+        return nullptr;
+    }
+
+    LinkedList::Node* list = (LinkedList::Node*)freePagesNode->value;
+    LinkedList::deleteNode(list, allPagesNode->key);
+    if (list == nullptr)
+        m_freePagesTree.RemoveNode(freePagesNode);
+    else
+        freePagesNode->value = (uint64_t)list;
+
+    // Step 3: Isolate the required section of the region
+    if (allPagesNode->key < (uint64_t)ptr) {
+        uint64_t diff = (uint64_t)ptr - allPagesNode->key;
+        AVLTree::wAVLTreeNode* node = SplitAPTNode(allPagesNode, diff);
+        assert(node != nullptr);
+
+        freePagesNode = m_freePagesTree.FindNode(diff);
+        if (freePagesNode == nullptr) {
+            freePagesNode = m_freePagesTree.Insert(diff, nullptr);
+            assert(freePagesNode != nullptr);
+        }
+
+        LinkedList::insertNode((LinkedList::Node*&)freePagesNode->value, allPagesNode->key);
+
+        allPagesNode = node;
+        nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
+    }
+
+    if (nodeData.size > numPages) {
+        AVLTree::wAVLTreeNode* node = SplitAPTNode(allPagesNode, numPages);
+        assert(node != nullptr);
+
+        CompleteTreeNodeData newNodeData = std::bit_cast<CompleteTreeNodeData>(node->value);
+
+        freePagesNode = m_freePagesTree.FindNode(newNodeData.size);
+        if (freePagesNode == nullptr) {
+            freePagesNode = m_freePagesTree.Insert(newNodeData.size, nullptr);
+            assert(freePagesNode != nullptr);
+        }
+
+        LinkedList::insertNode((LinkedList::Node*&)freePagesNode->value, node->key);
+
+        nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
+    }
+
+    nodeData.isFree = 0;
+    allPagesNode->value = std::bit_cast<uint64_t>(nodeData);
+
+    m_freePageCount -= numPages;
+    m_usedPageCount += numPages;
+
+    m_lock.Unlock();
+
+    return ptr;
+}
+
 void VMRegionAllocator::FreePages(void* ptr, uint64_t numPages) {
     m_lock.Lock();
     // Step 1: Find the exactly matching node in the m_allPagesTree, partial matches are not allowed

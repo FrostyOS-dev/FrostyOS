@@ -86,8 +86,8 @@ void x86_64_SetThreadRegisters(x86_64_Registers* regs, uint64_t stack, ThreadEnt
     regs->RDI = (uint64_t)entryPoint.Data;
     regs->RIP = (uint64_t)entryPoint.EntryPoint;
     regs->RFLAGS = 0x202;
-    regs->CS = mode == ProcessMode::KERNEL ? x86_64_GDT_KERNEL_CODE_SEGMENT : x86_64_GDT_USER_CODE_SEGMENT;
-    regs->SS = mode == ProcessMode::KERNEL ? x86_64_GDT_KERNEL_DATA_SEGMENT : x86_64_GDT_USER_DATA_SEGMENT;
+    regs->CS = mode == ProcessMode::KERNEL ? x86_64_GDT_KERNEL_CODE_SEGMENT : (x86_64_GDT_USER_CODE_SEGMENT | 3);
+    regs->SS = mode == ProcessMode::KERNEL ? x86_64_GDT_KERNEL_DATA_SEGMENT : (x86_64_GDT_USER_DATA_SEGMENT | 3);
     regs->CR3 = (uint64_t)pageMap;
 }
 

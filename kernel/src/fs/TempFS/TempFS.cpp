@@ -343,7 +343,7 @@ namespace FS {
     TempFSVNode::Block* TempFSVNode::CreateBlock(uint64_t offset, uint64_t pages) {
         Block* block = new Block;
         block->pages = pages;
-        block->addr = VMM::g_KVMM->AllocatePages(pages);
+        block->addr = VMM::g_KVMM->AllocatePages(pages, VMM::Protection::READ_WRITE);
         if (block->addr == nullptr) {
             delete block;
             return nullptr;

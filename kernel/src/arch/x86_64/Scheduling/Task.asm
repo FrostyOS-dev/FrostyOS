@@ -91,6 +91,11 @@ x86_64_SwitchTask:
     movzx rax, WORD [rdi+0x9A]
     push rax ; SS
 
+    test rax, 0x3
+    jz .stack
+    swapgs
+
+.stack:
     push QWORD [rdi+0x30] ; RSP
     push QWORD [rdi+0x88] ; RFLAGS
 
