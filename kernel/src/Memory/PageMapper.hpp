@@ -36,6 +36,9 @@ public:
     virtual void InvalidatePages(uint64_t virt, size_t count, bool shootdown = false) = 0;
 
     virtual bool isPermsReduction(VMM::Protection oldProt, VMM::Protection newProt) const = 0;
+
+    virtual void Create() = 0;
+    virtual void Delete() = 0;
 };
 
 extern PageMapper* g_KPageMapper;

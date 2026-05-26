@@ -58,6 +58,28 @@ void VMRegionAllocator::Init(uint64_t start, uint64_t end) {
     m_totalPageCount = pageCount;
 }
 
+void VMRegionAllocator::Delete() {
+    m_lock.Lock();
+
+    // Step 1: clear the linked list at each node
+    m_freePagesTree.forEach([](void*, uint64_t, LinkedList::Node* list) -> bool {
+        while (list != nullptr) // clear the list
+            LinkedList::deleteNode(list, list, true);
+        return true;
+    }, nullptr);
+
+    // Step 2: Clear both wAVL trees
+    m_freePagesTree.Clear();
+    m_allPagesTree.Clear();
+
+    m_freePageCount = 0;
+    m_usedPageCount = 0;
+    m_reservedPageCount = 0;
+    m_totalPageCount = 0;
+
+    m_lock.Unlock();
+}
+
 void* VMRegionAllocator::AllocatePages(uint64_t numPages) {
     m_lock.Lock();
     uint64_t start = 0;

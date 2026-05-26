@@ -156,6 +156,18 @@ namespace AVLTree {
             }
         }
 
+        void Clear() {
+            wAVLTreeNode* next;
+            for (wAVLTreeNode* node = RB_MIN(raw_wAVLTree, &m_tree); node != nullptr; node = next) {
+                next = RB_NEXT(raw_wAVLTree, &m_tree, node);
+                RB_REMOVE(raw_wAVLTree, &m_tree, node);
+                if (m_vmm)
+                    kfree_vmm(node);
+                else
+                    kfree(node);
+            }
+        }
+
         void lock() const {
             m_lock.Lock();
         }

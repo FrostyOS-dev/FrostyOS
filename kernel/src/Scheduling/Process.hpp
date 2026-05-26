@@ -47,6 +47,7 @@ public:
     ~Process();
 
     bool Start();
+    void Delete();
 
     bool CreateMainThread(ThreadEntryPoint entryPoint);
     void SetMainThread(Thread* thread);

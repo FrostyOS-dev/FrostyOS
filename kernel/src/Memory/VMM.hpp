@@ -93,6 +93,7 @@ namespace VMM {
         ~VMM();
 
         void Init(PageMapper* pageMapper, VMRegionAllocator* vmRegionAllocator);
+        void Delete(); // The PageMapper and VMRegionAllocator must be deleted separately.
 
         void* AllocatePages(uint64_t count, Protection prot = Protection::READ_WRITE, bool user = false, bool allocPhys = false, CacheType cacheType = CacheType::DEFAULT);
         void* AllocatePages(uint64_t count, void* addr = nullptr, Protection prot = Protection::READ_WRITE, bool user = false, bool allocPhys = false, CacheType cacheType = CacheType::DEFAULT);
@@ -103,6 +104,9 @@ namespace VMM {
         bool RemapMemory(uint64_t virtAddr, Protection prot, bool user, CacheType cacheType);
 
         bool HandlePageFault(PageFaultCode code, uint64_t virtAddr);
+
+        PageMapper* GetPageMapper();
+        VMRegionAllocator* GetAllocator();
 
     private:
         // UVM fields

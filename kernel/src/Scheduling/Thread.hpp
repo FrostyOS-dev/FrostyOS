@@ -58,7 +58,7 @@ public:
 
     bool Delete(); // Assumed to be removed from scheduler, and not running
 
-    static bool ExitCurrentThread(bool deleteThis);
+    static bool ExitCurrentThread(bool deleteThis, bool deleteParent);
 
     void SetEntryPoint(ThreadEntryPoint entryPoint);
     ThreadEntryPoint GetEntryPoint() const;
@@ -96,8 +96,9 @@ public:
     void SetInProcList(bool inList);
     bool IsInProcList() const;
 
-    void SetDeleteProp(bool deleteSelf);
+    void SetDeleteProp(bool deleteSelf, bool deleteParent);
     bool ShouldDelete() const;
+    bool ShouldDeleteParent() const;
     int64_t GetIntState() const;
 
     uint64_t sleepRemainingTime;
@@ -121,6 +122,7 @@ private:
 
     struct {
         bool deleteThis;
+        bool deleteParent;
         int64_t intState;
     } m_deleteProp;
 };

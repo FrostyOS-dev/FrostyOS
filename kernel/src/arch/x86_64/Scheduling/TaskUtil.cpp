@@ -21,10 +21,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../GDT.hpp"
 #include "../MSR.h"
 
+#include "../Memory/PageMapper.hpp"
 #include "../Memory/PagingInit.hpp"
 
 #include <string.h>
 
+#include <Memory/PageMapper.hpp>
 #include <Memory/PagingUtil.hpp>
 
 #include <Scheduling/Scheduler.hpp>
@@ -79,8 +81,11 @@ void x86_64_CopyFromISRFrame(const x86_64_ISR_Frame* frame, x86_64_Registers* re
     regs->CR3 = frame->CR3;
 }
 
-void x86_64_SetThreadRegisters(x86_64_Registers* regs, uint64_t stack, ThreadEntryPoint entryPoint, ProcessMode mode, void* pageMap) {
+void x86_64_SetThreadRegisters(x86_64_Registers* regs, uint64_t stack, ThreadEntryPoint entryPoint, ProcessMode mode, PageMapper* mapper) {
     memset(regs, 0, sizeof(x86_64_Registers));
+
+    x86_64_PageMapper* map = (x86_64_PageMapper*)mapper;
+    void* pageMap = from_HHDM(map->GetPageTable());
 
     regs->RSP = stack;
     regs->RDI = (uint64_t)entryPoint.Data;

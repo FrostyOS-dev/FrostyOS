@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -27,11 +27,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Scheduling/Process.hpp>
 #include <Scheduling/Thread.hpp>
 
+class PageMapper;
 
 void x86_64_CopyToISRFrame(const x86_64_Registers* regs, x86_64_ISR_Frame* frame);
 void x86_64_CopyFromISRFrame(const x86_64_ISR_Frame* frame, x86_64_Registers* regs);
 
-void x86_64_SetThreadRegisters(x86_64_Registers* regs, uint64_t stack, ThreadEntryPoint entryPoint, ProcessMode mode, void* pageMap);
+void x86_64_SetThreadRegisters(x86_64_Registers* regs, uint64_t stack, ThreadEntryPoint entryPoint, ProcessMode mode, PageMapper* mapper);
 
 void x86_64_CreateHaltISRFrame(x86_64_ISR_Frame* frame);
 

@@ -28,6 +28,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <util.h>
 
+#include <Memory/PageMapper.hpp>
+#include <Memory/PagingUtil.hpp>
+#include <Memory/PMM.hpp>
 #include <Memory/VMM.hpp>
 
 x86_64_PageMapper::x86_64_PageMapper() : m_pageTable(nullptr) {
@@ -193,4 +196,15 @@ bool x86_64_PageMapper::isPermsReduction(VMM::Protection oldProt, VMM::Protectio
         return false;
     }
     return true;
+}
+
+void x86_64_PageMapper::Create() {
+    m_pageTable = to_HHDM(g_PMM->AllocatePage());
+    void* kernelPageTable = ((x86_64_PageMapper*)g_KPageMapper)->m_pageTable;
+    memcpy(m_pageTable, kernelPageTable, PAGE_SIZE);
+}
+
+void x86_64_PageMapper::Delete() {
+    g_PMM->FreePage(from_HHDM(m_pageTable));
+    m_pageTable = nullptr;
 }

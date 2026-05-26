@@ -21,11 +21,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Syscall.hpp"
 
 #include <stdint.h>
-#include <stdio.h>
+
+#include <SystemCalls/SystemCall.hpp>
 
 extern "C" uint64_t x86_64_SyscallHandler(uint64_t num, uint64_t a, uint64_t b, uint64_t c, uint64_t d, uint64_t e) {
-    dbgprintf("syscall(%lu, %lu, %lu, %lu, %lu, %lu)\n", num, a, b, c, d, e);
-    return 0;
+    return HandleSystemCall(num, a, b, c, d, e);
 }
 
 bool x86_64_InitSyscall() {

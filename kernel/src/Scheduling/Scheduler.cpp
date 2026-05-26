@@ -26,6 +26,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <DataStructures/LinkedList.hpp>
 
+#include <Memory/PageMapper.hpp>
 #include <Memory/PagingUtil.hpp>
 #include <Memory/VMM.hpp>
 
@@ -192,8 +193,16 @@ namespace Scheduler {
         thread->SetTimeRemaining(DEFAULT_TIMESLICE);
         thread->sleepRemainingTime = 0;
 
+        PageMapper* mapper = g_KPageMapper;
+        VMM::VMM* vmm = process->GetVMM();
+        if (vmm != nullptr) {
+            PageMapper* temp = vmm->GetPageMapper();
+            if (temp != nullptr)
+                mapper = temp;
+        }
+
 #ifdef __x86_64__
-        x86_64_SetThreadRegisters(&(thread->GetMutableRegisters()), thread->GetStack(), thread->GetEntryPoint(), process->GetMode(), from_HHDM(g_KernelRootPageTable));
+        x86_64_SetThreadRegisters(&(thread->GetMutableRegisters()), thread->GetStack(), thread->GetEntryPoint(), process->GetMode(), mapper);
 #endif
 
         if (state == nullptr)
@@ -255,7 +264,7 @@ namespace Scheduler {
         thread->GetCPUInfo()->state = state;
 
 #ifdef __x86_64__
-        x86_64_SetThreadRegisters(&(thread->GetMutableRegisters()), thread->GetStack(), thread->GetEntryPoint(), ProcessMode::KERNEL, from_HHDM(g_KernelRootPageTable));
+        x86_64_SetThreadRegisters(&(thread->GetMutableRegisters()), thread->GetStack(), thread->GetEntryPoint(), ProcessMode::KERNEL, g_KPageMapper);
 #endif
 
         spinlock_acquire(&state->lock);
@@ -376,10 +385,13 @@ namespace Scheduler {
 
     void Yield_Internal(uint64_t, void*);
 
-    void Yield(Thread* oldThread, bool forceSwitch, void* data) {
+    void Yield(Thread* oldThread, bool forceSwitch, void* data, bool swapStack) {
         ProcessorState* state = GetCurrentProcessorState();
         YieldData d = {data, oldThread};
-        Processor::SwapStackWithReturn(&Yield_Internal, forceSwitch, &d, state->kernelStack);
+        if (swapStack)
+            Processor::SwapStackWithReturn(&Yield_Internal, forceSwitch, &d, state->kernelStack);
+        else
+            Yield_Internal(forceSwitch, &d);
     }
 
     void Yield_Internal(uint64_t forceSwitchInt, void* fullData) {
@@ -612,11 +624,19 @@ namespace Scheduler {
                 if (thread == nullptr)
                     break;
 
-                if (Process* proc = thread->GetParent(); proc != nullptr)
+                Process* proc = thread->GetParent(); 
+                if (proc != nullptr)
                     proc->RemoveThread(thread);
                 thread->Delete();
                 if (thread->ShouldDelete())
                     delete thread;
+                if (thread->ShouldDeleteParent()) {
+                    g_Processes.lock();
+                    g_Processes.remove(proc);
+                    g_Processes.unlock();
+                    proc->Delete();
+                    delete proc;
+                }
             }
             g_deadThreadsSemaphore.Wait(); // nothing to delete, wait until next is ready
         }

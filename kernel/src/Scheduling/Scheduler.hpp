@@ -81,7 +81,7 @@ namespace Scheduler {
     void TimerTick(uint64_t msSinceLast, void* data);
     bool SaveOnInt(void* data);
 
-    void Yield(Thread* oldThread = nullptr, bool forceSwitch = false, void* data = nullptr); // data != nullptr means this is run in an interrupt context
+    void Yield(Thread* oldThread = nullptr, bool forceSwitch = false, void* data = nullptr, bool swapStack = true); // data != nullptr means this is run in an interrupt context
     
     void PickNext(bool lockState = true);
     Thread* StealThreadFromOther(ProcessorState* current, int* niceOut = nullptr);

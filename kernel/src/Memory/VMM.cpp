@@ -47,6 +47,36 @@ namespace VMM {
         m_vmRegionAllocator = vmRegionAllocator;
     }
 
+    void VMM::Delete() {
+        m_mapEntries.lock();
+        
+        m_mapEntries.forEach([](void* data, uint64_t, MapEntry* entry) -> bool {
+            VMM* current = (VMM*)data;
+            MemoryObject* obj = entry->memoryObject;
+            if (obj != nullptr) {
+                spinlock_acquire(&obj->lock);
+                Page* page = obj->pages;
+                for (uint64_t i = 0; i < obj->size; i += PAGE_SIZE) {
+                    if (page == nullptr)
+                        break;
+                    if (page->physAddr != 0) {
+                        current->m_pageMapper->UnmapPage(entry->startVirt + i);
+                        obj->pager->FreePage((void*)page->physAddr);
+                    }
+                    Page* current = page;
+                    page = page->next;
+                    delete current;
+                }
+                delete obj;
+            }
+            delete entry;
+            return true;
+        }, this);
+
+        m_mapEntries.Clear();
+        m_mapEntries.unlock();
+    }
+
     void* VMM::AllocatePages(uint64_t count, Protection prot, bool user, bool allocPhys, CacheType cacheType) {
         return AllocatePages(count, nullptr, prot, allocPhys, user, cacheType);
     }
@@ -479,6 +509,14 @@ namespace VMM {
         spinlock_release(&obj->lock);
 
         return result;
+    }
+
+    PageMapper* VMM::GetPageMapper() {
+        return m_pageMapper;
+    }
+
+    VMRegionAllocator* VMM::GetAllocator() {
+        return m_vmRegionAllocator;
     }
 
 

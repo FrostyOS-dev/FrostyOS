@@ -142,6 +142,8 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Semaphore.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Thread.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/ThreadList.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Process.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/SystemCall.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/DebugBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/VGABackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTYBackend.cpp

@@ -40,6 +40,9 @@ public:
 
     bool isPermsReduction(VMM::Protection oldProt, VMM::Protection newProt) const override;
 
+    void Create() override;
+    void Delete() override;
+
 private:
     void* m_pageTable;
 };

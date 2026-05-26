@@ -25,6 +25,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <DataStructures/LinkedList.hpp>
 
+#include <Memory/PageMapper.hpp>
+#include <Memory/VMM.hpp>
+#include <Memory/VMRegionAllocator.hpp>
+
 Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), m_VMM(vmm), m_Nice(nice), m_PID(UINT64_MAX), m_PPID(UINT64_MAX), m_nextTID(0), m_MainThread(nullptr), m_Threads() {
 
 }
@@ -43,6 +47,21 @@ bool Process::Start() {
     }, nullptr);
     m_Threads.unlock();
     return true;
+}
+
+void Process::Delete() {
+    // TODO: delete all threads
+    if (m_VMM != nullptr) {
+        m_VMM->Delete(); // Clear the VMM mappings before deleting its mapper or allocator
+        PageMapper* mapper = m_VMM->GetPageMapper();
+        mapper->Delete();
+        delete mapper;
+        VMRegionAllocator* allocator = m_VMM->GetAllocator();
+        allocator->Delete();
+        delete allocator;
+        delete m_VMM;
+        m_VMM = nullptr;
+    }
 }
 
 bool Process::CreateMainThread(ThreadEntryPoint entryPoint) {
@@ -107,7 +126,7 @@ void Process::RemoveThread(uint64_t tid, bool lock) {
 }
 
 void Process::RemoveThread(Thread* thread) {
-    if (thread == nullptr)
+    if (thread == nullptr || thread == m_MainThread)
         return;
 
     m_Threads.lock();
