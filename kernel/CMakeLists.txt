@@ -95,6 +95,8 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Processor.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Stack.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/start.asm
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Syscall.asm
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Syscall.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/TSC.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/TSC.cpp
     )

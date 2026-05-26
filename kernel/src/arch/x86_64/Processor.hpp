@@ -91,7 +91,7 @@ public:
     void Halt(bool wait = true) override;
     void Yield(bool forceSwitch = false) override;
 
-    void SwitchKernelStack(uint64_t stack) override;
+    void SwitchKernelStack(uint64_t stack) override; // Must be called with interrupts disabled
 
     void SetIRQData(x86_64_ProcessorIRQData* data);
     x86_64_ProcessorIRQData* GetIRQData();

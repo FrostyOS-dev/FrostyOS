@@ -23,8 +23,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define x86_64_GDT_KERNEL_CODE_SEGMENT 0x8
 #define x86_64_GDT_KERNEL_DATA_SEGMENT 0x10
 
-#define x86_64_GDT_USER_CODE_SEGMENT 0x18
-#define x86_64_GDT_USER_DATA_SEGMENT 0x20
+#define x86_64_GDT_USER_CODE_SEGMENT 0x20
+#define x86_64_GDT_USER_DATA_SEGMENT 0x18
 
 #define x86_64_TSS_SEGMENT 0x28
 

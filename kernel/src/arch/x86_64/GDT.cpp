@@ -41,7 +41,7 @@ void x86_64_InitGDT(x86_64_GDTEntry* entries, x86_64_TSS* TSS) {
     entries[3].Limit0 = 0xFFFF;
     entries[3].Base0 = 0;
     entries[3].Base1 = 0;
-    entries[3].Access = (uint8_t)x86_64_GDTAccess::Accessed | (uint8_t)x86_64_GDTAccess::ReadWrite | (uint8_t)x86_64_GDTAccess::Execute | (uint8_t)x86_64_GDTAccess::NonSystem | (uint8_t)x86_64_GDTAccess::Privilege3 | (uint8_t)x86_64_GDTAccess::Present;
+    entries[3].Access = (uint8_t)x86_64_GDTAccess::Accessed | (uint8_t)x86_64_GDTAccess::ReadWrite | (uint8_t)x86_64_GDTAccess::NonSystem | (uint8_t)x86_64_GDTAccess::Privilege3 | (uint8_t)x86_64_GDTAccess::Present;
     entries[3].Limit1 = 0xF;
     entries[3].Flags = (uint8_t)x86_64_GDTFlags::LongMode | (uint8_t)x86_64_GDTFlags::Granularity;
     entries[3].Base2 = 0;
@@ -49,7 +49,7 @@ void x86_64_InitGDT(x86_64_GDTEntry* entries, x86_64_TSS* TSS) {
     entries[4].Limit0 = 0xFFFF;
     entries[4].Base0 = 0;
     entries[4].Base1 = 0;
-    entries[4].Access = (uint8_t)x86_64_GDTAccess::Accessed | (uint8_t)x86_64_GDTAccess::ReadWrite | (uint8_t)x86_64_GDTAccess::NonSystem | (uint8_t)x86_64_GDTAccess::Privilege3 | (uint8_t)x86_64_GDTAccess::Present;
+    entries[4].Access = (uint8_t)x86_64_GDTAccess::Accessed | (uint8_t)x86_64_GDTAccess::ReadWrite | (uint8_t)x86_64_GDTAccess::Execute | (uint8_t)x86_64_GDTAccess::NonSystem | (uint8_t)x86_64_GDTAccess::Privilege3 | (uint8_t)x86_64_GDTAccess::Present;
     entries[4].Limit1 = 0xF;
     entries[4].Flags = (uint8_t)x86_64_GDTFlags::LongMode | (uint8_t)x86_64_GDTFlags::Granularity;
     entries[4].Base2 = 0;

@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "CPUID.h"
 #include "GDT.hpp"
 #include "PIT.hpp"
+#include "Syscall.hpp"
 #include "TSC.hpp"
 
 #include "interrupts/IDT.hpp"
@@ -86,6 +87,8 @@ x86_64_Processor::~x86_64_Processor() {
 
     x86_64_LocalNMI::Init();
 
+    assert(x86_64_InitSyscall());
+
     Scheduler::CreateIdleThread();
 
     Scheduler::Start(true);
@@ -125,6 +128,7 @@ void x86_64_Processor::InitBSPLate() {
         return;
 
     x86_64_IDT_SetISTS();
+    assert(x86_64_InitSyscall());
 }
 
 void x86_64_Processor::InitTSS(Scheduler::ProcessorState* state) {
@@ -168,7 +172,9 @@ void x86_64_Processor::Yield(bool forceSwitch) {
 }
 
 void x86_64_Processor::SwitchKernelStack(uint64_t stack) {
+    Scheduler::ProcessorState* state = GetCurrentProcessorState();
     m_TSS.RSP[0] = (uint64_t)stack;
+    state->taskKernelStack = (void*)stack;
 }
 
 void x86_64_Processor::FillCPUInfo() {
