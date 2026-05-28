@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <errno.h>
 #include <stddef.h>
+#include <string.h>
 
 #include <fs/FDManager.hpp>
 #include <fs/FileDescriptor.hpp>
@@ -45,15 +46,47 @@ int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
 
     realPath[pathLen] = 0;
 
+    FS::VNode* cwd = proc->GetCWD();
+
     FS::VNode* vnode = nullptr;
-    int rc = FS::VFS_Open(realPath, &vnode, proc->GetCWD(), proc->GetCred());
+    int rc = FS::VFS_Open(realPath, &vnode, cwd, proc->GetCred());
     if (rc < 0 || vnode->GetType() != FS::VType::REG) {
         if (rc >= 0 && vnode->GetType() != FS::VType::REG) {
             rc = -ENOSYS;
             FS::VFS_Close(vnode, proc->GetCred());
+        } else if (rc == -ENOENT && (flags & O_CREAT) > 0) {
+            if (realPath[pathLen - 1] == '/') {
+                delete[] realPath;
+                return -EISDIR;
+            }
+            char* parent = realPath;
+            char* name = strrchr(realPath, '/');
+            if (name == nullptr) {
+                name = realPath;
+                parent = (char*)"";
+            } else {
+                name[0] = 0;
+                name++;
+            }
+            
+            rc = FS::VFS_CreateFile(parent, name, cwd, proc->GetCred());
+            if (rc < 0) {
+                delete[] realPath;
+                return rc;
+            }
+
+            if (name != realPath)
+                name[-1] = '/';
+
+            rc = FS::VFS_Open(realPath, &vnode, cwd, proc->GetCred());
+            if (rc < 0) {
+                delete[] realPath;
+                return rc;
+            }
+        } else {
+            delete[] realPath;
+            return rc;
         }
-        delete[] realPath;
-        return rc;
     }
 
     FileDescriptor* desc = new FileDescriptor(proc, FDType::File, vnode);
