@@ -117,7 +117,6 @@ int LoadELFFile(const char* path, Process* proc, void** entry) {
             }
             void* pages = vmm->AllocatePages(DIV_ROUNDUP(phdr->p_memsz, PAGE_SIZE), ALIGN_ADDRESS_DOWN(phdr->p_vaddr, PAGE_SIZE), VMM::Protection::READ_WRITE, true, true);
             if (pages == nullptr) {
-                dbgprintf("Failed to allocate region\n");
                 HandleLoadFail(mappedRegions, vmm);
                 return -ENOMEM;
             }
