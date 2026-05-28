@@ -158,13 +158,11 @@ void* VMRegionAllocator::AllocatePages(void* ptr, uint64_t numPages) {
     // Step 1: Find the all pages tree node
     AVLTree::wAVLTreeNode* allPagesNode = m_allPagesTree.FindNodeOrLower((uint64_t)ptr);
     if (allPagesNode == nullptr) {
-        dbgprintf("no node\n");
         m_lock.Unlock();
         return nullptr;
     }
     CompleteTreeNodeData nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
     if (nodeData.isFree == 0 || allPagesNode->key + nodeData.size * PAGE_SIZE < (uint64_t)ptr + numPages * PAGE_SIZE) {
-        dbgprintf("too small\n");
         m_lock.Unlock();
         return nullptr;
     }
@@ -172,7 +170,6 @@ void* VMRegionAllocator::AllocatePages(void* ptr, uint64_t numPages) {
     // Step 2: Remove the free pages tree node
     AVLTree::wAVLTreeNode* freePagesNode = m_freePagesTree.FindNode(nodeData.size);
     if (freePagesNode == nullptr) {
-        dbgprintf("no free node\n");
         m_lock.Unlock();
         return nullptr;
     }
