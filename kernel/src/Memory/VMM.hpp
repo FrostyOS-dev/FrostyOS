@@ -97,11 +97,11 @@ namespace VMM {
 
         void* AllocatePages(uint64_t count, Protection prot = Protection::READ_WRITE, bool user = false, bool allocPhys = false, CacheType cacheType = CacheType::DEFAULT);
         void* AllocatePages(uint64_t count, void* addr = nullptr, Protection prot = Protection::READ_WRITE, bool user = false, bool allocPhys = false, CacheType cacheType = CacheType::DEFAULT);
-        bool FreePages(void* virtAddr);
+        bool FreePages(void* virtAddr, uint64_t count = 0);
+        bool RemapPages(void* virtAddr, uint64_t count = 0, Protection prot = Protection::READ_WRITE, bool user = false, CacheType cacheType = CacheType::DEFAULT);
 
         bool MapMemory(uint64_t virtAddr, MemoryObject* memObj, Protection prot, bool user, CacheType cacheType);
         bool UnmapMemory(uint64_t virtAddr);
-        bool RemapMemory(uint64_t virtAddr, Protection prot, bool user, CacheType cacheType);
 
         bool HandlePageFault(PageFaultCode code, uint64_t virtAddr);
 

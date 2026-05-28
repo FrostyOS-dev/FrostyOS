@@ -91,10 +91,8 @@ namespace VMM {
             pages = m_vmRegionAllocator->AllocatePages(count);
         else
             pages = m_vmRegionAllocator->AllocatePages(addr, count);
-        if (pages == nullptr) {
-            dbgprintf("Failed to allocate mem region at %p of %lu pages\n", addr, count);
+        if (pages == nullptr)
             return nullptr;
-        }
 
         // Step 2: put together the memory object, including page list
         MemoryObject* memObj = (MemoryObject*)kcalloc_vmm(1, sizeof(MemoryObject));
@@ -147,10 +145,16 @@ namespace VMM {
         return pages;
     }
 
-    bool VMM::FreePages(void* virtAddr) {
+    bool VMM::FreePages(void* virtAddr, uint64_t count) {
         uint64_t virt = reinterpret_cast<uint64_t>(virtAddr);
 
-        if (m_vmRegionAllocator == nullptr || virt < m_vmRegionAllocator->GetStart() || virt >= m_vmRegionAllocator->GetEnd())
+        bool full = false;
+        if (count == 0) {
+            full = true;
+            count = 1;
+        }
+
+        if (m_vmRegionAllocator == nullptr || virt < m_vmRegionAllocator->GetStart() || (virt + count * PAGE_SIZE) > m_vmRegionAllocator->GetEnd())
             return false; // outside the region
 
         m_mapEntries.lock();
@@ -161,7 +165,7 @@ namespace VMM {
         }
 
         MapEntry* entry = reinterpret_cast<MapEntry*>(node->value);
-        if (virt != entry->startVirt || entry->memoryObject == nullptr) {
+        if (virt != entry->startVirt || entry->memoryObject == nullptr || (!full && (virt + count * PAGE_SIZE) != entry->endVirt)) {
             m_mapEntries.unlock();
             return false;
         }
@@ -204,6 +208,80 @@ namespace VMM {
 
         kfree_vmm(obj);
 
+        return true;
+    }
+
+    bool VMM::RemapPages(void* virtAddr, uint64_t count, Protection prot, bool user, CacheType cacheType) {
+        m_mapEntries.lock();
+
+        bool full = count == 0;
+
+        MapEntry* entry = m_mapEntries.Find((uint64_t)virtAddr);
+        if (entry == nullptr || entry->memoryObject == nullptr || (!full && (uint64_t)virtAddr + count * PAGE_SIZE > entry->endVirt)) {
+            m_mapEntries.unlock();
+            return false;
+        }
+
+        uint64_t pageCount = (entry->endVirt - entry->startVirt) >> PAGE_SIZE_SHIFT;
+
+        spinlock_acquire(&entry->memoryObject->lock);
+        Page* page = entry->memoryObject->pages;
+        for (uint64_t i = 0; i < pageCount; i++) {
+            // need to confirm the protection is at least as high as what it is requesting to be mapped as
+            switch (page->protection) {
+            case Protection::READ:
+            case Protection::WRITE:
+            case Protection::EXECUTE:
+                if (prot != page->protection) {
+                    spinlock_release(&entry->memoryObject->lock);
+                    m_mapEntries.unlock();
+                    return false;
+                }
+                break;
+            case Protection::READ_WRITE:
+                if (prot == Protection::EXECUTE || prot == Protection::READ_EXECUTE || prot == Protection::READ_WRITE_EXECUTE) {
+                    spinlock_release(&entry->memoryObject->lock);
+                    m_mapEntries.unlock();
+                    return false;
+                }
+                break;
+            case Protection::READ_EXECUTE:
+                if (prot == Protection::WRITE || prot == Protection::READ_WRITE || prot == Protection::READ_WRITE_EXECUTE) {
+                    spinlock_release(&entry->memoryObject->lock);
+                    m_mapEntries.unlock();
+                    return false;
+                }
+                break;
+            default:
+                break;
+            }
+
+            page = page->next;
+        }
+        
+        // Now that it is confirmed to be valid, we can remap
+        page = entry->memoryObject->pages;
+        for (uint64_t i = 0; i < pageCount; i++) {
+            if (page == nullptr)
+                break;
+
+            if (page->physAddr != 0)
+                m_pageMapper->RemapPage((uint64_t)virtAddr + i * PAGE_SIZE, prot, user, cacheType);
+
+            page = page->next;
+        }
+
+        spinlock_release(&entry->memoryObject->lock);
+
+        Protection oldProt = entry->flags.protection;
+        bool wasUser = entry->flags.user;
+
+        entry->flags.protection = prot;
+        entry->flags.user = user;
+
+        m_mapEntries.unlock(); // need to hold the lock for the whole function to ensure it can't be unmapped on us part way through
+
+        m_pageMapper->InvalidatePages((uint64_t)virtAddr, pageCount, (user ^ wasUser ) || m_pageMapper->isPermsReduction(oldProt, prot));
         return true;
     }
 
@@ -325,78 +403,6 @@ namespace VMM {
 
         m_pageMapper->InvalidatePages(virtAddr, pageCount, true);
 
-        return true;
-    }
-
-    bool VMM::RemapMemory(uint64_t virtAddr, Protection prot, bool user, CacheType cacheType) {
-        m_mapEntries.lock();
-
-        MapEntry* entry = m_mapEntries.Find(virtAddr);
-        if (entry == nullptr || entry->memoryObject == nullptr) {
-            m_mapEntries.unlock();
-            return false;
-        }
-
-        uint64_t pageCount = (entry->endVirt - entry->startVirt) >> PAGE_SIZE_SHIFT;
-
-        spinlock_acquire(&entry->memoryObject->lock);
-        Page* page = entry->memoryObject->pages;
-        for (uint64_t i = 0; i < pageCount; i++) {
-            // need to confirm the protection is at least as high as what it is requesting to be mapped as
-            switch (page->protection) {
-            case Protection::READ:
-            case Protection::WRITE:
-            case Protection::EXECUTE:
-                if (prot != page->protection) {
-                    spinlock_release(&entry->memoryObject->lock);
-                    m_mapEntries.unlock();
-                    return false;
-                }
-                break;
-            case Protection::READ_WRITE:
-                if (prot == Protection::EXECUTE || prot == Protection::READ_EXECUTE || prot == Protection::READ_WRITE_EXECUTE) {
-                    spinlock_release(&entry->memoryObject->lock);
-                    m_mapEntries.unlock();
-                    return false;
-                }
-                break;
-            case Protection::READ_EXECUTE:
-                if (prot == Protection::WRITE || prot == Protection::READ_WRITE || prot == Protection::READ_WRITE_EXECUTE) {
-                    spinlock_release(&entry->memoryObject->lock);
-                    m_mapEntries.unlock();
-                    return false;
-                }
-                break;
-            default:
-                break;
-            }
-
-            page = page->next;
-        }
-        
-        // Now that it is confirmed to be valid, we can remap
-        page = entry->memoryObject->pages;
-        for (uint64_t i = 0; i < pageCount; i++) {
-            if (page == nullptr)
-                break;
-
-            if (page->physAddr != 0)
-                m_pageMapper->RemapPage(virtAddr + i * PAGE_SIZE, prot, user, cacheType);
-
-            page = page->next;
-        }
-
-        spinlock_release(&entry->memoryObject->lock);
-
-        Protection oldProt = entry->flags.protection;
-        bool wasUser = entry->flags.user;
-
-        entry->flags.protection = prot;
-        entry->flags.user = user;
-
-        m_mapEntries.unlock(); // need to hold the lock for the whole function to ensure it can't be unmapped on us part way through
-
-        m_pageMapper->InvalidatePages(virtAddr, pageCount, (user ^ wasUser ) || m_pageMapper->isPermsReduction(oldProt, prot));
         return true;
     }
 
