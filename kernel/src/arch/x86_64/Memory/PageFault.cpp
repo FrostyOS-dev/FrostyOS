@@ -19,6 +19,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdio.h>
 
+#include <Memory/VMM.hpp>
+#include <Memory/VMRegionAllocator.hpp>
+
 #include <Scheduling/Process.hpp>
 #include <Scheduling/Scheduler.hpp>
 
@@ -45,7 +48,11 @@ void x86_64_PageFaultHandler(x86_64_ISR_Frame* frame) {
             process = g_KProcess;
 
         if (process != nullptr) {
-            VMM::VMM* vmm = process->GetVMM();
+            VMM::VMM* vmm;
+            if (process->GetMode() == ProcessMode::USER && !IsInUserRegion(frame->CR2))
+                vmm = VMM::g_KVMM;
+            else
+                vmm = process->GetVMM();
             if (vmm != nullptr && vmm->HandlePageFault({code.present, code.write, code.user, code.execute}, frame->CR2))
                 return;
         }

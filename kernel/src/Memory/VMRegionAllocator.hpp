@@ -69,5 +69,6 @@ private:
 
 // Implemented in arch specific code
 void GetDefaultUserRegion(uint64_t* start, uint64_t* end);
+bool IsInUserRegion(uint64_t addr);
 
 #endif /* _VIRTMEM_REGION_ALLOCATOR_HPP */

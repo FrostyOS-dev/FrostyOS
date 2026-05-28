@@ -216,10 +216,15 @@ PageMapper* CreatePageMapper() {
     return mapper;
 }
 
-// From: Memory/VMRegionAllocator.hpp
+// Following functions are from: Memory/VMRegionAllocator.hpp
+
 void GetDefaultUserRegion(uint64_t* start, uint64_t* end) {
     if (start != nullptr)
         *start = USER_MEMORY_START;
     if (end != nullptr)
         *end = x86_64_Is5LevelPagingSupported() ? USER_MEMORY_END_5LVL : USER_MEMORY_END_4LVL;
+}
+
+bool IsInUserRegion(uint64_t addr) {
+    return addr >= USER_MEMORY_START && addr <= (x86_64_Is5LevelPagingSupported() ? USER_MEMORY_END_5LVL : USER_MEMORY_END_4LVL);
 }
