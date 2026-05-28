@@ -25,11 +25,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <DataStructures/LinkedList.hpp>
 
+#include <fs/FDManager.hpp>
+#include <fs/FileDescriptor.hpp>
+#include <fs/VFS.hpp>
+
 #include <Memory/PageMapper.hpp>
 #include <Memory/VMM.hpp>
 #include <Memory/VMRegionAllocator.hpp>
 
-Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), m_VMM(vmm), m_Nice(nice), m_PID(UINT64_MAX), m_PPID(UINT64_MAX), m_nextTID(0), m_MainThread(nullptr), m_Threads() {
+#include <tty/TTYBackend.hpp>
+#include <tty/TTY.hpp>
+
+
+Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), m_VMM(vmm), m_Nice(nice), m_PID(UINT64_MAX), m_PPID(UINT64_MAX), m_nextTID(0), m_MainThread(nullptr), m_Threads(), m_cred({0, 0, 0, 0, 0, 0}), m_FDManager(nullptr), m_cwd(nullptr) {
 
 }
 
@@ -49,6 +57,73 @@ bool Process::Start() {
     return true;
 }
 
+bool Process::Create() {
+    if (m_VMM == nullptr) {
+        VMRegionAllocator* alloc = new VMRegionAllocator();
+        if (alloc == nullptr)
+            return false;
+        uint64_t start, end;
+        GetDefaultUserRegion(&start, &end);
+        alloc->Init(start, end);
+        PageMapper* mapper = CreatePageMapper();
+        if (mapper == nullptr) {
+            delete alloc;
+            return false;
+        }
+        VMM::VMM* vmm = new VMM::VMM(mapper, alloc);
+        if (vmm == nullptr) {
+            mapper->Delete();
+            delete mapper;
+            delete alloc;
+            return false;
+        }
+        m_VMM = vmm;
+    }
+    if (m_FDManager == nullptr) {
+        m_FDManager = new FileDescriptorManager();
+        if (m_FDManager == nullptr) {
+            Delete();
+            return false;
+        }
+        if (!m_FDManager->Init()) {
+            delete m_FDManager;
+            m_FDManager = nullptr;
+            Delete();
+            return false;
+        }
+        FileDescriptor* in = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYBackendStream::IN);
+        FileDescriptor* out = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYBackendStream::OUT);
+        FileDescriptor* err = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYBackendStream::ERR);
+        FileDescriptor* debug = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYBackendStream::DEBUG);
+        if (in == nullptr || out == nullptr || err == nullptr || debug == nullptr) {
+            delete in;
+            delete out;
+            delete err;
+            delete debug;
+            delete m_FDManager;
+            m_FDManager = nullptr;
+            Delete();
+            return false;
+        }
+        if (!m_FDManager->ReserveFD(stdin, in) || !m_FDManager->ReserveFD(stdout, out) || !m_FDManager->ReserveFD(stderr, err) || !m_FDManager->ReserveFD(stddebug, debug)) {
+            Delete();
+            return false;
+        }
+        if (in->Open(0) < 0 || out->Open(0) < 0 || err->Open(0) < 0 || debug->Open(0) < 0) {
+            Delete();
+            return false;
+        }
+    }
+    if (m_cwd == nullptr) {
+        FS::VNode* vnode;
+        FS::VFS* fs;
+        int rc = FS::VFS_LookupPath("/", &vnode, &fs, nullptr, m_cred);
+        if (rc == 0) // not having a cwd isn't fatal
+            m_cwd = vnode;
+    }
+    return true;
+}
+
 void Process::Delete() {
     // TODO: delete all threads
     if (m_VMM != nullptr) {
@@ -61,6 +136,11 @@ void Process::Delete() {
         delete allocator;
         delete m_VMM;
         m_VMM = nullptr;
+    }
+    if (m_FDManager != nullptr) {
+        m_FDManager->Delete();
+        delete m_FDManager;
+        m_FDManager = nullptr;
     }
 }
 
@@ -176,6 +256,22 @@ const Credential& Process::GetCred() const {
 
 void Process::SetCred(const Credential& cred) {
     m_cred = cred;
+}
+
+FileDescriptorManager* Process::GetFDManager() {
+    return m_FDManager;
+}
+
+void Process::SetFDManager(FileDescriptorManager* manager) {
+    m_FDManager = manager;
+}
+
+FS::VNode* Process::GetCWD() {
+    return m_cwd;
+}
+
+void Process::SetCWD(FS::VNode* cwd) {
+    m_cwd = cwd;
 }
 
 

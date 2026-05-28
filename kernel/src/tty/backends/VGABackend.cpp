@@ -44,9 +44,12 @@ void TTYBackendVGA::WriteString(const char* str) {
         m_vga->PrintString(str);
 }
 
-void TTYBackendVGA::WriteString(const char* str, uint64_t length) {
-    if (m_vga != nullptr)
+void TTYBackendVGA::WriteString(const char* str, uint64_t length, bool flush) {
+    if (m_vga != nullptr) {
         m_vga->PrintString(str, length);
+        if (flush)
+            m_vga->SwapBuffers();
+    }
 }
 
 void TTYBackendVGA::SetCursor(uint64_t x, uint64_t y) {

@@ -67,4 +67,7 @@ private:
     Mutex m_lock;
 };
 
+// Implemented in arch specific code
+void GetDefaultUserRegion(uint64_t* start, uint64_t* end);
+
 #endif /* _VIRTMEM_REGION_ALLOCATOR_HPP */

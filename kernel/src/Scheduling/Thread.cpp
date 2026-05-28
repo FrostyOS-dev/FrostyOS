@@ -93,6 +93,14 @@ bool Thread::ExitCurrentThread(bool deleteThis, bool deleteParent) {
     return false;
 }
 
+Thread* Thread::GetCurrentThread() {
+    int intState = Processor::DisableInterrupts();
+    Scheduler::ProcessorState* state = GetCurrentProcessorState();
+    Thread* thread = state->currentThread;
+    Processor::EnableInterrupts(intState);
+    return thread;
+}
+
 void Thread::SetEntryPoint(ThreadEntryPoint entryPoint) {
     m_EntryPoint = entryPoint;
 }

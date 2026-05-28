@@ -25,6 +25,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Scheduling/Mutex.hpp>
 
+#include <SystemCalls/File.hpp>
+
 #include <tty/TTY.hpp>
 #include <tty/TTYBackend.hpp>
 
@@ -62,7 +64,7 @@ int FileDescriptor::Open(int flags) {
 
     switch (m_type) {
     case FDType::File:
-        if ((flags & FD_FLAG_O_APPEND) > 0) {
+        if ((flags & O_APPEND) > 0) {
             if (m_vnode == nullptr) {
                 m_mutex.Unlock();
                 return -EBADF;
@@ -71,7 +73,7 @@ int FileDescriptor::Open(int flags) {
         }
         break;
     case FDType::TTY:
-        if ((flags & FD_FLAG_O_APPEND) == 0)
+        if ((flags & O_APPEND) == 0)
             break;
         m_mutex.Unlock();
         return -EBADF;
@@ -86,13 +88,16 @@ int FileDescriptor::Open(int flags) {
     return ESUCCESS;
 }
 
-int FileDescriptor::Close() {
+void FileDescriptor::Close() {
     m_mutex.Lock();
     m_offset = 0;
     m_append = false;
     m_open = false;
     m_mutex.Unlock();
-    return ESUCCESS;
+}
+
+bool FileDescriptor::isOpen() const {
+    return m_open;
 }
 
 int FileDescriptor::Read(void* buf, size_t count, size_t* realCount) {
@@ -177,7 +182,7 @@ int FileDescriptor::Write(const void* buf, size_t count, size_t* realCount) {
             return -EBADF;
         }
         // Ignore offset
-        m_tty->WriteString(static_cast<const char*>(buf), count, m_ttyStream);
+        m_tty->WriteString(static_cast<const char*>(buf), count, m_ttyStream, true);
         *realCount = count;
         rc = ESUCCESS;
         break;
@@ -249,3 +254,12 @@ int FileDescriptor::Seek(int64_t offset, FDOffsetStart whence, int64_t* realOffs
     m_mutex.Unlock();
     return rc;
 }
+
+FDType FileDescriptor::GetType() const {
+    return m_type;
+}
+
+FS::VNode* FileDescriptor::GetVNode() {
+    return m_vnode;
+}
+

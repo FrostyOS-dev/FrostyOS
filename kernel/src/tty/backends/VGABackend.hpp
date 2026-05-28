@@ -31,7 +31,7 @@ public:
 
     void WriteChar(char c) override;
     void WriteString(const char* str) override;
-    void WriteString(const char* str, uint64_t length) override;
+    void WriteString(const char* str, uint64_t length, bool flush) override;
 
     void SetCursor(uint64_t x, uint64_t y) override;
     void GetCursor(uint64_t& x, uint64_t& y) override;

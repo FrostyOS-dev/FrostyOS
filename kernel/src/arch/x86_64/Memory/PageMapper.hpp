@@ -47,4 +47,6 @@ private:
     void* m_pageTable;
 };
 
+PageMapper* CreatePageMapper();
+
 #endif /* _x86_64_PAGE_MAPPER_HPP */

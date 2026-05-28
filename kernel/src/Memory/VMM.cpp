@@ -511,6 +511,65 @@ namespace VMM {
         return result;
     }
 
+    bool VMM::ValidateRead(const void* addr, size_t size, bool user) {
+        uint64_t virtAddr = (uint64_t)addr;
+
+        m_mapEntries.lock();
+
+        while (true) {
+            AVLTree::wAVLTreeNode* node = m_mapEntries.FindNodeOrLower(virtAddr);
+            if (node == nullptr || node->value == 0) {
+                m_mapEntries.unlock();
+                return false;
+            }
+
+            MapEntry* entry = reinterpret_cast<MapEntry*>(node->value);
+            Protection prot = entry->flags.protection;
+            if (virtAddr < entry->startVirt || (user && !entry->flags.user) || (static_cast<uint8_t>(prot) & static_cast<uint8_t>(Protection::READ)) == 0) {
+                m_mapEntries.unlock();
+                return false;
+            }
+
+            if ((virtAddr + size) <= entry->endVirt) {
+                m_mapEntries.unlock();
+                return true;
+            }
+
+            size -= entry->endVirt - virtAddr;
+            virtAddr = entry->endVirt;
+        }
+    }
+
+    bool VMM::ValidateWrite(const void* addr, size_t size, bool user) {
+        uint64_t virtAddr = (uint64_t)addr;
+
+        m_mapEntries.lock();
+
+        while (true) {
+            AVLTree::wAVLTreeNode* node = m_mapEntries.FindNodeOrLower(virtAddr);
+            if (node == nullptr || node->value == 0) {
+                m_mapEntries.unlock();
+                return false;
+            }
+
+            MapEntry* entry = reinterpret_cast<MapEntry*>(node->value);
+            Protection prot = entry->flags.protection;
+            if (virtAddr < entry->startVirt || (user && !entry->flags.user) || (static_cast<uint8_t>(prot) & static_cast<uint8_t>(Protection::WRITE)) == 0) {
+                m_mapEntries.unlock();
+                return false;
+            }
+
+            if ((virtAddr + size) <= entry->endVirt) {
+                m_mapEntries.unlock();
+                return true;
+            }
+
+            size -= entry->endVirt - virtAddr;
+            virtAddr = entry->endVirt;
+        }
+    }
+
+
     PageMapper* VMM::GetPageMapper() {
         return m_pageMapper;
     }

@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _FILE_DESCRIPTOR_HPP
 #define _FILE_DESCRIPTOR_HPP
 
+#include "fs/VFS.hpp"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -38,10 +39,6 @@ enum class FDOffsetStart {
     CURRENT
 };
 
-enum FDOpenFlags {
-    FD_FLAG_O_APPEND = 0x1
-};
-
 namespace FS {
     class VNode;
 }
@@ -59,12 +56,16 @@ public:
     void Init(Process* proc, FDType type, TTY* tty, TTYBackendStream stream);
 
     int Open(int flags);
-    int Close();
+    void Close();
+    bool isOpen() const;
 
     int Read(void* buf, size_t count, size_t* realCount);
     int Write(const void* buf, size_t count, size_t* realCount);
 
     int Seek(int64_t offset, FDOffsetStart whence, int64_t* realOffset);
+
+    FDType GetType() const;
+    FS::VNode* GetVNode();
 
 private:
     Process* m_proc;

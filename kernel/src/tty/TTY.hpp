@@ -30,7 +30,7 @@ public:
 
     void WriteChar(char c, TTYBackendStream stream = TTYBackendStream::OUT);
     void WriteString(const char* str, TTYBackendStream stream = TTYBackendStream::OUT);
-    void WriteString(const char* str, uint64_t length, TTYBackendStream stream = TTYBackendStream::OUT);
+    void WriteString(const char* str, uint64_t length, TTYBackendStream stream = TTYBackendStream::OUT, bool flush = false);
 
     char ReadChar(TTYBackendStream stream = TTYBackendStream::IN);
     void ReadString(char* str, uint64_t length, TTYBackendStream stream = TTYBackendStream::IN);

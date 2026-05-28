@@ -42,7 +42,7 @@ public:
 
     virtual void WriteChar(char c);
     virtual void WriteString(const char* str);
-    virtual void WriteString(const char* str, uint64_t length);
+    virtual void WriteString(const char* str, uint64_t length, bool flush);
 
     virtual char ReadChar();
     virtual void ReadString(char* str, uint64_t length);

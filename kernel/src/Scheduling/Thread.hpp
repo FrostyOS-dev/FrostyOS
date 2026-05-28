@@ -59,6 +59,7 @@ public:
     bool Delete(); // Assumed to be removed from scheduler, and not running
 
     static bool ExitCurrentThread(bool deleteThis, bool deleteParent);
+    static Thread* GetCurrentThread();
 
     void SetEntryPoint(ThreadEntryPoint entryPoint);
     ThreadEntryPoint GetEntryPoint() const;

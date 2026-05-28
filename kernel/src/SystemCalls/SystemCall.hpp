@@ -18,12 +18,22 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _SYSTEM_CALL_HPP
 #define _SYSTEM_CALL_HPP
 
+#include <stddef.h>
 #include <stdint.h>
+
+class Process;
 
 uint64_t HandleSystemCall(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5);
 
+bool UserRead(const void* userBuf, void* kBuf, size_t size, Process* currentProc);
+bool UserWrite(void* userBuf, const void* kBuf, size_t size, Process* currentProc, bool validate = true);
+
 #define ENUMERATE_SYSTEM_CALLS(SC) \
-    SC(EXIT, exit)
+    SC(EXIT, exit) \
+    SC(OPEN, open) \
+    SC(CLOSE, close) \
+    SC(READ, read) \
+    SC(WRITE, write)
 
 enum SystemCalls : uint64_t {
 #define ENUMERATE_CALL(u, l) SYS_##u,
@@ -31,6 +41,6 @@ enum SystemCalls : uint64_t {
 #undef ENUMERATE_CALL
 };
 
-#define SYSTEM_CALL_COUNT 1
+#define SYSTEM_CALL_COUNT 5
 
 #endif /* _SYSTEM_CALL_HPP */

@@ -16,7 +16,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "FDManager.hpp"
+#include "FileDescriptor.hpp"
 
+#include <errno.h>
 #include <string.h>
 
 #include <DataStructures/Bitmap.hpp>
@@ -43,6 +45,26 @@ bool FileDescriptorManager::Init() {
     return true;
 }
 
+void FileDescriptorManager::Delete() {
+    m_bitmapLock.Lock();
+    delete[] m_bitmap.GetBuffer();
+    m_bitmap.SetBuffer(nullptr);
+    m_bitmap.SetSize(0);
+    m_bitmapLock.Unlock();
+
+    m_currentFDs.lock();
+    m_currentFDs.forEach([](void*, fd_t, FileDescriptor* desc) -> bool {
+        if (desc != nullptr) {
+            if (desc->isOpen())
+                desc->Close();
+            delete desc;
+        }
+        return true;
+    }, nullptr);
+    m_currentFDs.Clear();
+    m_currentFDs.unlock();
+}
+
 fd_t FileDescriptorManager::Allocate(FileDescriptor* desc) {
     m_bitmapLock.Lock();
     for (uint64_t i = 0; i < m_bitmap.GetSize() * 8; i++) {
@@ -60,14 +82,14 @@ fd_t FileDescriptorManager::Allocate(FileDescriptor* desc) {
 
     if (m_bitmap.GetSize() * 8 == MAX_FD) {
         m_bitmapLock.Unlock();
-        return -1; // no more FDs are allowed
+        return -EMFILE; // no more FDs are allowed
     }
 
     size_t currentSize = m_bitmap.GetSize();
     uint8_t* buffer = new uint8_t[currentSize + INITIAL_FD_TABLE_SIZE / 8];
     if (buffer == nullptr) {
         m_bitmapLock.Unlock();
-        return -1;
+        return -ENOMEM;
     }
 
     memcpy(buffer, m_bitmap.GetBuffer(), currentSize);
@@ -86,7 +108,7 @@ fd_t FileDescriptorManager::Allocate(FileDescriptor* desc) {
     return currentSize * 8;
 }
 
-bool FileDescriptorManager::Free(fd_t fd) {
+bool FileDescriptorManager::Free(fd_t fd, FileDescriptor** descOut) {
     m_currentFDs.lock();
 
     AVLTree::wAVLTreeNode* node = m_currentFDs.FindNode(fd);
@@ -94,6 +116,9 @@ bool FileDescriptorManager::Free(fd_t fd) {
         m_currentFDs.unlock();
         return false;
     }
+
+    if (descOut != nullptr)
+        *descOut = (FileDescriptor*)node->value;
 
     m_currentFDs.RemoveNode(node);
     m_currentFDs.unlock();

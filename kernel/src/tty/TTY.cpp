@@ -39,9 +39,9 @@ void TTY::WriteString(const char* str, TTYBackendStream stream) {
     }
 }
 
-void TTY::WriteString(const char* str, uint64_t length, TTYBackendStream stream) {
+void TTY::WriteString(const char* str, uint64_t length, TTYBackendStream stream, bool flush) {
     if (m_backends[(uint64_t)stream] != nullptr) {
-        m_backends[(uint64_t)stream]->WriteString(str, length);
+        m_backends[(uint64_t)stream]->WriteString(str, length, flush);
     }
 }
 

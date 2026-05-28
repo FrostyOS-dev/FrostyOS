@@ -37,7 +37,7 @@ void TTYBackend::WriteString(const char* str) {
     
 }
 
-void TTYBackend::WriteString(const char* str, uint64_t length) {
+void TTYBackend::WriteString(const char* str, uint64_t length, bool flush) {
     
 }
 

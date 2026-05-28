@@ -44,6 +44,10 @@ Virtual Memory Regions (5 level paging):
 0xFFFFFFFF80000000 - 0xFFFF'FFFF'FFFF'FFFF (   2GiB): Kernel executable loading space
 */
 
+#define USER_MEMORY_START    0x0000'0000'0000'1000
+#define USER_MEMORY_END_4LVL 0x0000'7FFF'FFFF'FFFF
+#define USER_MEMORY_END_5LVL 0x00FF'FFFF'FFFF'FFFF
+
 void x86_64_InitPaging(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, x86_64_PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical);
 
 extern void* g_KernelRootPageTable;

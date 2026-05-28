@@ -41,6 +41,9 @@ public:
     virtual void Delete() = 0;
 };
 
+// Implemented in arch-specific code
+extern PageMapper* CreatePageMapper();
+
 extern PageMapper* g_KPageMapper;
 
 #endif /* _PAGE_MAPPER_HPP */

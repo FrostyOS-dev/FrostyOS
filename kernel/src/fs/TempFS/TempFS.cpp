@@ -101,6 +101,9 @@ namespace FS {
         if (offset >= m_attr.size)
             return -EINVAL;
 
+        if (offset + size > m_attr.size)
+            size = m_attr.size - offset;
+
         size_t read = 0;
         while (read < size) {
             if (offset + read >= m_attr.size)
@@ -160,7 +163,7 @@ namespace FS {
         size_t written = 0;
         while (written < size) {
             uint64_t blockNum = (offset + written) >> PAGE_SIZE_SHIFT;
-            if (offset + written >= m_attr.size) {
+            if (offset + written >= m_attr.blocks) {
                 Block* block = CreateBlock(blockNum, DIV_ROUNDUP(size - written, PAGE_SIZE));
                 if (block == nullptr) {
                     *bytesWritten = written;
@@ -169,6 +172,7 @@ namespace FS {
 
                 memcpy(block->addr, (void*)((uint64_t)in + written), size - written);
                 m_attr.size += size - written;
+                m_attr.blocks += ALIGN_UP(size - written, PAGE_SIZE);
                 written = size;
                 break;
             }

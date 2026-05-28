@@ -41,12 +41,19 @@ struct Credential {
     uint32_t sgid;
 };
 
+class FileDescriptorManager;
+
+namespace FS {
+    class VNode;
+}
+
 class Process {
 public:
     Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice);
     ~Process();
 
     bool Start();
+    bool Create();
     void Delete();
 
     bool CreateMainThread(ThreadEntryPoint entryPoint);
@@ -75,6 +82,12 @@ public:
     const Credential& GetCred() const;
     void SetCred(const Credential& cred);
 
+    FileDescriptorManager* GetFDManager();
+    void SetFDManager(FileDescriptorManager* manager);
+
+    FS::VNode* GetCWD();
+    void SetCWD(FS::VNode* cwd);
+
 private:
     ProcessMode m_Mode;
     VMM::VMM* m_VMM;
@@ -85,6 +98,8 @@ private:
     Thread* m_MainThread;
     ProcThreadList m_Threads;
     Credential m_cred;
+    FileDescriptorManager* m_FDManager;
+    FS::VNode* m_cwd;
 };
 
 extern Process* g_KProcess;

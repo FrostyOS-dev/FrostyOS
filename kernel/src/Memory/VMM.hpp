@@ -105,6 +105,9 @@ namespace VMM {
 
         bool HandlePageFault(PageFaultCode code, uint64_t virtAddr);
 
+        bool ValidateRead(const void* addr, size_t size, bool user = true);
+        bool ValidateWrite(const void* addr, size_t size, bool user = true);
+
         PageMapper* GetPageMapper();
         VMRegionAllocator* GetAllocator();
 

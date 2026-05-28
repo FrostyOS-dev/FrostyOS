@@ -36,9 +36,10 @@ public:
     ~FileDescriptorManager();
 
     bool Init();
+    void Delete();
 
     fd_t Allocate(FileDescriptor* desc);
-    bool Free(fd_t fd); // destruction of the underlying FileDescriptor is the responsibility of the caller
+    bool Free(fd_t fd, FileDescriptor** descOut = nullptr); // destruction of the underlying FileDescriptor is the responsibility of the caller
 
     bool ReserveFD(fd_t fd, FileDescriptor* desc);
 

@@ -15,11 +15,17 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "File.hpp"
 #include "Process.hpp"
 #include "SystemCall.hpp"
 
 #include <errno.h>
 #include <stdint.h>
+#include <string.h>
+
+#include <Memory/VMM.hpp>
+
+#include <Scheduling/Process.hpp>
 
 typedef uint64_t (*systemCall_t)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t);
 
@@ -38,5 +44,26 @@ uint64_t HandleSystemCall(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t a
     if (num >= SYSTEM_CALL_COUNT)
         return -ENOSYS;
 
-    return g_syscallTable[num](arg1, arg2, arg3, arg4, arg5);
+    uint64_t rc = g_syscallTable[num](arg1, arg2, arg3, arg4, arg5);
+    return rc;
+}
+
+bool UserRead(const void* userBuf, void* kBuf, size_t size, Process* currentProc) {
+    if (userBuf == nullptr || kBuf == nullptr || size == 0 || currentProc == nullptr)
+        return false;
+    VMM::VMM* vmm = currentProc->GetVMM();
+    if (!vmm->ValidateRead(userBuf, size))
+        return false;
+    memcpy(kBuf, userBuf, size);
+    return true;
+}
+
+bool UserWrite(void* userBuf, const void* kBuf, size_t size, Process* currentProc, bool validate) {
+    if (userBuf == nullptr || kBuf == nullptr || size == 0 || currentProc == nullptr)
+        return false;
+    VMM::VMM* vmm = currentProc->GetVMM();
+    if (validate && !vmm->ValidateWrite(userBuf, size))
+        return false;
+    memcpy(userBuf, kBuf, size);
+    return true;
 }

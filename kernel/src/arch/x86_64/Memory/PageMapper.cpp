@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "PageMapper.hpp"
 #include "PageTables.hpp"
+#include "PagingInit.hpp"
 #include "PagingUtil.hpp"
 #include "PAT.hpp"
 
@@ -207,4 +208,18 @@ void x86_64_PageMapper::Create() {
 void x86_64_PageMapper::Delete() {
     g_PMM->FreePage(from_HHDM(m_pageTable));
     m_pageTable = nullptr;
+}
+
+PageMapper* CreatePageMapper() {
+    x86_64_PageMapper* mapper = new x86_64_PageMapper;
+    mapper->Create();
+    return mapper;
+}
+
+// From: Memory/VMRegionAllocator.hpp
+void GetDefaultUserRegion(uint64_t* start, uint64_t* end) {
+    if (start != nullptr)
+        *start = USER_MEMORY_START;
+    if (end != nullptr)
+        *end = x86_64_Is5LevelPagingSupported() ? USER_MEMORY_END_5LVL : USER_MEMORY_END_4LVL;
 }

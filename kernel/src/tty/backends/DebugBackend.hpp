@@ -26,7 +26,7 @@ public:
 
     void WriteChar(char c) override;
     void WriteString(const char* str) override;
-    void WriteString(const char* str, uint64_t length) override;
+    void WriteString(const char* str, uint64_t length, bool flush) override;
 };
 
 #endif /* _TTY_DEBUG_BACKEND_HPP */
