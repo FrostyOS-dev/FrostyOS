@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "File.hpp"
+#include "Memory.hpp"
 #include "Process.hpp"
 #include "SystemCall.hpp"
 
