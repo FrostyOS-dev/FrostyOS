@@ -52,3 +52,45 @@ int sys_settcb(void* base) {
 
     return ESUCCESS;
 }
+
+pid_t sys_getpid() {
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+    return proc->GetPID();
+}
+
+pid_t sys_getppid() {
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+    return proc->GetPPID();
+}
+
+pid_t sys_gettid() {
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+    return proc->GetPID(); // todo: unique TIDs between processes
+}
+
+uid_t sys_getuid() {
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+    return proc->GetCred().uid;
+}
+
+uid_t sys_geteuid() {
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+    return proc->GetCred().euid;
+}
+
+gid_t sys_getgid() {
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+    return proc->GetCred().gid;
+}
+
+gid_t sys_getegid() {
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+    return proc->GetCred().egid;
+}

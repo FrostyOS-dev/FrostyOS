@@ -20,8 +20,22 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
+typedef long pid_t;
+typedef long uid_t;
+typedef long gid_t;
+
 [[noreturn]] void sys_exit(uint64_t code);
 
 int sys_settcb(void* base);
+
+pid_t sys_getpid();
+pid_t sys_getppid();
+pid_t sys_gettid();
+
+uid_t sys_getuid();
+uid_t sys_geteuid();
+
+gid_t sys_getgid();
+gid_t sys_getegid();
 
 #endif /* _SYSCALL_PROCESS_HPP */

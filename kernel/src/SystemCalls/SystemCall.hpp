@@ -38,7 +38,14 @@ bool UserWrite(void* userBuf, const void* kBuf, size_t size, Process* currentPro
     SC(MMAP, mmap) \
     SC(MUNMAP, munmap) \
     SC(MPROTECT, mprotect) \
-    SC(SETTCB, settcb)
+    SC(SETTCB, settcb) \
+    SC(GETPID, getpid) \
+    SC(GETPPID, getppid) \
+    SC(GETTID, gettid) \
+    SC(GETUID, getuid) \
+    SC(GETEUID, geteuid) \
+    SC(GETGID, getgid) \
+    SC(GETEGID, getegid)
 
 enum SystemCalls : uint64_t {
 #define ENUMERATE_CALL(u, l) SYS_##u,
@@ -46,6 +53,6 @@ enum SystemCalls : uint64_t {
 #undef ENUMERATE_CALL
 };
 
-#define SYSTEM_CALL_COUNT 10
+#define SYSTEM_CALL_COUNT 17
 
 #endif /* _SYSTEM_CALL_HPP */
