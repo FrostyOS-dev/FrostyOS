@@ -17,8 +17,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "Processor.hpp"
 
+#include "ArchDefs.h"
 #include "CPUID.h"
 #include "GDT.hpp"
+#include "MSR.h"
 #include "PIT.hpp"
 #include "Syscall.hpp"
 #include "TSC.hpp"
@@ -49,8 +51,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Scheduling/Process.hpp>
 #include <Scheduling/Scheduler.hpp>
 
+// X87, SSE, AVX
+#define XCR0_MASK 7
+
 x86_64_Processor g_x86_64_BSP(true);
 Processor* g_BSP = &g_x86_64_BSP;
+
+// Implemented in assembly
+extern "C" void x86_64_SIMDInit(uint64_t xcr0);
 
 x86_64_Processor::x86_64_Processor(bool BSP) : apLock(SPINLOCK_LOCKED_VALUE), m_IRQData(nullptr), m_LAPIC(nullptr), m_TSCAvailable(false) {
     m_BSP = BSP; // member of parent class
@@ -77,6 +85,13 @@ x86_64_Processor::~x86_64_Processor() {
 
     m_state->kernelStack = reinterpret_cast<void*>(stackTop);
     InitTSS(m_state);
+
+    // SIMD init
+    x86_64_SIMDInit(m_info.SIMDInfo.XCR0 & XCR0_MASK);
+    if (m_info.SIMDInfo.saveMethod == x86_64_SIMDSaveMethod::XSAVE) {
+        x86_64_CPUIDResult result = x86_64_CPUID(0xD, 0);
+        m_info.SIMDInfo.XSAVESize = result.EBX;
+    }
 
     spinlock_release(&apLock);
 
@@ -107,6 +122,14 @@ void x86_64_Processor::Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uin
     Scheduler::InitBSPState();
     x86_64_SetGSBases(0, (uint64_t)&Scheduler::g_BSPState);
     m_state = &Scheduler::g_BSPState;
+
+    // SIMD init
+    x86_64_SIMDInit(m_info.SIMDInfo.XCR0 & XCR0_MASK);
+    if (m_info.SIMDInfo.saveMethod == x86_64_SIMDSaveMethod::XSAVE) {
+        x86_64_CPUIDResult result = x86_64_CPUID(0xD, 0);
+        m_info.SIMDInfo.XSAVESize = result.EBX;
+    } else
+        m_info.SIMDInfo.XSAVESize = 512;
 
     x86_64_IRQ_EarlyInit();
     x86_64_InitPaging(HHDMOffset, memoryMap, memoryMapEntryCount, pagingMode, kernelVirtual, kernelPhysical);
@@ -175,6 +198,52 @@ void x86_64_Processor::SwitchKernelStack(uint64_t stack) {
     Scheduler::ProcessorState* state = GetCurrentProcessorState();
     m_TSS.RSP[0] = (uint64_t)stack;
     state->taskKernelStack = (void*)stack;
+}
+
+void x86_64_Processor::InitExtraContext(CPU_ExtraContext* extraContext) {
+    extraContext->fsBase = 0;
+    extraContext->gsBase = 0;
+
+    if (m_info.SIMDInfo.saveMethod == x86_64_SIMDSaveMethod::XSAVE) {
+        void* buffer = kcalloc(1, m_info.SIMDInfo.XSAVESize + 48);
+        extraContext->SIMDSaveRegion = ALIGN_UP_ADDRESS(buffer, 64);
+    } else
+        extraContext->SIMDSaveRegion = kcalloc(1, m_info.SIMDInfo.XSAVESize);
+
+    // Initialise the x87 FPU state to what it would be after the FNINIT instruction
+    FXSaveRegion* save = static_cast<FXSaveRegion*>(extraContext->SIMDSaveRegion);
+    save->MXCSR = 0x1F80;
+    save->FCW = 0x37F;
+}
+
+void x86_64_Processor::DestroyExtraContext(CPU_ExtraContext* extraContext) {
+    kfree(extraContext->SIMDSaveRegion);
+}
+
+void x86_64_Processor::SaveExtraContext(CPU_ExtraContext* extraContext) {
+    extraContext->fsBase = x86_64_ReadMSR(MSR_FS_BASE);
+    extraContext->gsBase = x86_64_ReadMSR(MSR_KERNEL_GS_BASE);
+
+    if (m_info.SIMDInfo.saveMethod == x86_64_SIMDSaveMethod::XSAVE)
+        __asm__ volatile ("xsaveq %0" :: "m"(*(char*)extraContext->SIMDSaveRegion), "d"(-1), "a"(-1) : "memory");
+    else
+        __asm__ volatile ("fxsaveq %0" :: "m"(*(char*)extraContext->SIMDSaveRegion) : "memory");
+}
+
+void x86_64_Processor::RestoreExtraContext(CPU_ExtraContext* extraContext) {
+    x86_64_WriteMSR(MSR_FS_BASE, extraContext->fsBase);
+    x86_64_WriteMSR(MSR_KERNEL_GS_BASE, extraContext->gsBase);
+
+    if (m_info.SIMDInfo.saveMethod == x86_64_SIMDSaveMethod::XSAVE)
+        __asm__ volatile ("xrstorq %0" :: "m"(*(char*)extraContext->SIMDSaveRegion), "d"(-1), "a"(-1) : "memory");
+    else
+        __asm__ volatile ("fxrstorq %0" :: "m"(*(char*)extraContext->SIMDSaveRegion) : "memory");
+}
+
+void x86_64_Processor::CopyExtraContext(CPU_ExtraContext* dst, const CPU_ExtraContext* src) {
+    dst->fsBase = src->fsBase;
+    dst->gsBase = src->gsBase;
+    memcpy(dst->SIMDSaveRegion, src->SIMDSaveRegion, m_info.SIMDInfo.XSAVESize);
 }
 
 void x86_64_Processor::FillCPUInfo() {
@@ -259,6 +328,39 @@ void x86_64_Processor::FillCPUInfo() {
 #undef HYPER_STR_CMP
     } else
         m_info.hypervisor = x86_HYPER_NONE;
+
+    // Now get all the SIMD info
+    result = x86_64_CPUID(1, 0);
+    m_info.SIMDInfo.FPU = (result.EDX & 1) > 0;
+    m_info.SIMDInfo.MMX = (result.EDX & (1 << 23)) > 0;
+    m_info.SIMDInfo.SSE = (result.EDX & (1 << 25)) > 0;
+    m_info.SIMDInfo.SSE2 = (result.EDX & (1 << 26)) > 0;
+    m_info.SIMDInfo.SSE3 = (result.ECX & (1 << 0)) > 0;
+    m_info.SIMDInfo.SSSE3 = (result.ECX & (1 << 9)) > 0;
+    m_info.SIMDInfo.SSE41 = (result.ECX & (1 << 19)) > 0;
+    m_info.SIMDInfo.SSE42 = (result.ECX & (1 << 20)) > 0;
+    m_info.SIMDInfo.AVX = (result.ECX & (1 << 28)) > 0;
+    m_info.SIMDInfo.FXSR = (result.EDX & (1 << 24)) > 0;
+    m_info.SIMDInfo.XSAVE = (result.ECX & (1 << 26)) > 0;
+
+    if (!m_info.SIMDInfo.FPU || !m_info.SIMDInfo.MMX || !m_info.SIMDInfo.SSE || !m_info.SIMDInfo.SSE2 || !m_info.SIMDInfo.FXSR)
+        PANIC("Minimum of SSE2 support is required!");
+
+    if (m_info.maxCPUID >= 0x7) {
+        result = x86_64_CPUID(7, 0);
+        m_info.SIMDInfo.AVX2 = (result.EBX & (1 << 5)) > 0;
+    } else
+        m_info.SIMDInfo.AVX2 = false;
+
+    if (m_info.maxCPUID >= 0xD && m_info.SIMDInfo.XSAVE) {
+        m_info.SIMDInfo.saveMethod = x86_64_SIMDSaveMethod::XSAVE;
+
+        result = x86_64_CPUID(0xD, 0);
+        m_info.SIMDInfo.XCR0 = ((uint64_t)result.EDX << 32) | result.EAX;
+    } else {
+        m_info.SIMDInfo.saveMethod = x86_64_SIMDSaveMethod::FXSAVE;
+        m_info.SIMDInfo.XCR0 = 0;
+    }
 }
 
 void x86_64_Processor::SetIRQData(x86_64_ProcessorIRQData* data) {

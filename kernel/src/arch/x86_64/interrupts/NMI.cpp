@@ -183,7 +183,6 @@ namespace x86_64_LocalNMI { // for NMIs on a specific CPU
 }
 
 bool x86_64_HandleNMI(x86_64_ISR_Frame* frame) {
-    debug_putc('N');
     using namespace x86_64_GlobalNMI;
     spinlock_acquire(&g_NMIData.lock);
     bool status = false;

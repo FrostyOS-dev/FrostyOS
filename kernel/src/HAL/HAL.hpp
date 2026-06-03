@@ -32,6 +32,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 typedef x86_64_PagingMode PagingMode;
 typedef x86_64_Registers CPU_Registers;
+typedef x86_64_ExtraContext CPU_ExtraContext;
 typedef uint32_t (*GSIHandler_t)(void* ctx);
 #endif
 

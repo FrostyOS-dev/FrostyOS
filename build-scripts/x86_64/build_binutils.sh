@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Copyright (©) 2024  Frosty515
+# Copyright (©) 2024-2026  Frosty515
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,9 +20,11 @@ set -e
 
 mkdir -p $TOOLCHAIN_PREFIX
 
-# Check if x86_64-frostyos binutils exists and is version 2.42 using x86_64-frostyos-ld
+BINUTILS_VERSION=2.45.1
+
+# Check if x86_64-frostyos binutils exists and is version 2.45.1 using x86_64-frostyos-ld
 if [ -f "$TOOLCHAIN_PREFIX/bin/x86_64-frostyos-ld" ]; then
-    if [ "$($TOOLCHAIN_PREFIX/bin/x86_64-frostyos-ld -v | grep '2.42')" ]; then
+    if [ "$($TOOLCHAIN_PREFIX/bin/x86_64-frostyos-ld -v | grep $BINUTILS_VERSION)" ]; then
         echo "x86_64-frostyos binutils is up to date."
         exit 0
     fi
@@ -35,9 +37,13 @@ echo Building binutils
 echo -----------------
 mkdir -p toolchain/binutils/{src,build}
 cd toolchain/binutils/src
-git clone https://github.com/FrostyOS-dev/binutils-gdb.git --depth 1 --branch binutils-2_42-branch binutils-2.42
-cd ../build
-../src/binutils-2.42/configure --target=x86_64-frostyos --prefix="$TOOLCHAIN_PREFIX" --with-sysroot=$SYSROOT --disable-nls --disable-werror --enable-shared --disable-gdb
+curl -OL https://ftpmirror.gnu.org/binutils/binutils-$BINUTILS_VERSION.tar.xz
+tar -xf binutils-$BINUTILS_VERSION.tar.xz
+rm binutils-$BINUTILS_VERSION.tar.xz
+cd binutils-$BINUTILS_VERSION
+patch -p1 < ../../../../patches/binutils.patch
+cd ../../build
+../src/binutils-$BINUTILS_VERSION/configure --target=x86_64-frostyos --prefix="$TOOLCHAIN_PREFIX" --with-sysroot=$SYSROOT --disable-nls --disable-werror --enable-shared --disable-gdb
 make -j$(nproc)
 make install
 cd ../../..

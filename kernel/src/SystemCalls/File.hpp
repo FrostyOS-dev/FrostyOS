@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 typedef unsigned int mode_t;
 typedef long ssize_t;
+typedef long off_t;
 
 #define O_RDONLY (1 << 0)
 #define O_WRONLY (1 << 1)
@@ -45,11 +46,17 @@ typedef long ssize_t;
 #define S_ISGID 02000
 #define S_ISVTX 01000
 
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+
 // pathLen does NOT include null-termination
 int sys_open(const char* path, size_t pathLen, int flags, mode_t mode);
 int sys_close(int fd);
 
 ssize_t sys_read(int fd, void* buf, size_t count);
 ssize_t sys_write(int fd, const void* buf, size_t count);
+
+off_t sys_seek(int fd, off_t offset, int whence);
 
 #endif /* _SYSCALL_FILE_HPP */

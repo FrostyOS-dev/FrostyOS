@@ -118,7 +118,7 @@ void x86_64_MapPage(void* pageTable, uint64_t virtualAddress, uint64_t physicalA
         else {
             uint64_t* entry = (uint64_t*)pageTableEntry;
             uint64_t raw = *entry;
-            raw = (raw & 0x000F'FFFF'FFFF'F001) | ((uint64_t)flags & 0x0000'0F67);
+            raw = (raw & 0x000F'FFFF'FFFF'FFFF) | ((uint64_t)flags & 0x0000'0F67);
             *entry = raw;
             newPageTable = to_HHDM(newPageTable);
         }
@@ -147,7 +147,7 @@ void x86_64_RemapPage(void* pageTable, uint64_t virtualAddress, uint32_t flags) 
         else {
             uint64_t* entry = (uint64_t*)pageTableEntry;
             uint64_t raw = *entry;
-            raw = (raw & 0x000F'FFFF'FFFF'F001) | ((uint64_t)flags & 0x0000'0F67);
+            raw = (raw & 0x000F'FFFF'FFFF'FFFF) | ((uint64_t)flags & 0x0000'0F67);
             *entry = raw;
         }
         pageTable = to_HHDM(newPageTable);
@@ -222,7 +222,7 @@ void x86_64_Map2MiBPage(void* pageTable, uint64_t virtualAddress, uint64_t physi
         else {
             uint64_t* entry = (uint64_t*)pageTableEntry;
             uint64_t raw = *entry;
-            raw = (raw & 0x000F'FFFF'FFFF'F001) | ((uint64_t)flags & 0x0000'0F67);
+            raw = (raw & 0x000F'FFFF'FFFF'FFFF) | ((uint64_t)flags & 0x0000'0F67);
             *entry = raw;
             newPageTable = to_HHDM(newPageTable);
         }
@@ -251,7 +251,7 @@ void x86_64_Remap2MiBPage(void* pageTable, uint64_t virtualAddress, uint32_t fla
         else {
             uint64_t* entry = (uint64_t*)pageTableEntry;
             uint64_t raw = *entry;
-            raw = (raw & 0x000F'FFFF'FFFF'F001) | ((uint64_t)flags & 0x0000'0F67);
+            raw = (raw & 0x000F'FFFF'FFFF'FFFF) | ((uint64_t)flags & 0x0000'0F67);
             *entry = raw;
         }
         pageTable = to_HHDM(newPageTable);
@@ -323,7 +323,7 @@ void x86_64_Map1GiBPage(void* pageTable, uint64_t virtualAddress, uint64_t physi
         else {
             uint64_t* entry = (uint64_t*)pageTableEntry;
             uint64_t raw = *entry;
-            raw = (raw & 0x000F'FFFF'FFFF'F001) | ((uint64_t)flags & 0x0000'0F67);
+            raw = (raw & 0x000F'FFFF'FFFF'FFFF) | ((uint64_t)flags & 0x0000'0F67);
             *entry = raw;
             newPageTable = to_HHDM(newPageTable);
         }
@@ -352,7 +352,7 @@ void x86_64_Remap1GiBPage(void* pageTable, uint64_t virtualAddress, uint64_t phy
         else {
             uint64_t* entry = (uint64_t*)pageTableEntry;
             uint64_t raw = *entry;
-            raw = (raw & 0x000F'FFFF'FFFF'F001) | ((uint64_t)flags & 0x0000'0F67);
+            raw = (raw & 0x000F'FFFF'FFFF'FFFF) | ((uint64_t)flags & 0x0000'0F67);
             *entry = raw;
         }
         pageTable = to_HHDM(newPageTable);

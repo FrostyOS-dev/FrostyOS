@@ -24,6 +24,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <string.h>
 #include <util.h>
 
+#include <HAL/HAL.hpp>
+
 #include <Memory/VMM.hpp>
 
 Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, -1) {
@@ -137,6 +139,10 @@ CPU_Registers& Thread::GetMutableRegisters() {
     return m_Registers;
 }
 
+CPU_ExtraContext* Thread::GetExtraContext() {
+    return &m_extraContext;
+}
+
 bool Thread::CreateStacks() {
     if (m_Parent == nullptr)
         return false;
@@ -241,8 +247,8 @@ int64_t Thread::GetIntState() const {
 [[noreturn]] void Thread_ExitHelper(void* data) {
     Thread* thread = static_cast<Thread*>(data);
     if (!Scheduler::DeleteThread(thread))
-        PANIC("Failed to delete thread on exit!")
+        PANIC("Failed to delete thread on exit!");
 
     Scheduler::Yield(nullptr, false, nullptr, false);
-    PANIC("Scheduler::Yield() returned!")
+    PANIC("Scheduler::Yield() returned!");
 }

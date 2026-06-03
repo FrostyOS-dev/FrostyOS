@@ -77,6 +77,25 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define PF_W 2
 #define PF_R 4
 
+#define AT_NULL 0
+#define AT_IGNORE 1
+#define AT_EXECFD 2
+#define AT_PHDR 3
+#define AT_PHENT 4
+#define AT_PHNUM 5
+#define AT_PAGESZ 6
+#define AT_BASE 7
+#define AT_FLAGS 8
+#define AT_ENTRY 9
+#define AT_NOTELF 10
+#define AT_UID 11
+#define AT_EUID 12
+#define AT_GID 13
+#define AT_EGID 14
+#define AT_SECURE 23
+#define AT_EXECFN 31
+
+
 struct Elf64_Ehdr {
     uint8_t e_ident[EI_NIDENT];
     uint16_t e_type;
@@ -105,8 +124,26 @@ struct Elf64_Phdr {
     uint64_t p_align;
 };
 
+struct auxv64_t {
+    uint64_t a_type;
+    uint64_t a_val;
+};
+
+struct auxv64list_t {
+    auxv64_t phdr;
+    auxv64_t phnum;
+    auxv64_t phent;
+    auxv64_t entry;
+    auxv64_t execfn;
+    auxv64_t secure;
+    auxv64_t pagesz;
+    auxv64_t null;
+};
+
 class Process;
 
-int LoadELFFile(const char* path, Process* proc, void** entry);
+int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* auxv64);
+
+int CreateELFProcess(const char* path, Process* parent, char** argv, char** env);
 
 #endif /* _ELF_HPP */

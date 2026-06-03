@@ -248,7 +248,11 @@ int FileDescriptor::Seek(int64_t offset, FDOffsetStart whence, int64_t* realOffs
             break;
         }
         }
+        break;
     }
+    case FDType::TTY:
+        rc = ESUCCESS; // ignore seek on TTYs
+        break;
     }
 
     m_mutex.Unlock();

@@ -17,11 +17,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "Memory.hpp"
 #include "SystemCall.hpp"
-#include "util.h"
 
 #include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <util.h>
 
 #include <Memory/VMM.hpp>
 
@@ -49,7 +49,7 @@ void* sys_mmap(void* addr, size_t length, int prot, int flags, sys_mmapExtraArgs
     //     return (void*)-EFAULT;
 
     if (addr != nullptr)
-        addr = ALIGN_ADDRESS_DOWN(addr, PAGE_SIZE);
+        addr = ALIGN_DOWN_ADDRESS(addr, PAGE_SIZE);
 
     uint64_t pageCount = DIV_ROUNDUP(length, PAGE_SIZE);
 
@@ -81,7 +81,7 @@ int sys_munmap(void* addr, size_t length) {
     if (vmm == nullptr)
         return -ENOSYS;
 
-    addr = ALIGN_ADDRESS_DOWN(addr, PAGE_SIZE);
+    addr = ALIGN_DOWN_ADDRESS(addr, PAGE_SIZE);
     uint64_t pageCount = DIV_ROUNDUP(length, PAGE_SIZE);
 
     return vmm->FreePages(addr, pageCount) ? ESUCCESS : -EINVAL;
@@ -100,7 +100,7 @@ int sys_mprotect(void* addr, size_t size, int prot) {
     if (vmm == nullptr)
         return -ENOSYS;
 
-    addr = ALIGN_ADDRESS_DOWN(addr, PAGE_SIZE);
+    addr = ALIGN_DOWN_ADDRESS(addr, PAGE_SIZE);
     uint64_t pageCount = DIV_ROUNDUP(size, PAGE_SIZE);
 
     VMM::Protection protection = VMM::Protection::NONE;

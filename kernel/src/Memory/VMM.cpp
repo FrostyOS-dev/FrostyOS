@@ -78,10 +78,10 @@ namespace VMM {
     }
 
     void* VMM::AllocatePages(uint64_t count, Protection prot, bool user, bool allocPhys, CacheType cacheType) {
-        return AllocatePages(count, nullptr, prot, allocPhys, user, cacheType);
+        return AllocatePages(count, nullptr, prot, user, allocPhys, cacheType);
     }
 
-    void* VMM::AllocatePages(uint64_t count, void* addr, Protection prot, bool allocPhys, bool user, CacheType cacheType) {
+    void* VMM::AllocatePages(uint64_t count, void* addr, Protection prot, bool user, bool allocPhys, CacheType cacheType) {
         if (count == 0 || g_defaultPager == nullptr)
             return nullptr;
 
@@ -282,6 +282,45 @@ namespace VMM {
         m_mapEntries.unlock(); // need to hold the lock for the whole function to ensure it can't be unmapped on us part way through
 
         m_pageMapper->InvalidatePages((uint64_t)virtAddr, pageCount, (user ^ wasUser ) || m_pageMapper->isPermsReduction(oldProt, prot));
+        return true;
+    }
+
+    bool VMM::MapPages(void* virtAddr, uint64_t count) {
+        m_mapEntries.lock();
+
+        AVLTree::wAVLTreeNode* node = m_mapEntries.FindNodeOrLower((uint64_t)virtAddr);
+        if (node == nullptr || node->value == 0) {
+            m_mapEntries.unlock();
+            return false;
+        }
+
+        MapEntry* entry = (MapEntry*)node->value;
+        if (entry->endVirt <= (uint64_t)virtAddr || ((uint64_t)virtAddr + count * PAGE_SIZE) > entry->endVirt || entry->memoryObject == nullptr) {
+            m_mapEntries.unlock();
+            return false;
+        }
+        MemoryObject* memObj = entry->memoryObject;
+        uint64_t pageCount = count + (((uint64_t)virtAddr - entry->startVirt) >> PAGE_SIZE_SHIFT);
+
+        spinlock_acquire(&memObj->lock);
+
+        Page* page = memObj->pages;
+        for (uint64_t i = 0; i < pageCount; i++) {
+            if ((entry->startVirt + i * PAGE_SIZE) < (uint64_t)virtAddr) {
+                page = page->next;
+                continue;
+            }
+            if (page->physAddr == 0)
+                page->physAddr = (uint64_t)memObj->pager->AllocatePage();
+            m_pageMapper->MapPage(entry->startVirt + i * PAGE_SIZE, page->physAddr, entry->flags.protection, entry->flags.user, entry->cacheType);
+            page = page->next;
+        }
+
+        spinlock_release(&memObj->lock);
+        
+        m_mapEntries.unlock();
+        
+        m_pageMapper->InvalidatePages((uint64_t)virtAddr, pageCount, false); // Not a permission reduction, shootdown is not required
         return true;
     }
 

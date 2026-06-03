@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -24,6 +24,6 @@ extern "C" [[noreturn]] void x86_64_Panic(const char* message, void* registers, 
 
 extern "C" [[noreturn]] void x86_64_PrePanic();
 
-#define PANIC(reason) {__asm__ volatile ("movq %1, %0" : "=m" (g_x86_64_PanicReason) : "p" (reason)); __asm__ volatile ("call x86_64_PrePanic"); __builtin_unreachable();}
+#define PANIC(reason) do { g_x86_64_PanicReason = (reason); x86_64_PrePanic(); __builtin_unreachable(); } while (0)
 
 #endif /* _PANIC_HPP */

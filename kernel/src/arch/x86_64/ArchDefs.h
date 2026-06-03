@@ -22,7 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define PAUSE() __asm__ volatile ("pause" ::: "memory")
 
-struct x86_64_Registers {
+struct [[gnu::packed, gnu::aligned(8)]] x86_64_Registers {
     uint64_t RAX;
     uint64_t RBX;
     uint64_t RCX;
@@ -45,7 +45,34 @@ struct x86_64_Registers {
     uint16_t CS;
     uint16_t SS;
     uint32_t _align; // make the struct 8 byte aligned
-} __attribute__((packed));
+};
+
+struct x86_64_ExtraContext {
+    void* SIMDSaveRegion;
+    uint64_t fsBase;
+    uint64_t gsBase;
+};
+
+struct [[gnu::packed, gnu::aligned(16)]] FXSaveRegion {
+    uint16_t FCW;
+    uint16_t FSW;
+    uint8_t FTW;
+    uint8_t reserved0;
+    uint16_t FOP;
+    uint64_t FIP;
+    uint64_t FDP;
+    uint32_t MXCSR;
+    uint32_t MXCSR_MASK;
+    struct {
+        uint64_t data;
+        uint64_t reserved;
+    } mm[8];
+    struct {
+        uint64_t data[2];
+    } xmm[16];
+    uint64_t reserved1[6];
+    uint64_t available[6];
+};
 
 #ifdef __cplusplus
 extern "C" {

@@ -26,9 +26,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <DataStructures/LinkedList.hpp>
 
+#include <Memory/PageMapper.hpp>
 #include <Memory/VMM.hpp>
 
 #include <Scheduling/Process.hpp>
+
+#define STACK_TOP_BUFFER 8
 
 #ifndef __x86_64__
 #error ELF format is only supported on x86_64
@@ -83,12 +86,12 @@ void HandleLoadFail(LinkedList::RearInsertLinkedList<Elf64_Phdr>& regions, VMM::
     regions.EnumerateDelete([](Elf64_Phdr* phdr, void* data, uint64_t) -> LinkedList::IteratorDecision {
         VMM::VMM* vmm = static_cast<VMM::VMM*>(data);
         if (phdr->p_type == PT_LOAD && phdr->p_memsz > 0)
-            vmm->FreePages(ALIGN_ADDRESS_DOWN(phdr->p_vaddr, PAGE_SIZE));
+            vmm->FreePages(ALIGN_DOWN_ADDRESS(phdr->p_vaddr, PAGE_SIZE));
         return LinkedList::IteratorDecision::DELETE;
     }, vmm, 0);
 }
 
-int LoadELFFile(const char* path, Process* proc, void** entry) {
+int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* auxv64) {
     uint8_t* data = nullptr;
     uint64_t fileSize = 0;
     int rc = ReadFile(path, proc, &data, &fileSize);
@@ -103,6 +106,20 @@ int LoadELFFile(const char* path, Process* proc, void** entry) {
         return -ENOEXEC;
     }
 
+    auxv64->null.a_type = AT_NULL;
+    auxv64->phdr.a_type = AT_PHDR;
+    auxv64->phnum.a_type = AT_PHNUM;
+    auxv64->phent.a_type = AT_PHENT;
+    auxv64->entry.a_type = AT_ENTRY;
+    auxv64->secure.a_type = AT_SECURE;
+    auxv64->pagesz.a_type = AT_PAGESZ;
+
+    auxv64->secure.a_val = 0; // set later
+    auxv64->phnum.a_val = header->e_phnum;
+    auxv64->phent.a_val = header->e_phentsize;
+    auxv64->entry.a_val = header->e_entry;
+    auxv64->pagesz.a_val = PAGE_SIZE;
+
     VMM::VMM* vmm = proc->GetVMM();
 
     LinkedList::RearInsertLinkedList<Elf64_Phdr> mappedRegions;
@@ -110,12 +127,16 @@ int LoadELFFile(const char* path, Process* proc, void** entry) {
     Elf64_Phdr* phdr = (Elf64_Phdr*)((uint64_t)data + header->e_phoff);
     for (uint64_t i = 0; i < header->e_phnum; i++) {
         switch (phdr->p_type) {
+        case PT_TLS:
         case PT_LOAD: {
-            if (phdr->p_flags == 0 || phdr->p_memsz == 0) {
+            if (phdr->p_flags == 0 || phdr->p_flags > (PF_X | PF_W | PF_R) || phdr->p_memsz == 0) {
                 HandleLoadFail(mappedRegions, vmm);
                 return -ENOEXEC;
             }
-            void* pages = vmm->AllocatePages(DIV_ROUNDUP(phdr->p_memsz, PAGE_SIZE), ALIGN_ADDRESS_DOWN(phdr->p_vaddr, PAGE_SIZE), VMM::Protection::READ_WRITE, true, true);
+            if (phdr->p_type == PT_TLS)
+                phdr->p_vaddr = 0;
+
+            void* pages = vmm->AllocatePages(DIV_ROUNDUP(phdr->p_memsz, PAGE_SIZE), ALIGN_DOWN_ADDRESS(phdr->p_vaddr, PAGE_SIZE), VMM::Protection::READ_WRITE, true, true);
             if (pages == nullptr) {
                 HandleLoadFail(mappedRegions, vmm);
                 return -ENOMEM;
@@ -125,7 +146,7 @@ int LoadELFFile(const char* path, Process* proc, void** entry) {
 
             memcpy((void*)phdr->p_vaddr, (void*)((uint64_t)data + phdr->p_offset), phdr->p_filesz);
 
-            VMM::Protection prot;
+            VMM::Protection prot = VMM::Protection::NONE;
 
             switch(phdr->p_flags) {
             case PF_X:
@@ -161,6 +182,8 @@ int LoadELFFile(const char* path, Process* proc, void** entry) {
         case PT_INTERP:
             HandleLoadFail(mappedRegions, vmm);
             return -ENOSYS;
+        case PT_PHDR:
+            auxv64->phdr.a_val = phdr->p_vaddr;
         default:
             break;
         }
@@ -176,4 +199,135 @@ int LoadELFFile(const char* path, Process* proc, void** entry) {
 
     delete[] data;
     return ESUCCESS;
+}
+
+void* PrepareELFStack(void* stackTop, auxv64list_t* auxv64, char** argv, char** env, const char* path, VMM::VMM* vmm) {
+    if (stackTop == nullptr || auxv64 == nullptr || argv == nullptr || env == nullptr || path == nullptr || vmm == nullptr)
+        return nullptr;
+    size_t argc;
+    size_t envc;
+    size_t argDataSize = 0;
+    size_t envDataSize = 0;
+    size_t pathSize = strlen(path) + 1;
+
+    for (argc = 0; argv[argc] != nullptr; argc++)
+        argDataSize += strlen(argv[argc]) + 1;
+
+    for (envc = 0; env[envc] != nullptr; envc++)
+        envDataSize += strlen(env[envc]) + 1;
+
+    // Ensure the stack is aligned
+    uint8_t align = (argc + envc + 3) & 1 ? 8 : 0;
+
+    size_t size = argDataSize + envDataSize + pathSize + (argc + envc) * sizeof(char*) + sizeof(size_t) + sizeof(auxv64list_t) + align + STACK_TOP_BUFFER;
+    void* base = (void*)((uint64_t)stackTop - size);
+    if (!vmm->MapPages(ALIGN_DOWN_ADDRESS(base, PAGE_SIZE), DIV_ROUNDUP(size, PAGE_SIZE)))
+        return nullptr;
+
+    stackTop = (void*)((uint64_t)stackTop - STACK_TOP_BUFFER);
+
+    char* argDataStart = (char*)((uint64_t)stackTop - argDataSize);
+    char* envDataStart = (char*)((uint64_t)argDataStart - envDataSize);
+    char* pathDataStart = (char*)((uint64_t)envDataStart - pathSize);
+    auxv64list_t* auxvStart = (auxv64list_t*)pathDataStart - 1;
+
+    // Align the stack after strings for the auxv list
+    auxvStart = (auxv64list_t*)(ALIGN_DOWN_BASE2((uint64_t)auxvStart, 16) - align);
+
+    char** envStart = (char**)auxvStart - envc - 1;
+    char** argStart = (char**)envStart - argc - 1;
+    uint64_t* argcPoint = (uint64_t*)argStart - 1;
+
+    auxv64->execfn.a_type = AT_EXECFN;
+    auxv64->execfn.a_val = (uint64_t)pathDataStart;
+    
+    // TODO: user access begin?
+    memcpy(pathDataStart, path, pathSize);
+
+    memcpy(auxvStart, auxv64, sizeof(auxv64list_t));
+
+    for (uint64_t i = 0; i < argc; i++) {
+        strcpy(argDataStart, argv[i]);
+        argStart[i] = argDataStart;
+        argDataStart += strlen(argv[i]) + 1;
+    }
+
+    for (uint64_t i = 0; i < envc; i++) {
+        strcpy(envDataStart, env[i]);
+        envStart[i] = envDataStart;
+        envDataStart += strlen(env[i]) + 1;
+    }
+
+    argStart[argc] = nullptr;
+    envStart[envc] = nullptr;
+    *argcPoint = argc;
+
+    // TODO: user access end?
+    return argcPoint;
+}
+
+int CreateELFProcess(const char* path, Process* parent, char** argv, char** env) {
+    Process* proc = new Process(ProcessMode::USER, nullptr, 15);
+    if (!proc->Create()) {
+        delete proc;
+        return -ENOMEM;
+    }
+
+    if (parent != nullptr)
+        proc->SetPPID(parent->GetPID());
+
+    VMM::VMM* vmm = proc->GetVMM();
+    if (vmm == nullptr || vmm->GetPageMapper() == nullptr) {
+        proc->Delete();
+        delete proc;
+        return -ENOSYS;
+    }
+
+    PageMapper* mapper = vmm->GetPageMapper();
+    if (!mapper->SwapToThis()) {
+        proc->Delete();
+        delete proc;
+        return -ENOSYS;
+    }
+
+    auxv64list_t auxv64;
+    memset(&auxv64, 0, sizeof(auxv64list_t));
+
+    void* entry = nullptr;
+    int rc = LoadELFFile(path, proc, &entry, &auxv64);
+    if (rc < 0) {
+        g_KPageMapper->SwapToThis();
+        proc->Delete();
+        delete proc;
+        return rc;
+    }
+
+    if (!proc->CreateMainThread({(void (*)(void*))entry, nullptr})) {
+        g_KPageMapper->SwapToThis();
+        proc->Delete();
+        delete proc;
+        return -ENOMEM;
+    }
+
+    Thread* thread = proc->GetMainThread();
+    void* stack = PrepareELFStack((void*)thread->GetStack(), &auxv64, argv, env, path, vmm);
+    if (stack == nullptr) {
+        g_KPageMapper->SwapToThis();
+        proc->Delete();
+        delete proc;
+        return -ENOMEM;
+    }
+
+    thread->SetStack((uint64_t)stack);
+
+    rc = ESUCCESS;
+
+    if (!proc->Start()) {
+        proc->Delete();
+        delete proc;
+        rc = -ENOSYS;
+    }
+
+    g_KPageMapper->SwapToThis();
+    return rc;
 }

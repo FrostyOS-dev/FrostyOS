@@ -1,0 +1,11 @@
+[host_machine]
+system = 'frostyos'
+cpu_family = 'x86_64'
+cpu = 'x86_64'
+endian = 'little'
+[binaries]
+c = 'x86_64-frostyos-gcc'
+cpp = 'x86_64-frostyos-g++'
+ar = 'x86_64-frostyos-ar'
+strip = 'x86_64-frostyos-strip'
+ld = 'x86_64-frostyos-ld'

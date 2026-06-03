@@ -66,6 +66,7 @@ namespace Scheduler {
 #ifdef __x86_64__
         if (parent != nullptr && parent->GetMode() == ProcessMode::USER) {
             state->processor->SwitchKernelStack(thread->GetKernelStack());
+            state->processor->RestoreExtraContext(thread->GetExtraContext());
             x86_64_SwitchTask(&thread->GetRegisters());
         } else if (interrupt)
             x86_64_SwitchTask(&thread->GetRegisters());
@@ -75,7 +76,11 @@ namespace Scheduler {
     }
 
     void SaveThreadFromINT(Thread* thread, void* data) {
+        ProcessorState* state = GetCurrentProcessorState();
+        Process* parent = thread->GetParent();
 #ifdef __x86_64__
+        if (parent != nullptr && parent->GetMode() == ProcessMode::USER)
+            state->processor->SaveExtraContext(thread->GetExtraContext());
         x86_64_CopyFromISRFrame((x86_64_ISR_Frame*)data, &(thread->GetMutableRegisters()));
 #endif
     }
@@ -204,6 +209,9 @@ namespace Scheduler {
 #ifdef __x86_64__
         x86_64_SetThreadRegisters(&(thread->GetMutableRegisters()), thread->GetStack(), thread->GetEntryPoint(), process->GetMode(), mapper);
 #endif
+
+        if (process->GetMode() == ProcessMode::USER)
+            GetCurrentProcessorState()->processor->InitExtraContext(thread->GetExtraContext());
 
         if (state == nullptr)
             state = GetCurrentProcessorState();
@@ -627,6 +635,8 @@ namespace Scheduler {
                 Process* proc = thread->GetParent(); 
                 if (proc != nullptr)
                     proc->RemoveThread(thread);
+                if (proc->GetMode() == ProcessMode::USER)
+                    GetCurrentProcessor()->DestroyExtraContext(thread->GetExtraContext());
                 thread->Delete();
                 if (thread->ShouldDelete())
                     delete thread;
@@ -646,6 +656,10 @@ namespace Scheduler {
 
 [[noreturn]] void Scheduler_YieldAfterSave(Thread* currentThread, CPU_Registers* regs) {
     memcpy(&currentThread->GetMutableRegisters(), regs, sizeof(CPU_Registers));
+    Scheduler::ProcessorState* state = GetCurrentProcessorState();
+    Process* parent = currentThread->GetParent();
+    if (parent != nullptr && parent->GetMode() == ProcessMode::USER)
+        state->processor->SaveExtraContext(currentThread->GetExtraContext());
     Scheduler::Yield(currentThread);
     PANIC("Scheduler::Yield returned");
 }

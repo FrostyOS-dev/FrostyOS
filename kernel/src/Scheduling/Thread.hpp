@@ -74,6 +74,8 @@ public:
     const CPU_Registers& GetRegisters() const;
     CPU_Registers& GetMutableRegisters();
 
+    CPU_ExtraContext* GetExtraContext();
+
     bool CreateStacks();
     void SetStack(uint64_t stack);
     uint64_t GetStack() const;
@@ -110,6 +112,7 @@ private:
     Process* m_Parent;
     uint64_t m_TID;
     CPU_Registers m_Registers;
+    CPU_ExtraContext m_extraContext;
     uint64_t m_Stack;
     uint64_t m_KernelStack;
     ThreadListItemInternalData m_ThreadListData;

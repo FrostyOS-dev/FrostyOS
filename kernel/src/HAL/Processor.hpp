@@ -45,6 +45,11 @@ public:
     virtual inline bool isBSP() const { return m_BSP; }
 
     virtual void SwitchKernelStack(uint64_t stack) = 0;
+    virtual void InitExtraContext(CPU_ExtraContext* extraContext) = 0;
+    virtual void DestroyExtraContext(CPU_ExtraContext* extraContext) = 0;
+    virtual void SaveExtraContext(CPU_ExtraContext* extraContext) = 0;
+    virtual void RestoreExtraContext(CPU_ExtraContext* extraContext) = 0;
+    virtual void CopyExtraContext(CPU_ExtraContext* dst, const CPU_ExtraContext* src) = 0;
 
     // Following functions are implemented in arch-specific code
     
@@ -59,5 +64,7 @@ protected:
 };
 
 extern Processor* g_BSP;
+
+extern "C" Processor* GetCurrentProcessor();
 
 #endif /* _HAL_PROCESSOR_HPP */

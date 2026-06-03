@@ -39,6 +39,8 @@ public:
 
     virtual void Create() = 0;
     virtual void Delete() = 0;
+
+    virtual bool SwapToThis() = 0;
 };
 
 // Implemented in arch-specific code

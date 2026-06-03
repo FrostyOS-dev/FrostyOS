@@ -210,6 +210,14 @@ void x86_64_PageMapper::Delete() {
     m_pageTable = nullptr;
 }
 
+bool x86_64_PageMapper::SwapToThis() {
+    if (m_pageTable == nullptr)
+        return false;
+
+    x86_64_LoadCR3((uint64_t)from_HHDM(m_pageTable));
+    return true;
+}
+
 PageMapper* CreatePageMapper() {
     x86_64_PageMapper* mapper = new x86_64_PageMapper;
     mapper->Create();

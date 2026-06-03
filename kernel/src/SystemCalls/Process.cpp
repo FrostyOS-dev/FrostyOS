@@ -17,12 +17,38 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "Process.hpp"
 
+#include <errno.h>
 #include <stdint.h>
 
+#include <Memory/VMM.hpp>
+
+#include <Scheduling/Process.hpp>
 #include <Scheduling/Thread.hpp>
+
+#ifdef __x86_64__
+#include <arch/x86_64/Scheduling/TaskUtil.hpp>
+#endif
 
 [[noreturn]] void sys_exit(uint64_t code) {
     Thread::ExitCurrentThread(true, true);
 
     PANIC("sys_exit failed!");
+}
+
+int sys_settcb(void* base) {
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+    VMM::VMM* vmm = proc->GetVMM();
+    if (vmm == nullptr)
+        return -ENOSYS;
+
+    if (!vmm->ValidateRead(base, 1))
+        return -EFAULT;
+
+#ifdef __x86_64__
+    current->GetExtraContext()->fsBase = (uint64_t)base;
+    x86_64_SetFSBase((uint64_t)base);
+#endif
+
+    return ESUCCESS;
 }

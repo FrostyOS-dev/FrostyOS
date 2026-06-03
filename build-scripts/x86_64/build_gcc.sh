@@ -20,10 +20,12 @@ set -e
 
 mkdir -p $TOOLCHAIN_PREFIX
 
+GCC_VERSION=15.2.0
+
 # Now check that x86_64-frostyos-gcc is version 14.1.1
 
 if [ -f "$TOOLCHAIN_PREFIX/bin/x86_64-frostyos-gcc" ]; then
-    if [ "$($TOOLCHAIN_PREFIX/bin/x86_64-frostyos-gcc -dumpversion | grep '14.1.1')" ]; then
+    if [ "$($TOOLCHAIN_PREFIX/bin/x86_64-frostyos-gcc -dumpversion | grep $GCC_VERSION)" ]; then
         echo "x86_64-frostyos GCC is up to date."
         exit 0
     fi
@@ -41,9 +43,13 @@ echo Building GCC
 echo ------------
 mkdir -p toolchain/gcc/{src,build}
 cd toolchain/gcc/src
-git clone https://github.com/FrostyOS-dev/gcc.git --depth 1 --branch releases/gcc-14 gcc-14.1.1
-cd ../build
-../src/gcc-14.1.1/configure --target=x86_64-frostyos --prefix="$TOOLCHAIN_PREFIX" --with-sysroot=$SYSROOT --disable-nls --enable-shared --enable-languages=c,c++
+curl -OL https://mirrors.middlendian.com/gnu/gcc/gcc-$GCC_VERSION/gcc-$GCC_VERSION.tar.xz
+tar -xf gcc-$GCC_VERSION.tar.xz
+rm gcc-$GCC_VERSION.tar.xz
+cd gcc-$GCC_VERSION
+patch -p1 < ../../../../patches/gcc.patch
+cd ../../build
+../src/gcc-$GCC_VERSION/configure --target=x86_64-frostyos --prefix="$TOOLCHAIN_PREFIX" --with-sysroot=$SYSROOT --enable-languages=c,c++ --enable-threads=posix --disable-multilib --enable-shared --enable-host-shared CXXFLAGS="-fno-char8_t"
 make -j$(nproc) all-gcc all-target-libgcc
 make install-gcc install-target-libgcc
 cd ../../..

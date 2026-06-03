@@ -205,3 +205,40 @@ ssize_t sys_write(int fd, const void* buf, size_t count) {
     delete[] kBuf;
     return result;
 }
+
+off_t sys_seek(int fd, off_t offset, int whence) {
+    if (whence < SEEK_SET || whence > SEEK_END)
+        return -EINVAL;
+
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+    FileDescriptorManager* manager = proc->GetFDManager();
+    if (manager == nullptr)
+        return -ENOSYS;
+
+    FileDescriptor* desc = manager->Get(fd);
+    if (desc == nullptr || !desc->isOpen())
+        return -EBADF;
+
+    FDOffsetStart fdWhence;
+    switch (whence) {
+    case SEEK_SET:
+        fdWhence = FDOffsetStart::START;
+        break;
+    case SEEK_CUR:
+        fdWhence = FDOffsetStart::CURRENT;
+        break;
+    case SEEK_END:
+        fdWhence = FDOffsetStart::END;
+        break;
+    default:
+        return -EINVAL;
+    }
+
+    int64_t realOffset = 0;
+    int rc = desc->Seek(offset, fdWhence, &realOffset);
+    if (rc < 0)
+        return rc;
+
+    return realOffset;
+}

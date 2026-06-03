@@ -32,14 +32,14 @@ This OS is developed on Linux, and is expected to be built and run on Linux. It 
 - CMake 3.20 or newer
 - Ninja
 - bash (see note 2 below)
-- dd
-- dosfstools (e.g. mformat, mmd, mcopy)
+- xorriso
 - curl
 - tar
 - other unix utilities (e.g. rm, mkdir, etc.)
 - QEMU
 - OVMF
 - make and other tools that may be required for building GCC and binutils (see the GCC and binutils documentation for details)
+- meson and other tools that may be required for building mlibc.
 
 #### Notes
 

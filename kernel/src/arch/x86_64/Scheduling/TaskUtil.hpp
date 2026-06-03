@@ -37,7 +37,10 @@ void x86_64_SetThreadRegisters(x86_64_Registers* regs, uint64_t stack, ThreadEnt
 void x86_64_CreateHaltISRFrame(x86_64_ISR_Frame* frame);
 
 void x86_64_SetGSBases(uint64_t kernelBase, uint64_t base);
+void x86_64_SetFSBase(uint64_t base);
 void x86_64_SetGSBase(uint64_t base);
+void x86_64_SetKernelGSBase(uint64_t base);
+uint64_t x86_64_GetFSBase();
 uint64_t x86_64_GetGSBase();
 uint64_t x86_64_GetKernelGSBase();
 

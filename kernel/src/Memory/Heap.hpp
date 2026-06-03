@@ -57,6 +57,7 @@ private:
         size_t size;
         HeapSection* next;
         HeapBlock* firstBlock;
+        uint64_t _align;
     };
 
     HeapSection* m_Head;

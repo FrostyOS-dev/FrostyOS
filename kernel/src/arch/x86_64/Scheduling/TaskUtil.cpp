@@ -111,8 +111,20 @@ void x86_64_SetGSBases(uint64_t kernelBase, uint64_t base) {
     x86_64_WriteMSR(MSR_KERNEL_GS_BASE, kernelBase);
 }
 
+void x86_64_SetFSBase(uint64_t base) {
+    x86_64_WriteMSR(MSR_FS_BASE, base);
+}
+
 void x86_64_SetGSBase(uint64_t base) {
     x86_64_WriteMSR(MSR_GS_BASE, base);
+}
+
+void x86_64_SetKernelGSBase(uint64_t base) {
+    x86_64_WriteMSR(MSR_KERNEL_GS_BASE, base);
+}
+
+uint64_t x86_64_GetFSBase() {
+    return x86_64_ReadMSR(MSR_FS_BASE);
 }
 
 uint64_t x86_64_GetGSBase() {

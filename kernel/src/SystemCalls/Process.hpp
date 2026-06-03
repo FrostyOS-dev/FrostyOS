@@ -22,4 +22,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 [[noreturn]] void sys_exit(uint64_t code);
 
+int sys_settcb(void* base);
+
 #endif /* _SYSCALL_PROCESS_HPP */

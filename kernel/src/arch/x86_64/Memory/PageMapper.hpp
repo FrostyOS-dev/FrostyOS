@@ -43,6 +43,8 @@ public:
     void Create() override;
     void Delete() override;
 
+    bool SwapToThis() override;
+
 private:
     void* m_pageTable;
 };

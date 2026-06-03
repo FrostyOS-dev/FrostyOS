@@ -59,6 +59,11 @@ enum x86_Hypervisor {
     x86_HYPER_PARALLELS,
     x86_HYPER_UNKNOWN = 0xFF
 };
+
+enum class x86_64_SIMDSaveMethod {
+    FXSAVE,
+    XSAVE
+};
  
 struct x86_64_CPUInfo {
     uint8_t vendor;
@@ -69,6 +74,23 @@ struct x86_64_CPUInfo {
     uint8_t hypervisor;
     char hypervisorStr[12];
     uint32_t maxHypervisorCPUID;
+    struct SIMDInfo {
+        bool FPU;
+        bool MMX;
+        bool SSE; // SSE, MXCSR, CR4.OSXMMEXCPT, #XF
+        bool SSE2; // SSE2, MXCSR, CR4.OSXMMEXCPT, #XF
+        bool SSE3; // SSE3, MXCSR, CR4.OSXMMEXCPT, #XF
+        bool SSSE3;
+        bool SSE41; // SSE4.1, MXCSR, CR4.OSXMMEXCPT, #XF
+        bool SSE42; // SSE4.2
+        bool AVX;
+        bool FXSR; // FXSAVE/FXRSTOR, CR4.OSFXSR
+        bool XSAVE; // CR4.OSXSAVE, XCRn, XGETBV, XSETBV, XSAVE(OPT), XRSTOR
+        bool AVX2;
+        uint64_t XCR0;
+        uint32_t XSAVESize;
+        x86_64_SIMDSaveMethod saveMethod;
+    } SIMDInfo;
 };
 
 #define AP_TRAMP_LOAD 0
@@ -91,7 +113,13 @@ public:
     void Halt(bool wait = true) override;
     void Yield(bool forceSwitch = false) override;
 
-    void SwitchKernelStack(uint64_t stack) override; // Must be called with interrupts disabled
+    // Next group of functions must be called with interrupts disabled
+    void SwitchKernelStack(uint64_t stack) override;
+    void InitExtraContext(CPU_ExtraContext* extraContext) override;
+    void DestroyExtraContext(CPU_ExtraContext* extraContext) override;
+    void SaveExtraContext(CPU_ExtraContext* extraContext) override;
+    void RestoreExtraContext(CPU_ExtraContext* extraContext) override;
+    void CopyExtraContext(CPU_ExtraContext* dst, const CPU_ExtraContext* src) override;
 
     void SetIRQData(x86_64_ProcessorIRQData* data);
     x86_64_ProcessorIRQData* GetIRQData();

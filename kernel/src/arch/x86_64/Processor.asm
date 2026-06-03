@@ -17,6 +17,7 @@
 
 global GetCurrentProcessor
 global GetCurrentProcessorState
+global x86_64_SIMDInit
 
 GetCurrentProcessor:
     mov rax, QWORD [gs:16]
@@ -24,4 +25,36 @@ GetCurrentProcessor:
 
 GetCurrentProcessorState:
     mov rax, QWORD [gs:0]
+    ret
+
+x86_64_SIMDInit:
+    mov rax, cr0
+    and eax, ~4 ; clear EM
+    or eax, 2 ; set MP
+    mov cr0, rax
+
+    mov rax, cr4
+    or eax, 3 << 9 ; set OSFXSR and OSXMMEXCPT
+    mov cr4, rax
+
+    fninit
+
+    mov rax, cr0
+    or eax, 1 << 5 ; set NE
+    mov cr0, rax
+
+    test rdi, rdi
+    jz .end
+
+    mov rax, cr4
+    or eax, 1 << 18 ; set OSXSAVE
+    mov cr4, rax
+
+    xor ecx, ecx
+    mov eax, edi
+    shr rdi, 32
+    mov edx, edi
+    xsetbv
+
+.end:
     ret
