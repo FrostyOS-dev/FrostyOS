@@ -26,6 +26,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define DEFAULT_DIR_MODE 0755
 #define DEFAULT_FILE_MODE 0644
 
+#define NAME_MAX 255
+
+#define DT_UNKNOWN 0
+#define DT_FIFO 1
+#define DT_CHR 2
+#define DT_DIR 4
+#define DT_BLK 6
+#define DT_REG 8
+#define DT_LNK 10
+#define DT_SOCK 12
+#define DT_WHT 14
+
 /* Based on the Sun VFS Design */
 
 namespace FS {
@@ -65,6 +77,14 @@ namespace FS {
         uint64_t blocks;      // space used
     };
 
+    struct Dentry {
+        int64_t inode;
+        int64_t offset;
+        uint16_t recordLen;
+        uint8_t type;
+        char name[NAME_MAX + 1];
+    };
+
     class VFS {
     public:
         VFS();
@@ -100,6 +120,7 @@ namespace FS {
         virtual int Create(VNode* parent, const char* name, size_t nameLen, VAttr* attr, Credential cred) = 0;
         virtual int GetAttr(VAttr* out) = 0;
         virtual int SetAttr(const VAttr& attr) = 0;
+        virtual int GetDents(Dentry* buffer, size_t count, uint64_t offset, size_t* readCount) = 0;
         virtual int Access() = 0;
         virtual int Link() = 0;
         virtual int Unlink() = 0;
@@ -139,6 +160,8 @@ namespace FS {
     int VFS_CreateFile(const char* path, const char* name, VNode* cwd, Credential cred);
     int VFS_Open(const char* path, VNode** out, VNode* cwd, Credential cred);
     int VFS_Close(VNode* vnode, Credential cred);
+
+    uint8_t VFS_GetPosixType(VType type);
 
     extern VFS* g_rootVFS;
 

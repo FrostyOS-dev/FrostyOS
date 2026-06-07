@@ -55,6 +55,7 @@ namespace FS {
         virtual int Create(VNode* parent, const char* name, size_t nameLen, VAttr* attr, Credential cred) override; // Verifying that a child vnode with the same name doesn't already exist is up to the caller.
         virtual int GetAttr(VAttr* out) override;
         virtual int SetAttr(const VAttr& attr) override;
+        virtual int GetDents(Dentry* buffer, size_t count, uint64_t offset, size_t* readCount) override;
         virtual int Access() override;
         virtual int Link() override;
         virtual int Unlink() override;

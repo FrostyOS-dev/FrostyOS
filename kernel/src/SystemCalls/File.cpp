@@ -50,11 +50,8 @@ int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
 
     FS::VNode* vnode = nullptr;
     int rc = FS::VFS_Open(realPath, &vnode, cwd, proc->GetCred());
-    if (rc < 0 || vnode->GetType() != FS::VType::REG) {
-        if (rc >= 0 && vnode->GetType() != FS::VType::REG) {
-            rc = -ENOSYS;
-            FS::VFS_Close(vnode, proc->GetCred());
-        } else if (rc == -ENOENT && (flags & O_CREAT) > 0) {
+    if (rc < 0) {
+        if (rc == -ENOENT && (flags & O_CREAT) > 0) {
             if (realPath[pathLen - 1] == '/') {
                 delete[] realPath;
                 return -EISDIR;
@@ -89,7 +86,18 @@ int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
         }
     }
 
-    FileDescriptor* desc = new FileDescriptor(proc, FDType::File, vnode);
+    vnode->Lock();
+    FS::VType type = vnode->GetType();
+    vnode->Unlock();
+    if (type != FS::VType::REG && type != FS::VType::DIR) {
+        FS::VFS_Close(vnode, proc->GetCred());
+        return -ENOSYS;
+    } else if (type != FS::VType::DIR && (flags & O_DIRECTORY) > 0) {
+        FS::VFS_Close(vnode, proc->GetCred());
+        return -ENOTDIR;
+    }
+
+    FileDescriptor* desc = new FileDescriptor(proc, type == FS::VType::REG ? FDType::File : FDType::Directory, vnode);
     if (desc == nullptr) {
         FS::VFS_Close(vnode, proc->GetCred());
         delete[] realPath;
@@ -256,8 +264,45 @@ int sys_isatty(int fd) {
 
     switch (desc->GetType()) {
     case FDType::TTY:
-        return 1;
+        return 0;
     default:
         return -ENOTTY;
     }
+}
+
+int sys_getdents(int fd, void* buf, size_t maxRead, size_t* bytesRead) {
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+    FileDescriptorManager* manager = proc->GetFDManager();
+    if (manager == nullptr)
+        return -ENOSYS;
+
+    FileDescriptor* desc = manager->Get(fd);
+    if (desc == nullptr || !desc->isOpen())
+        return -EBADF;
+
+    size_t count = maxRead / sizeof(FS::Dentry);
+    if (count == 0)
+        return -EINVAL;
+
+    FS::Dentry* kBuf = new FS::Dentry[count];
+    if (kBuf == nullptr)
+        return -ENOMEM;
+
+    size_t realCount = 0;
+    int rc = desc->GetDents(kBuf, count, &realCount);
+    if (rc < 0) {
+        delete[] kBuf;
+        return rc;
+    }
+
+    if (!UserWrite(buf, kBuf, sizeof(FS::Dentry) * count, proc))
+        rc = -EFAULT;
+
+    realCount *= sizeof(FS::Dentry);
+    if (!UserWrite(bytesRead, &realCount, sizeof(size_t), proc))
+        rc = -EFAULT;
+
+    delete[] kBuf;
+    return rc;
 }

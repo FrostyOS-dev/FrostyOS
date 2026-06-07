@@ -64,19 +64,24 @@ int FileDescriptor::Open(int flags) {
 
     switch (m_type) {
     case FDType::File:
-        if ((flags & O_APPEND) > 0) {
-            if (m_vnode == nullptr) {
-                m_mutex.Unlock();
-                return -EBADF;
-            }
-            m_append = true;
+        if (m_vnode == nullptr) {
+            m_mutex.Unlock();
+            return -EBADF;
         }
+        if ((flags & O_APPEND) > 0)
+            m_append = true;
         break;
     case FDType::TTY:
         if ((flags & O_APPEND) == 0)
             break;
         m_mutex.Unlock();
         return -EBADF;
+    case FDType::Directory:
+        if (m_vnode == nullptr) {
+            m_mutex.Unlock();
+            return -EBADF;
+        }
+        break;
     case FDType::Invalid:
         m_mutex.Unlock();
         return -EBADF;
@@ -140,6 +145,10 @@ int FileDescriptor::Read(void* buf, size_t count, size_t* realCount) {
         rc = ESUCCESS;
         break;
     }
+    case FDType::Directory: {
+        rc = -EBADF;
+        break;
+    }
     }
 
     m_mutex.Unlock();
@@ -195,6 +204,10 @@ int FileDescriptor::Write(const void* buf, size_t count, size_t* realCount) {
         m_tty->Unlock(m_ttyStream);
         *realCount = count;
         rc = ESUCCESS;
+        break;
+    }
+    case FDType::Directory: {
+        rc = -EBADF;
         break;
     }
     }
@@ -265,9 +278,41 @@ int FileDescriptor::Seek(int64_t offset, FDOffsetStart whence, int64_t* realOffs
     case FDType::TTY:
         rc = ESUCCESS; // ignore seek on TTYs
         break;
+    case FDType::Directory: {
+        rc = -EBADF;
+        break;
+    }
     }
 
     m_mutex.Unlock();
+    return rc;
+}
+
+int FileDescriptor::GetDents(FS::Dentry* buf, size_t count, size_t* realCount) {
+    if (buf == nullptr || count == 0 || realCount == 0)
+        return -EINVAL;
+
+    m_mutex.Lock();
+
+    if (!m_open) {
+        m_mutex.Unlock();
+        return -EBADF;
+    }
+
+    if (m_type != FDType::Directory) {
+        m_mutex.Unlock();
+        return -ENOTDIR;
+    }
+
+    size_t read = 0;
+    m_vnode->Lock();
+    int rc = m_vnode->GetDents(buf, count, m_offset, &read);
+    m_vnode->Unlock();
+
+    m_offset += read;
+    m_mutex.Unlock();
+    if (rc >= 0)
+        *realCount = read;
     return rc;
 }
 

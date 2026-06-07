@@ -29,6 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 enum class FDType {
     File,
     TTY,
+    Directory,
     Invalid
 };
 
@@ -40,6 +41,7 @@ enum class FDOffsetStart {
 
 namespace FS {
     class VNode;
+    struct Dentry;
 }
 
 class Process;
@@ -62,6 +64,8 @@ public:
     int Write(const void* buf, size_t count, size_t* realCount);
 
     int Seek(int64_t offset, FDOffsetStart whence, int64_t* realOffset);
+
+    int GetDents(FS::Dentry* buf, size_t count, size_t* realCount);
 
     FDType GetType() const;
     FS::VNode* GetVNode();

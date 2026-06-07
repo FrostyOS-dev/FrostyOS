@@ -24,11 +24,29 @@ typedef unsigned int mode_t;
 typedef long ssize_t;
 typedef long off_t;
 
-#define O_RDONLY (1 << 0)
-#define O_WRONLY (1 << 1)
-#define O_RDWR (O_RDONLY | O_WRONLY)
-#define O_APPEND (1 << 4)
-#define O_CREAT (1 << 5)
+#define O_PATH 010000000
+
+#define O_ACCMODE (03 | O_PATH)
+#define O_RDONLY   00
+#define O_WRONLY   01
+#define O_RDWR     02
+
+#define O_CREAT         0100
+#define O_EXCL          0200
+#define O_NOCTTY        0400
+#define O_TRUNC        01000
+#define O_APPEND       02000
+#define O_NONBLOCK     04000
+#define O_DSYNC       010000
+#define O_ASYNC       020000
+#define O_DIRECT      040000
+#define O_LARGEFILE  0100000
+#define O_DIRECTORY  0200000
+#define O_NOFOLLOW   0400000
+#define O_NOATIME   01000000
+#define O_CLOEXEC   02000000
+#define O_SYNC      04010000
+#define O_RSYNC     04010000
 
 #define S_IRWXU 00700
 #define S_IRUSR 00400
@@ -60,5 +78,7 @@ ssize_t sys_write(int fd, const void* buf, size_t count);
 off_t sys_seek(int fd, off_t offset, int whence);
 
 int sys_isatty(int fd);
+
+int sys_getdents(int fd, void* buf, size_t maxRead, size_t* bytesRead);
 
 #endif /* _SYSCALL_FILE_HPP */

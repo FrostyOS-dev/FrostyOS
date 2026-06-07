@@ -232,8 +232,14 @@ namespace FS {
             return -ENOSYS;
         }
 
+        size_t nameLen = strlen(name);
+        if (nameLen > NAME_MAX) {
+            delete vnode;
+            return -ENAMETOOLONG;
+        }
+
         VAttr attr = {VType::DIR, DEFAULT_DIR_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, 0, 0, 0, 0};
-        rc = vnode->Create(parent, name, strlen(name), &attr, cred);
+        rc = vnode->Create(parent, name, nameLen, &attr, cred);
         if (rc < 0) {
             delete vnode;
             return rc;
@@ -261,8 +267,14 @@ namespace FS {
             return -ENOSYS;
         }
 
+        size_t nameLen = strlen(name);
+        if (nameLen > NAME_MAX) {
+            delete vnode;
+            return -ENAMETOOLONG;
+        }
+        
         VAttr attr = {VType::REG, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, 0, 0, 0, 0};
-        rc = vnode->Create(parent, name, strlen(name), &attr, cred);
+        rc = vnode->Create(parent, name, nameLen, &attr, cred);
         if (rc < 0) {
             delete vnode;
             return rc;
@@ -303,6 +315,26 @@ namespace FS {
         if (rc >= 0)
             UnrefVNode(vnode);
         return rc;
+    }
+
+    uint8_t VFS_GetPosixType(VType type) {
+        switch (type) {
+#define TYPE_CASE(v, p) \
+        case VType::v: \
+            return DT_##p
+
+            TYPE_CASE(NON, UNKNOWN);
+            TYPE_CASE(REG, REG);
+            TYPE_CASE(DIR, DIR);
+            TYPE_CASE(BLK, BLK);
+            TYPE_CASE(CHR, CHR);
+            TYPE_CASE(LNK, LNK);
+            TYPE_CASE(SOCK, SOCK);
+            TYPE_CASE(FIFO, FIFO);
+            TYPE_CASE(BAD, UNKNOWN);
+#undef TYPE_CASE
+        }
+        return DT_UNKNOWN;
     }
 
 

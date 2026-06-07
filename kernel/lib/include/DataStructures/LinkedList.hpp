@@ -342,24 +342,32 @@ namespace LinkedList {
         void Enumerate(bool (*func)(T* obj, void* data), void* data = nullptr) const {
             Node* temp = m_start;
             for (uint64_t i = 0; i < m_count; i++) {
-                // if (temp == nullptr)
-                // 	return;
                 func((T*)(temp->data), data);
                 temp = temp->next;
             }
         }
 
         void Enumerate(bool (*func)(T* obj, uint64_t index), uint64_t start = 0) const {
+            if (start >= m_count)
+                return;
             Node* temp = m_start;
-            for (uint64_t i = 0; i < start; i++) {
-                // if (temp == nullptr)
-                // 	return;
+            for (uint64_t i = 0; i < start; i++)
+                temp = temp->next;
+            for (uint64_t i = start; i < m_count; i++) {
+                if (!func((T*)(temp->data), i))
+                    return;
                 temp = temp->next;
             }
+        }
+
+        void Enumerate(bool (*func)(T* obj, uint64_t index, void* data), uint64_t start = 0, void* data = nullptr) const {
+            if (start >= m_count)
+                return;
+            Node* temp = m_start;
+            for (uint64_t i = 0; i < start; i++)
+                temp = temp->next;
             for (uint64_t i = start; i < m_count; i++) {
-                // if (temp == nullptr)
-                // 	return;
-                if (!func((T*)(temp->data), i))
+                if (!func((T*)(temp->data), i, data))
                     return;
                 temp = temp->next;
             }

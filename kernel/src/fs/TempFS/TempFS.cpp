@@ -308,6 +308,44 @@ namespace FS {
         return ESUCCESS;
     }
 
+    int TempFSVNode::GetDents(Dentry* buffer, size_t count, uint64_t offset, size_t* readCount) {
+        struct Data {
+            Dentry* buffer;
+            size_t end;
+            size_t read;
+        } d = {buffer, offset + count, 0};
+        
+        m_children.lock();
+        if (offset >= m_children.getCount()) {
+            m_children.unlock();
+            *readCount = 0;
+            return ESUCCESS;
+        }
+
+        m_children.Enumerate([](TempFSVNode* vnode, uint64_t i, void* data) -> bool {
+            Data* d = static_cast<Data*>(data);
+            if (d->end == i)
+                return false;
+
+            vnode->Lock();
+
+            d->buffer[d->read] = {vnode->m_attr.inode, static_cast<int64_t>(d->read), sizeof(Dentry), VFS_GetPosixType(vnode->m_attr.type), ""};
+            memcpy(&d->buffer[d->read].name, vnode->m_name, vnode->m_nameLen);
+            d->buffer[d->read].name[vnode->m_nameLen] = 0;
+
+            vnode->Unlock();
+
+            d->read++;
+
+            return true;
+        }, offset, &d);
+
+        m_children.unlock();
+
+        *readCount = d.read;
+        return 0;
+    }
+
     int TempFSVNode::Access() {
         return -ENOSYS;
     }
