@@ -15,6 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "FADT.hpp"
 #include "HPET.hpp"
 #include "Init.hpp"
 #include "MADT.hpp"
@@ -74,6 +75,11 @@ namespace ACPI {
         if (!InitHPET()) {
             dbgprintf("HPET init failed.\n");
             PANIC("Failed to initialise HPET table");
+        }
+
+        if (!InitFADT()) {
+            dbgprintf("FADT init failed.\n");
+            PANIC("Failed to initialise FADT table");
         }
 
         dbgprintf("ACPI: Early init complete\n");

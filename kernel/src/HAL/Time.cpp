@@ -20,11 +20,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "drivers/HPET.hpp"
 
+#include <stdint.h>
 #include <util.h>
 
 #include <Scheduling/Scheduler.hpp>
 
 #ifdef __x86_64__
+#include <arch/x86_64/CMOS.hpp>
 #include <arch/x86_64/Processor.hpp>
 
 #include <arch/x86_64/interrupts/APIC/LocalAPIC.hpp>
@@ -87,4 +89,28 @@ void HAL_SleepNS(uint64_t ns) {
         while (g_HALTimerTicks < end)
             PAUSE();
     }
+}
+
+bool HAL_GetTimeOfDay(TimeOfDay* time) {
+#ifdef __x86_64__
+    return x86_64_CMOSGetTimeOfDay(time);
+#endif
+}
+
+int64_t HAL_GetUnixEpochTime() {
+    TimeOfDay time = {};
+    bool rc = HAL_GetTimeOfDay(&time);
+    if (!rc)
+        return INT64_MAX;
+    int64_t days = DaysSinceUnixEpoch(time.year, time.month, time.dayOfMonth);
+    return days * 86400 + time.hours * 3600 + time.minutes * 60 + time.seconds;
+}
+
+int64_t DaysSinceUnixEpoch(int32_t year, uint8_t month, uint8_t day) {
+    year -= month <= 2 ? 1 : 0;
+    int32_t era = (year >= 0 ? year : year - 399) / 400;
+    uint32_t yoe = (uint32_t)(year - era * 400);
+    uint32_t doy = (153 * (month > 2 ? month - 3 : month + 9) + 2) / 5 + day - 1;
+    uint32_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return (era * 146097 + (int32_t)doe) - 719468;
 }

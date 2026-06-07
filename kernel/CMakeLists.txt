@@ -81,6 +81,7 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Scheduling/TaskUtil.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/APTrampoline.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/ArchDefs.asm
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/CMOS.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/CPUID.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/E9.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/GDT.asm
@@ -121,6 +122,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Framebuffer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGA.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGAFont.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/FADT.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/HPET.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/Init.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/MADT.cpp
@@ -146,6 +148,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Memory.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Process.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/SystemCall.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Time.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/DebugBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/VGABackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTYBackend.cpp
