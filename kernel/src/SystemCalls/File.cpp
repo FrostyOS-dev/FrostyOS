@@ -242,3 +242,22 @@ off_t sys_seek(int fd, off_t offset, int whence) {
 
     return realOffset;
 }
+
+int sys_isatty(int fd) {
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+    FileDescriptorManager* manager = proc->GetFDManager();
+    if (manager == nullptr)
+        return -ENOSYS;
+
+    FileDescriptor* desc = manager->Get(fd);
+    if (desc == nullptr || !desc->isOpen())
+        return -EBADF;
+
+    switch (desc->GetType()) {
+    case FDType::TTY:
+        return 1;
+    default:
+        return -ENOTTY;
+    }
+}

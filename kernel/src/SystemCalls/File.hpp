@@ -59,4 +59,6 @@ ssize_t sys_write(int fd, const void* buf, size_t count);
 
 off_t sys_seek(int fd, off_t offset, int whence);
 
+int sys_isatty(int fd);
+
 #endif /* _SYSCALL_FILE_HPP */
