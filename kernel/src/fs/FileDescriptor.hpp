@@ -18,7 +18,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _FILE_DESCRIPTOR_HPP
 #define _FILE_DESCRIPTOR_HPP
 
-#include "fs/VFS.hpp"
 #include <stddef.h>
 #include <stdint.h>
 

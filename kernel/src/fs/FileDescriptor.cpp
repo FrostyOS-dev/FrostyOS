@@ -120,7 +120,9 @@ int FileDescriptor::Read(void* buf, size_t count, size_t* realCount) {
             return -EBADF;
         }
         size_t bytesRead = 0;
+        m_vnode->Lock();
         rc = m_vnode->Read(buf, count, 0, m_offset, &bytesRead, m_proc->GetCred());
+        m_vnode->Unlock();
         m_offset += bytesRead;
         *realCount = bytesRead;
         break;
@@ -131,7 +133,9 @@ int FileDescriptor::Read(void* buf, size_t count, size_t* realCount) {
             return -EBADF;
         }
         // Ignore offset
+        m_tty->Lock(m_ttyStream);
         m_tty->ReadString(static_cast<char*>(buf), count, m_ttyStream);
+        m_tty->Unlock(m_ttyStream);
         *realCount = count;
         rc = ESUCCESS;
         break;
@@ -161,16 +165,20 @@ int FileDescriptor::Write(const void* buf, size_t count, size_t* realCount) {
             m_mutex.Unlock();
             return -EBADF;
         }
+        m_vnode->Lock();
         size_t bytesWritten = 0;
         size_t offset = m_offset;
         if (m_append) {
             FS::VAttr attr;
             rc = m_vnode->GetAttr(&attr);
-            if (rc < 0)
+            if (rc < 0) {
+                m_vnode->Unlock();
                 break;
+            }
             offset = attr.size;
         }
         rc = m_vnode->Write(buf, count, 0, offset, &bytesWritten, m_proc->GetCred());
+        m_vnode->Unlock();
         if (!m_append)
             m_offset += bytesWritten;
         *realCount = bytesWritten;
@@ -182,7 +190,9 @@ int FileDescriptor::Write(const void* buf, size_t count, size_t* realCount) {
             return -EBADF;
         }
         // Ignore offset
+        m_tty->Lock(m_ttyStream);
         m_tty->WriteString(static_cast<const char*>(buf), count, m_ttyStream, true);
+        m_tty->Unlock(m_ttyStream);
         *realCount = count;
         rc = ESUCCESS;
         break;
@@ -213,7 +223,9 @@ int FileDescriptor::Seek(int64_t offset, FDOffsetStart whence, int64_t* realOffs
             break;
         }
         FS::VAttr attr;
+        m_vnode->Lock();
         rc = m_vnode->GetAttr(&attr);
+        m_vnode->Unlock();
         if (rc < 0)
             break;
         size_t fileSize = attr.size;

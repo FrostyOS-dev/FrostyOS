@@ -75,6 +75,14 @@ namespace FS {
         return m_parent;
     }
 
+    void VNode::Lock() {
+        m_lock.Lock();
+    }
+
+    void VNode::Unlock() {
+        m_lock.Unlock();
+    }
+
     // Increment refCount of a VNode, and delete it if refCount is 0.
     void RefVNode(VNode* node) {
         node->GetRefCount()++;
@@ -273,7 +281,9 @@ namespace FS {
         if (rc < 0)
             return rc;
 
+        vnode->Lock();
         rc = vnode->Open(0, cred);
+        vnode->Unlock();
         if (rc < 0)
             return rc;
 
@@ -287,7 +297,9 @@ namespace FS {
         if (vnode == nullptr)
             return -EINVAL;
 
+        vnode->Lock();
         int rc = vnode->Close(0, cred);
+        vnode->Unlock();
         if (rc >= 0)
             UnrefVNode(vnode);
         return rc;

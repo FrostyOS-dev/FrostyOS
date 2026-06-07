@@ -45,27 +45,33 @@ int ReadFile(const char* path, Process* proc, uint8_t** data, uint64_t* size) {
     if (rc < 0)
         return rc;
 
+    vnode->Lock();
+
     FS::VAttr attr{};
     rc = vnode->GetAttr(&attr);
     if (rc < 0) {
+        vnode->Unlock();
         FS::VFS_Close(vnode, cred);
         return rc;
     }
 
     uint64_t fileSize = attr.size;
     if (fileSize == 0) {
+        vnode->Unlock();
         FS::VFS_Close(vnode, cred);
         return -EINVAL;
     }
 
     uint8_t* buffer = new uint8_t[fileSize];
     if (buffer == nullptr) {
+        vnode->Unlock();
         FS::VFS_Close(vnode, cred);
         return -ENOMEM;
     }
 
     uint64_t read = 0;
     rc = vnode->Read(buffer, fileSize, 0, 0, &read, cred);
+    vnode->Unlock();
     if (rc < 0 || read != fileSize) {
         FS::VFS_Close(vnode, cred);
         delete[] buffer;

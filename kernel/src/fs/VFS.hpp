@@ -116,6 +116,9 @@ namespace FS {
         virtual int& GetRefCount();
         virtual VNode* GetParent();
 
+        virtual void Lock();
+        virtual void Unlock();
+
     protected:
         VAttr m_attr;
         Mutex m_lock;

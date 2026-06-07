@@ -89,10 +89,13 @@ int LoadInitRAMFS(void* data, size_t size) {
             if (rc < 0)
                 break;
 
+            vnode->Lock();
             FS::VAttr attr{};
             rc = vnode->GetAttr(&attr);
-            if (rc < 0)
+            if (rc < 0) {
+                vnode->Unlock();
                 break;
+            }
 
             attr.mode = mode;
             attr.uid = uid;
@@ -101,11 +104,14 @@ int LoadInitRAMFS(void* data, size_t size) {
             attr.mtime = mtime;
             attr.ctime = mtime;
             rc = vnode->SetAttr(attr);
-            if (rc < 0)
+            if (rc < 0) {
+                vnode->Unlock();
                 break;
+            }
 
             uint64_t bytes = 0;
             rc = vnode->Write((void*)((uint64_t)header + 512), itemSize, 0, 0, &bytes, cred);
+            vnode->Unlock();
             break;
         }
         case '5': { // Folder
@@ -119,10 +125,13 @@ int LoadInitRAMFS(void* data, size_t size) {
             if (rc < 0)
                 break;
 
+            vnode->Lock();
             FS::VAttr attr{};
             rc = vnode->GetAttr(&attr);
-            if (rc < 0)
+            if (rc < 0) {
+                vnode->Unlock();
                 break;
+            }
 
             attr.mode = mode;
             attr.uid = uid;
@@ -131,6 +140,7 @@ int LoadInitRAMFS(void* data, size_t size) {
             attr.mtime = mtime;
             attr.ctime = mtime;
             rc = vnode->SetAttr(attr);
+            vnode->Unlock();
             break;
         }
         default:
