@@ -1,4 +1,4 @@
-# Copyright (©) 2024  Frosty515
+# Copyright (©) 2024-2026  Frosty515
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,8 +23,10 @@ set(CMAKE_ASM-ATT_COMPILER x86_64-frostyos-as)
 set(CMAKE_ASM_NASM_COMPILER nasm)
 set(CMAKE_C_COMPILER_WORKS true)
 set(CMAKE_CXX_COMPILER_WORKS true)
-#set(CMAKE_ASM-ATT_COMPILER_WORKS true)
-#set(CMAKE_ASM_NASM_COMPILER_WORKS true)
+set(CMAKE_AR x86_64-frostyos-gcc-ar)
+set(CMAKE_RANLIB x86_64-frostyos-gcc-ranlib)
+set(AR x86_64-frostyos-gcc-ar)
+set(RANLIB x86_64-frostyos-gcc-ranlib)
 
 set(CMAKE_ASM_NASM_OBJECT_FORMAT elf64)
 
@@ -33,13 +35,6 @@ if(NOT HAS_x86_64_frostyos_nm)
     message(FATAL_ERROR "Could not find x86_64-frostyos-nm")
 else()
     set(NM x86_64-frostyos-nm)
-endif()
-
-find_program(HAS_x86_64_frostyos_ar x86_64-frostyos-ar)
-if(NOT HAS_x86_64_frostyos_ar)
-    message(FATAL_ERROR "Could not find x86_64-frostyos-ar")
-else()
-    set(AR x86_64-frostyos-ar)
 endif()
 
 set(FROSTYOS_ARCHITECTURE x86_64)
