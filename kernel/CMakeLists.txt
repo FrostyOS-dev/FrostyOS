@@ -32,6 +32,7 @@ set_target_properties(uacpi PROPERTIES C_STANDARD_REQUIRED ON)
 target_include_directories(uacpi PRIVATE ${UACPI_INCLUDES})
 
 target_compile_definitions(uacpi PRIVATE UACPI_FORMATTED_LOGGING=1)
+target_compile_definitions(uacpi PRIVATE UACPI_NATIVE_ALLOC_ZEROED=1)
 
 target_compile_options(uacpi
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mcmodel=kernel>
@@ -204,6 +205,7 @@ target_link_options(kernel
 target_compile_definitions(kernel PRIVATE _FROSTYOS_BUILD_TARGET=kernel)
 
 target_compile_definitions(kernel PRIVATE UACPI_FORMATTED_LOGGING=1)
+target_compile_definitions(kernel PRIVATE UACPI_NATIVE_ALLOC_ZEROED=1)
 
 target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mcmodel=kernel>
@@ -220,7 +222,7 @@ target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-nostdlib>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-ffreestanding>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-pie>
-    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fstack-protector-strong>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fstack-protector>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mgeneral-regs-only>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mno-red-zone>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-O2>

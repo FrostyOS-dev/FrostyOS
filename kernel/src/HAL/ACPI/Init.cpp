@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "MCFG.hpp"
 
 #include "../HAL.hpp"
+#include "../Processor.hpp"
 
 #include <stdio.h>
 #include <util.h>
@@ -88,11 +89,13 @@ namespace ACPI {
 
     void Stage2Init() {
 #ifndef UACPI_BAREBONES_MODE
+        int state = Processor::DisableInterrupts();
         uacpi_status rc = uacpi_namespace_load();
         if (uacpi_unlikely_error(rc)) {
             dbgprintf("Failed to load ACPI namespace: %d\n", rc);
             PANIC("ACPI: Failed to load ACPI namespace");
         }
+        Processor::EnableInterrupts(state);
 
         rc = uacpi_namespace_initialize();
         if (uacpi_unlikely_error(rc)) {

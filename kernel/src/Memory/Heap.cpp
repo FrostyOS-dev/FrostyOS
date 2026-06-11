@@ -29,17 +29,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <HAL/HAL.hpp>
 
-HeapAllocator::HeapAllocator() : m_Head(nullptr), m_SectionAllocator(nullptr), /*m_Lock(SPINLOCK_DEFAULT_VALUE),*/ m_UsedMemory(0), m_FreeMemory(0), m_MetadataMemory(0), m_TotalMemory(0) {
+#define HEAP_MIN_SECTION_SIZE (32 * PAGE_SIZE)
+
+HeapAllocator::HeapAllocator() : m_Head(nullptr), m_SectionAllocator(nullptr), m_UsedMemory(0), m_FreeMemory(0), m_MetadataMemory(0), m_TotalMemory(0) {
 }
 
-HeapAllocator::HeapAllocator(HeapSectionAllocator* allocator) : m_Head(nullptr), m_SectionAllocator(allocator), /*m_Lock(SPINLOCK_DEFAULT_VALUE),*/ m_UsedMemory(0), m_FreeMemory(0), m_MetadataMemory(0), m_TotalMemory(0) {
+HeapAllocator::HeapAllocator(HeapSectionAllocator* allocator) : m_Head(nullptr), m_SectionAllocator(allocator), m_UsedMemory(0), m_FreeMemory(0), m_MetadataMemory(0), m_TotalMemory(0) {
 }
 
 HeapAllocator::~HeapAllocator() {
 }
 
 void* HeapAllocator::Allocate(size_t size) {
-    // spinlock_acquire(&m_Lock);
     size = ALIGN_UP(size, HEAP_MIN_BLOCK_SIZE);
     m_lock.Lock();
 
@@ -73,7 +74,6 @@ void* HeapAllocator::Allocate(size_t size) {
                 m_FreeMemory -= block->size;
                 m_UsedMemory += block->size;
 
-                // spinlock_release(&m_Lock);
                 m_lock.Unlock();
                 return reinterpret_cast<void*>(reinterpret_cast<uint64_t>(block) + sizeof(HeapBlock));
             }
@@ -85,22 +85,19 @@ void* HeapAllocator::Allocate(size_t size) {
 
     // no free block found, allocate a new section
     if (m_SectionAllocator == nullptr) {
-        // spinlock_release(&m_Lock);
         m_lock.Unlock();
         return nullptr;
     }
 
     if (m_SectionAllocator->Allocate == nullptr) {
-        // spinlock_release(&m_Lock);
         m_lock.Unlock();
         return nullptr;
     }
 
-    size_t sectionSize = ALIGN_UP(sizeof(HeapSection) + sizeof(HeapBlock) + size, PAGE_SIZE);
+    size_t sectionSize = ALIGN_UP(sizeof(HeapSection) + sizeof(HeapBlock) + size, HEAP_MIN_SECTION_SIZE);
 
     section = reinterpret_cast<HeapSection*>(m_SectionAllocator->Allocate(sectionSize));
     if (section == nullptr) {
-        // spinlock_release(&m_Lock);
         m_lock.Unlock();
         return nullptr;
     }
@@ -135,7 +132,6 @@ void* HeapAllocator::Allocate(size_t size) {
     m_Head = section;
 
     
-    // spinlock_release(&m_Lock);
     m_lock.Unlock();
     
     return reinterpret_cast<void*>(reinterpret_cast<uint64_t>(block) + sizeof(HeapBlock));
@@ -145,13 +141,11 @@ void HeapAllocator::Free(void* ptr) {
     if (ptr == nullptr)
         return;
 
-    // spinlock_acquire(&m_Lock);
     m_lock.Lock();
 
     HeapBlock* block = reinterpret_cast<HeapBlock*>(reinterpret_cast<uint64_t>(ptr) - sizeof(HeapBlock));
     assert(!block->free);
     block->free = true;
-    memset(ptr, 0xCC, block->size);
 
     // need to insert the block back into the list
     HeapSection* section = m_Head;
@@ -266,7 +260,6 @@ void HeapAllocator::Free(void* ptr) {
         }
     }
 
-    // spinlock_release(&m_Lock);
     m_lock.Unlock();
 }
 
