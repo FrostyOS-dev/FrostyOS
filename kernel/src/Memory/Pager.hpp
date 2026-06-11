@@ -18,7 +18,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _VMM_PAGER_HPP
 #define _VMM_PAGER_HPP
 
+#include <stdint.h>
+
 namespace VMM {
+    struct MemoryObject;
+    struct Page;
+
     // physical memory backed pager, subclasses can expand it to be more
     class DefaultPager {
     public:
@@ -26,6 +31,7 @@ namespace VMM {
         virtual ~DefaultPager();
 
         virtual void* AllocatePage();
+        virtual bool GetPage(MemoryObject* obj, uint64_t offset, Page** outPage, bool write);
         virtual void FreePage(void* page);
 
     };

@@ -31,6 +31,11 @@ namespace VMM {
         return g_PMM->AllocatePage();
     }
 
+
+    bool DefaultPager::GetPage(MemoryObject* obj, uint64_t offset, Page** outPage, bool write) {
+        return false;
+    }
+
     void DefaultPager::FreePage(void* page) {
         g_PMM->FreePage(page);
     }

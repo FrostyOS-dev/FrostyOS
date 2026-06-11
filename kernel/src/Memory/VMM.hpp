@@ -63,23 +63,47 @@ namespace VMM {
         Page* next;
     }; // doesn't need a lock 
 
+    struct Anon {
+        uint64_t refCount;
+        uint64_t physAddr;
+    };
+
+    struct AnonMap {
+        uint64_t refCount;
+        size_t slotCount;
+        spinlock_new(lock);
+        Anon** slots; // pointer to an array of pointers to Anon objects
+    };
+
     struct MemoryObject {
-        uint64_t size; // in bytes
-        Page* pages;   // linked list of pages
+        uint64_t size;
+        uint64_t refCount;
+
+        AVLTree::wAVLTree<uint64_t, Page*> pages;
+
         DefaultPager* pager;
+        void* pagerData;
+
         spinlock_new(lock);
     };
 
     struct MapEntry {
         uint64_t startVirt;
         uint64_t endVirt;
+        uint64_t offset; // offset into memoryObject or anonMap
+
+        AnonMap* anonMap;
         MemoryObject* memoryObject;
+
         struct {
             Protection protection;
+            CacheType cacheType;
             bool user;
+            bool needsCopy; // True if write fault should trigger an anonoymous copy
+            bool isPrivate;
+            bool zero;
         } flags;
-        CacheType cacheType;
-        uint64_t memUsagePattern; // TODO
+        
         uint64_t wireCount;
     };
 
@@ -95,14 +119,11 @@ namespace VMM {
         void Init(PageMapper* pageMapper, VMRegionAllocator* vmRegionAllocator);
         void Delete(); // The PageMapper and VMRegionAllocator must be deleted separately.
 
-        void* AllocatePages(uint64_t count, Protection prot = Protection::READ_WRITE, bool user = false, bool allocPhys = false, CacheType cacheType = CacheType::DEFAULT);
-        void* AllocatePages(uint64_t count, void* addr = nullptr, Protection prot = Protection::READ_WRITE, bool user = false, bool allocPhys = false, CacheType cacheType = CacheType::DEFAULT);
+        void* AllocatePages(uint64_t count, Protection prot = Protection::READ_WRITE, bool user = false, bool allocPhys = false, bool zero = true, CacheType cacheType = CacheType::DEFAULT);
+        void* AllocatePages(uint64_t count, void* addr = nullptr, Protection prot = Protection::READ_WRITE, bool user = false, bool allocPhys = false, bool zero = true, CacheType cacheType = CacheType::DEFAULT);
         bool FreePages(void* virtAddr, uint64_t count = 0);
         bool RemapPages(void* virtAddr, uint64_t count = 0, Protection prot = Protection::READ_WRITE, bool user = false, CacheType cacheType = CacheType::DEFAULT);
         bool MapPages(void* virtAddr, uint64_t count);
-
-        bool MapMemory(uint64_t virtAddr, MemoryObject* memObj, Protection prot, bool user, CacheType cacheType);
-        bool UnmapMemory(uint64_t virtAddr);
 
         bool HandlePageFault(PageFaultCode code, uint64_t virtAddr);
 
