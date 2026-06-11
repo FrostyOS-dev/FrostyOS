@@ -135,7 +135,7 @@ void x86_64_Processor::Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uin
     x86_64_InitPaging(HHDMOffset, memoryMap, memoryMapEntryCount, pagingMode, kernelVirtual, kernelPhysical);
     g_KProcess->SetVMM(VMM::g_KVMM);
 
-    uint64_t kernelStack = (uint64_t)VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::Protection::READ_WRITE, false, true) + KERNEL_STACK_SIZE;
+    uint64_t kernelStack = (uint64_t)VMM::g_KVMM->AllocateAnonPages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::DEFAULT_KALLOC_PHYS_FLAGS) + KERNEL_STACK_SIZE;
     Scheduler::g_BSPState.kernelStack = (void*)kernelStack;
     InitTSS(&Scheduler::g_BSPState);
 
@@ -156,8 +156,8 @@ void x86_64_Processor::InitBSPLate() {
 
 void x86_64_Processor::InitTSS(Scheduler::ProcessorState* state) {
     m_TSS.RSP[0] = (uint64_t)state->kernelStack;
-    m_TSS.IST[0] = (uint64_t)VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::Protection::READ_WRITE, false, true) + KERNEL_STACK_SIZE;
-    m_TSS.IST[1] = (uint64_t)VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::Protection::READ_WRITE, false, true) + KERNEL_STACK_SIZE;
+    m_TSS.IST[0] = (uint64_t)VMM::g_KVMM->AllocateAnonPages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::DEFAULT_KALLOC_PHYS_FLAGS) + KERNEL_STACK_SIZE;
+    m_TSS.IST[1] = (uint64_t)VMM::g_KVMM->AllocateAnonPages(KERNEL_STACK_SIZE / PAGE_SIZE, VMM::DEFAULT_KALLOC_PHYS_FLAGS) + KERNEL_STACK_SIZE;
     if (state->kernelStack == 0 || m_TSS.IST[0] == 0 || m_TSS.IST[1] == 0)
         PANIC("Failed to allocate stack for TSS");
 

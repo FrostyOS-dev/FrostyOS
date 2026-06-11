@@ -28,10 +28,20 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Scheduling/Process.hpp>
 #include <Scheduling/Thread.hpp>
 
+bool ValidateMmapFlags(int flags) {
+    if (flags <= 0 || flags >= (MAP_FIXED * 2)) // out of bounds
+        return false;
+    if ((flags & MAP_ANONYMOUS) == 0) // not anonymous
+        return false;
+    if ((flags & (MAP_SHARED | MAP_PRIVATE)) == 0 || (flags & (MAP_SHARED | MAP_PRIVATE)) == (MAP_SHARED | MAP_PRIVATE)) // neither shared or private OR both shared and private
+        return false;
+    return true;
+}
+
 void* sys_mmap(void* addr, size_t length, int prot, int flags, sys_mmapExtraArgs* args) {
     if ((addr == nullptr && (flags & MAP_FIXED) > 0) || length == 0
             || prot <= PROT_NONE || prot > (PROT_READ | PROT_WRITE | PROT_EXEC)
-            || flags <= 0 || flags > (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) || (flags & (MAP_PRIVATE | MAP_ANONYMOUS)) == 0)
+            || !ValidateMmapFlags(flags))
         return (void*)-EINVAL;
 
     if (prot == (PROT_WRITE | PROT_EXEC))
@@ -61,9 +71,13 @@ void* sys_mmap(void* addr, size_t length, int prot, int flags, sys_mmapExtraArgs
     if (prot & PROT_EXEC)
         protection = (VMM::Protection)((uint8_t)protection | (uint8_t)VMM::Protection::EXECUTE);
 
-    void* mem = vmm->AllocatePages(pageCount, addr, protection, true);
+    VMM::AllocFlags allocFlags = VMM::DEFAULT_ALLOC_FLAGS;
+    allocFlags.protection = protection;
+    allocFlags.isPrivate = flags & MAP_PRIVATE;
+
+    void* mem = vmm->AllocateAnonPages(pageCount, addr, allocFlags);
     if (mem == nullptr && addr != nullptr && (flags & MAP_FIXED) == 0)
-        mem = vmm->AllocatePages(pageCount, nullptr, protection, true);
+        mem = vmm->AllocateAnonPages(pageCount, nullptr, allocFlags);
 
     if (mem == nullptr)
         return (void*)((flags & MAP_FIXED) == 0 ? (int64_t)-ENOMEM : (int64_t)-EEXIST);

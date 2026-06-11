@@ -230,7 +230,7 @@ void x86_64_LAPIC::StartCPU() {
 
     spinlock_acquire(&g_APTrampLock);
 
-    void* stack = VMM::g_KVMM->AllocatePages(KERNEL_STACK_SIZE >> PAGE_SIZE_SHIFT, VMM::Protection::READ_WRITE, false, true);
+    void* stack = VMM::g_KVMM->AllocateAnonPages(KERNEL_STACK_SIZE >> PAGE_SIZE_SHIFT, VMM::DEFAULT_KALLOC_PHYS_FLAGS);
     if (stack == nullptr)
         PANIC("Failed to allocate stack for AP");
     memset(stack, 0, KERNEL_STACK_SIZE);

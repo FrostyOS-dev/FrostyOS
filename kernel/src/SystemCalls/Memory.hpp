@@ -34,9 +34,10 @@ struct [[gnu::packed]] sys_mmapExtraArgs {
 #define PROT_EXEC 4
 
 #define MAP_PRIVATE 1
-#define MAP_ANONYMOUS 2
+#define MAP_SHARED 2
+#define MAP_ANONYMOUS 4
 #define MAP_ANON MAP_ANONYMOUS
-#define MAP_FIXED 4
+#define MAP_FIXED 8
 
 void* sys_mmap(void* addr, size_t length, int prot, int flags, sys_mmapExtraArgs* args);
 int sys_munmap(void* addr, size_t length); // For now, the bounds of this must be the bounds of the original mapping

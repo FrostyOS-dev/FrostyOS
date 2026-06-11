@@ -142,7 +142,7 @@ int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* aux
             if (phdr->p_type == PT_TLS)
                 phdr->p_vaddr = 0;
 
-            void* pages = vmm->AllocatePages(DIV_ROUNDUP(phdr->p_memsz, PAGE_SIZE), ALIGN_DOWN_ADDRESS(phdr->p_vaddr, PAGE_SIZE), VMM::Protection::READ_WRITE, true, true);
+            void* pages = vmm->AllocateAnonPages(DIV_ROUNDUP(phdr->p_memsz, PAGE_SIZE), ALIGN_DOWN_ADDRESS(phdr->p_vaddr, PAGE_SIZE), VMM::DEFAULT_KALLOC_PHYS_FLAGS);
             if (pages == nullptr) {
                 HandleLoadFail(mappedRegions, vmm);
                 return -ENOMEM;

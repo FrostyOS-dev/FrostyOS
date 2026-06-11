@@ -107,6 +107,19 @@ namespace VMM {
         uint64_t wireCount;
     };
 
+    struct AllocFlags {
+        Protection protection;
+        CacheType cacheType;
+        bool user;
+        bool isPrivate;
+        bool zero;
+        bool allocPhys;
+    };
+
+    constexpr AllocFlags DEFAULT_KALLOC_FLAGS = {Protection::READ_WRITE, CacheType::DEFAULT, false, true, true, false};
+    constexpr AllocFlags DEFAULT_KALLOC_PHYS_FLAGS = {Protection::READ_WRITE, CacheType::DEFAULT, false, true, true, true};
+    constexpr AllocFlags DEFAULT_ALLOC_FLAGS = {Protection::READ_WRITE, CacheType::DEFAULT, true, true, true, false};
+
 
     // The core VMM.
     // It uses the same region that its VMRegionAllocator uses.
@@ -119,8 +132,9 @@ namespace VMM {
         void Init(PageMapper* pageMapper, VMRegionAllocator* vmRegionAllocator);
         void Delete(); // The PageMapper and VMRegionAllocator must be deleted separately.
 
-        void* AllocatePages(uint64_t count, Protection prot = Protection::READ_WRITE, bool user = false, bool allocPhys = false, bool zero = true, CacheType cacheType = CacheType::DEFAULT);
-        void* AllocatePages(uint64_t count, void* addr = nullptr, Protection prot = Protection::READ_WRITE, bool user = false, bool allocPhys = false, bool zero = true, CacheType cacheType = CacheType::DEFAULT);
+        void* AllocateAnonPages(uint64_t count, AllocFlags flags = DEFAULT_KALLOC_FLAGS);
+        void* AllocateAnonPages(uint64_t count, void* addr = nullptr, AllocFlags allocFlags = DEFAULT_KALLOC_FLAGS);
+        
         bool FreePages(void* virtAddr, uint64_t count = 0);
         bool RemapPages(void* virtAddr, uint64_t count = 0, Protection prot = Protection::READ_WRITE, bool user = false, CacheType cacheType = CacheType::DEFAULT);
         bool MapPages(void* virtAddr, uint64_t count);

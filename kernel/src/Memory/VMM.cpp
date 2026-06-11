@@ -15,7 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "Memory/PMM.hpp"
+#include "PMM.hpp"
 #include "PageMapper.hpp"
 #include "Pager.hpp"
 #include "PagingUtil.hpp"
@@ -76,11 +76,11 @@ namespace VMM {
         m_mapEntries.unlock();
     }
 
-    void* VMM::AllocatePages(uint64_t count, Protection prot, bool user, bool allocPhys, bool zero, CacheType cacheType) {
-        return AllocatePages(count, nullptr, prot, user, allocPhys, zero, cacheType);
+    void* VMM::AllocateAnonPages(uint64_t count, AllocFlags flags) {
+        return AllocateAnonPages(count, nullptr, flags);
     }
 
-    void* VMM::AllocatePages(uint64_t count, void* addr, Protection prot, bool user, bool allocPhys, bool zero, CacheType cacheType) {
+    void* VMM::AllocateAnonPages(uint64_t count, void* addr, AllocFlags allocFlags) {
         if (count == 0 || g_defaultPager == nullptr)
             return nullptr;
 
@@ -119,14 +119,14 @@ namespace VMM {
 
 
         // Step 3: Allocate physical addresses if requested
-        if (allocPhys) {
+        if (allocFlags.allocPhys) {
             for (uint64_t i = 0; i < count; i++) {
                 Anon* anon = (Anon*)kcalloc_vmm(1, sizeof(Anon));
                 anon->refCount = 1;
                 anon->physAddr = (uint64_t)g_PMM->AllocatePage();
-                if (zero)
+                if (allocFlags.zero)
                     memset((void*)to_HHDM(anon->physAddr), 0, PAGE_SIZE);
-                m_pageMapper->MapPage(((uint64_t)pages + i * PAGE_SIZE), anon->physAddr, prot, user, cacheType);
+                m_pageMapper->MapPage(((uint64_t)pages + i * PAGE_SIZE), anon->physAddr, allocFlags.protection, allocFlags.user, allocFlags.cacheType);
                 map->slots[i] = anon;
             }
         }
@@ -135,18 +135,18 @@ namespace VMM {
         entry->startVirt = (uint64_t)pages;
         entry->endVirt = (uint64_t)pages + count * PAGE_SIZE;
         entry->anonMap = map;
-        entry->flags.protection = prot;
-        entry->flags.cacheType = cacheType;
-        entry->flags.user = user;
+        entry->flags.protection = allocFlags.protection;
+        entry->flags.cacheType = allocFlags.cacheType;
+        entry->flags.user = allocFlags.user;
         entry->flags.needsCopy = false;
-        entry->flags.isPrivate = true;
-        entry->flags.zero = zero;
+        entry->flags.isPrivate = allocFlags.isPrivate;
+        entry->flags.zero = allocFlags.zero;
 
         m_mapEntries.lock();
         m_mapEntries.Insert((uint64_t)pages, entry);
         m_mapEntries.unlock();
 
-        if (allocPhys)
+        if (allocFlags.allocPhys)
             m_pageMapper->InvalidatePages((uint64_t)pages, count);
 
         return pages;
