@@ -60,7 +60,6 @@ namespace VMM {
         uint64_t physAddr; // 0 when not assigned
         Protection protection; // highest protection this page is capable of
         bool isWired; // pageable
-        Page* next;
     }; // doesn't need a lock 
 
     struct Anon {
@@ -114,11 +113,12 @@ namespace VMM {
         bool isPrivate;
         bool zero;
         bool allocPhys;
+        bool addrIsHint; // if provided address is unavailable and not null, allocate at a different address
     };
 
-    constexpr AllocFlags DEFAULT_KALLOC_FLAGS = {Protection::READ_WRITE, CacheType::DEFAULT, false, true, true, false};
-    constexpr AllocFlags DEFAULT_KALLOC_PHYS_FLAGS = {Protection::READ_WRITE, CacheType::DEFAULT, false, true, true, true};
-    constexpr AllocFlags DEFAULT_ALLOC_FLAGS = {Protection::READ_WRITE, CacheType::DEFAULT, true, true, true, false};
+    constexpr AllocFlags DEFAULT_KALLOC_FLAGS = {Protection::READ_WRITE, CacheType::DEFAULT, false, true, true, false, false};
+    constexpr AllocFlags DEFAULT_KALLOC_PHYS_FLAGS = {Protection::READ_WRITE, CacheType::DEFAULT, false, true, true, true, false};
+    constexpr AllocFlags DEFAULT_ALLOC_FLAGS = {Protection::READ_WRITE, CacheType::DEFAULT, true, true, true, false, false};
 
 
     // The core VMM.
@@ -134,7 +134,12 @@ namespace VMM {
 
         void* AllocateAnonPages(uint64_t count, AllocFlags flags = DEFAULT_KALLOC_FLAGS);
         void* AllocateAnonPages(uint64_t count, void* addr = nullptr, AllocFlags allocFlags = DEFAULT_KALLOC_FLAGS);
+
+        void* AllocateBackedPages(uint64_t count, MemoryObject* obj, uint64_t offset = 0, void* addr = nullptr, AllocFlags allocFlags = DEFAULT_KALLOC_FLAGS); // offset will be aligned down to the nearest page
         
+        // Allocate anonymous pages, but managed through a memory object. Intended for ram-based file system usage.
+        void* AllocMemObjAnonPages(uint64_t count, void* pagerData, uint64_t offset = 0, AllocFlags flags = DEFAULT_KALLOC_FLAGS, MemoryObject** objOut = nullptr, DefaultPager* pager = g_defaultPager);
+
         bool FreePages(void* virtAddr, uint64_t count = 0);
         bool RemapPages(void* virtAddr, uint64_t count = 0, Protection prot = Protection::READ_WRITE, bool user = false, CacheType cacheType = CacheType::DEFAULT);
         bool MapPages(void* virtAddr, uint64_t count);

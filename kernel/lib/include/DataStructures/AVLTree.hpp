@@ -141,9 +141,14 @@ namespace AVLTree {
             }
         }
 
-        void forEach(bool (*callback)(void*, K, D), void* data = nullptr) {
+        void forEach(bool (*callback)(void*, K, D), void* data = nullptr, uint64_t startingIndex = 0) {
             wAVLTreeNode* node;
+            uint64_t i = 0;
             RB_FOREACH(node, raw_wAVLTree, &m_tree) {
+                if (i != startingIndex) {
+                    i++;
+                    continue;
+                }
                 if (!callback(data, (K)node->key, (D)node->value))
                     break;
             }
@@ -166,6 +171,10 @@ namespace AVLTree {
                 else
                     kfree(node);
             }
+        }
+
+        bool isEmpty() {
+            return RB_EMPTY(&m_tree);
         }
 
         void lock() const {

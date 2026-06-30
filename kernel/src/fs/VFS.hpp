@@ -126,7 +126,7 @@ namespace FS {
         virtual int Unlink() = 0;
         virtual int Symlink() = 0;
         virtual int ReadLink() = 0;
-        virtual int Mmap() = 0;
+        virtual int Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, Credential cred) = 0;
         virtual int Munmap() = 0;
         virtual int Resize() = 0;
         virtual int Rename() = 0;
@@ -160,6 +160,9 @@ namespace FS {
     int VFS_CreateFile(const char* path, const char* name, VNode* cwd, Credential cred);
     int VFS_Open(const char* path, VNode** out, VNode* cwd, Credential cred);
     int VFS_Close(VNode* vnode, Credential cred);
+
+    // Map a vnode into memory. Flags are assumed to be pre-validated.
+    int VFS_MapFile(void* hint, size_t length, VMM::Protection prot, int flags, bool user, VNode* vnode, uint64_t offset, void** addr, VMM::VMM* vmm, const Credential& cred);
 
     uint8_t VFS_GetPosixType(VType type);
 

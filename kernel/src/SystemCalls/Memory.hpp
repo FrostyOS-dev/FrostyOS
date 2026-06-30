@@ -38,6 +38,8 @@ struct [[gnu::packed]] sys_mmapExtraArgs {
 #define MAP_ANONYMOUS 4
 #define MAP_ANON MAP_ANONYMOUS
 #define MAP_FIXED 8
+#define MAP_POPULATE 16
+#define MAP_FIXED_NOREPLACE MAP_FIXED
 
 void* sys_mmap(void* addr, size_t length, int prot, int flags, sys_mmapExtraArgs* args);
 int sys_munmap(void* addr, size_t length); // For now, the bounds of this must be the bounds of the original mapping

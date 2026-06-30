@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "TempFS.hpp"
+#include "TempFSPager.hpp"
 
 #include <errno.h>
 #include <stddef.h>
@@ -25,6 +26,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <DataStructures/AVLTree.hpp>
 
+#include <Memory/PageMapper.hpp>
 #include <Memory/VMM.hpp>
 
 #include "../VFS.hpp"
@@ -36,7 +38,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 namespace FS {
 
-    TempFS::TempFS() {
+    TempFS::TempFS() : m_pager() {
 
     }
 
@@ -80,8 +82,12 @@ namespace FS {
         return FSType::TempFS;
     }
 
+    TempFSPager* TempFS::GetPager() {
+        return &m_pager;
+    }
+
     
-    TempFSVNode::TempFSVNode(VFS* vfs) : VNode(vfs), m_name(nullptr), m_nameLen(0), m_blocks(), m_children() {
+    TempFSVNode::TempFSVNode(VFS* vfs) : VNode(vfs), m_name(nullptr), m_nameLen(0), m_memObj(nullptr), m_blocks(), m_children() {
 
     }
 
@@ -366,8 +372,23 @@ namespace FS {
         return -ENOSYS;
     }
 
-    int TempFSVNode::Mmap() {
-        return -ENOSYS;
+    int TempFSVNode::Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, Credential cred) {
+        if (offset + size > m_attr.blocks || obj == nullptr || size == 0 || (offset & (PAGE_SIZE - 1)) > 0 || (size & (PAGE_SIZE - 1)) > 0)
+            return -EINVAL;
+
+        if (m_memObj == nullptr) {
+            m_blocks.lock();
+            bool empty = m_blocks.isEmpty();
+            m_blocks.unlock();
+            if (empty)
+                return -EINVAL;
+            Block* b = CreateBlock(0, 1);
+            if (b == nullptr || m_memObj == nullptr)
+                return -ENOMEM;
+        }
+
+        *obj = m_memObj;
+        return ESUCCESS;
     }
 
     int TempFSVNode::Munmap() {
@@ -382,15 +403,30 @@ namespace FS {
         return -ENOSYS;
     }
 
+    void* TempFSVNode::GetAddr(uint64_t offset) {
+        AVLTree::wAVLTreeNode* node = m_blocks.FindNodeOrLower(offset);
+        if (node == nullptr || node->value == 0)
+            return nullptr;
+        Block* block = reinterpret_cast<Block*>(node->value);
+        if (offset >= node->key + block->pages * PAGE_SIZE)
+            return nullptr;
+        return (void*)((uint64_t)block->addr + (offset - node->key));
+    }
+
+    VMM::Protection TempFSVNode::GetDefaultProt() const {
+        return m_defaultProt;
+    }
+
     TempFSVNode::Block* TempFSVNode::CreateBlock(uint64_t offset, uint64_t pages) {
         Block* block = new Block;
         block->pages = pages;
-        block->addr = VMM::g_KVMM->AllocateAnonPages(pages, VMM::DEFAULT_KALLOC_FLAGS);
+        block->addr = VMM::g_KVMM->AllocMemObjAnonPages(pages, this, offset, VMM::DEFAULT_KALLOC_FLAGS, &m_memObj, static_cast<TempFS*>(m_vfs)->GetPager());
         if (block->addr == nullptr) {
             delete block;
             return nullptr;
         }
 
+        m_defaultProt = VMM::Protection::READ_WRITE;
         m_blocks.Insert(offset, block);
         return block;
     }

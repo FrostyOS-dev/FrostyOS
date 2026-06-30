@@ -178,7 +178,7 @@ int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* aux
                 break;
             }
 
-            if (prot != VMM::Protection::READ_WRITE && !vmm->RemapPages(pages, 0, prot, true, VMM::CacheType::DEFAULT)) {
+            if (!vmm->RemapPages(pages, 0, prot, true, VMM::CacheType::DEFAULT)) {
                 HandleLoadFail(mappedRegions, vmm);
                 return -ENOMEM;
             }

@@ -23,9 +23,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <DataStructures/AVLTree.hpp>
 #include <DataStructures/LinkedList.hpp>
 
+#include <Memory/VMM.hpp>
+
 #include <Scheduling/Process.hpp>
 
+#include "TempFSPager.hpp"
+
 #include "../VFS.hpp"
+
 
 namespace FS {
     class TempFS : public VFS {
@@ -39,6 +44,11 @@ namespace FS {
         virtual int Sync() override;
 
         virtual FSType GetType() override;
+
+        TempFSPager* GetPager();
+
+    private:
+        TempFSPager m_pager;
     };
 
 
@@ -61,10 +71,13 @@ namespace FS {
         virtual int Unlink() override;
         virtual int Symlink() override;
         virtual int ReadLink() override;
-        virtual int Mmap() override;
+        virtual int Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, Credential cred) override;
         virtual int Munmap() override;
         virtual int Resize() override;
         virtual int Rename() override;
+
+        void* GetAddr(uint64_t offset);
+        VMM::Protection GetDefaultProt() const;
 
     private:
         struct Block {
@@ -76,6 +89,9 @@ namespace FS {
 
         char* m_name;
         size_t m_nameLen;
+
+        VMM::MemoryObject* m_memObj;
+        VMM::Protection m_defaultProt;
 
         AVLTree::wAVLTree<uint64_t, Block*> m_blocks;
         LinkedList::RearInsertLinkedList<TempFSVNode> m_children;

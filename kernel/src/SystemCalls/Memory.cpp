@@ -23,15 +23,17 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdint.h>
 #include <util.h>
 
+#include <fs/FDManager.hpp>
+#include <fs/FileDescriptor.hpp>
+#include <fs/VFS.hpp>
+
 #include <Memory/VMM.hpp>
 
 #include <Scheduling/Process.hpp>
 #include <Scheduling/Thread.hpp>
 
 bool ValidateMmapFlags(int flags) {
-    if (flags <= 0 || flags >= (MAP_FIXED * 2)) // out of bounds
-        return false;
-    if ((flags & MAP_ANONYMOUS) == 0) // not anonymous
+    if (flags <= 0 || flags >= (MAP_POPULATE * 2)) // out of bounds
         return false;
     if ((flags & (MAP_SHARED | MAP_PRIVATE)) == 0 || (flags & (MAP_SHARED | MAP_PRIVATE)) == (MAP_SHARED | MAP_PRIVATE)) // neither shared or private OR both shared and private
         return false;
@@ -53,10 +55,9 @@ void* sys_mmap(void* addr, size_t length, int prot, int flags, sys_mmapExtraArgs
     if (vmm == nullptr)
         return (void*)-ENOSYS;
 
-    // Don't bother with the extra args for now, but this is how the check would be done:
-    // sys_mmapExtraArgs kArgs;
-    // if (!UserRead(args, &kArgs, sizeof(sys_mmapExtraArgs), proc))
-    //     return (void*)-EFAULT;
+    sys_mmapExtraArgs kArgs;
+    if (!UserRead(args, &kArgs, sizeof(sys_mmapExtraArgs), proc))
+        return (void*)-EFAULT;
 
     if (addr != nullptr)
         addr = ALIGN_DOWN_ADDRESS(addr, PAGE_SIZE);
@@ -71,16 +72,33 @@ void* sys_mmap(void* addr, size_t length, int prot, int flags, sys_mmapExtraArgs
     if (prot & PROT_EXEC)
         protection = (VMM::Protection)((uint8_t)protection | (uint8_t)VMM::Protection::EXECUTE);
 
-    VMM::AllocFlags allocFlags = VMM::DEFAULT_ALLOC_FLAGS;
-    allocFlags.protection = protection;
-    allocFlags.isPrivate = flags & MAP_PRIVATE;
+    void* mem = nullptr;
+    if ((flags & MAP_ANONYMOUS) > 0) {
+        VMM::AllocFlags allocFlags = VMM::DEFAULT_ALLOC_FLAGS;
+        allocFlags.protection = protection;
+        allocFlags.isPrivate = flags & MAP_PRIVATE;
+        allocFlags.allocPhys = flags & MAP_POPULATE;
+        allocFlags.addrIsHint = flags & MAP_FIXED;
+        mem = vmm->AllocateAnonPages(pageCount, addr, allocFlags);
+        if (mem == nullptr)
+            return (void*)((flags & MAP_FIXED) == 0 ? (int64_t)-ENOMEM : (int64_t)-EEXIST);
+    } else {
+        FileDescriptorManager* manager = proc->GetFDManager();
+        if (manager == nullptr)
+            return (void*)-ENOSYS;
 
-    void* mem = vmm->AllocateAnonPages(pageCount, addr, allocFlags);
-    if (mem == nullptr && addr != nullptr && (flags & MAP_FIXED) == 0)
-        mem = vmm->AllocateAnonPages(pageCount, nullptr, allocFlags);
+        FileDescriptor* desc = manager->Get(kArgs.fd);
+        if (desc == nullptr || !desc->isOpen() || desc->GetType() != FDType::File)
+            return (void*)-EBADF;
 
-    if (mem == nullptr)
-        return (void*)((flags & MAP_FIXED) == 0 ? (int64_t)-ENOMEM : (int64_t)-EEXIST);
+        FS::VNode* vnode = desc->GetVNode();
+        if (vnode == nullptr)
+            return (void*)-EBADF;
+
+        int rc = FS::VFS_MapFile(addr, length, protection, flags, true, vnode, kArgs.offset, &mem, vmm, proc->GetCred());
+        if (rc < 0)
+            return (void*)(int64_t)rc;
+    }
 
     return mem;
 }

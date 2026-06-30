@@ -21,6 +21,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <errno.h>
 #include <string.h>
+#include <util.h>
+
+#include <Memory/VMM.hpp>
+
+#include <SystemCalls/Memory.hpp>
 
 namespace FS {
 
@@ -315,6 +320,25 @@ namespace FS {
         if (rc >= 0)
             UnrefVNode(vnode);
         return rc;
+    }
+
+    int VFS_MapFile(void* hint, size_t length, VMM::Protection prot, int flags, bool user, VNode* vnode, uint64_t offset, void** addr, VMM::VMM* vmm, const Credential& cred) {
+        if (vmm == nullptr || vnode == nullptr || addr == nullptr)
+            return -EINVAL;
+
+        VMM::AllocFlags allocFlags = {prot, VMM::CacheType::DEFAULT, user, (flags & MAP_PRIVATE) > 0, true, (flags & MAP_POPULATE) > 0, (flags & MAP_FIXED) > 0};
+        VMM::MemoryObject* obj;
+
+        int rc = vnode->Mmap(offset, length, &obj, cred);
+        if (rc < 0)
+            return rc;
+
+        void* pages = vmm->AllocateBackedPages(length >> PAGE_SIZE_SHIFT, obj, offset, hint, allocFlags);
+        if (pages == nullptr)
+            return -ENOMEM;
+
+        *addr = pages;
+        return ESUCCESS;
     }
 
     uint8_t VFS_GetPosixType(VType type) {

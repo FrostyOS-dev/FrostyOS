@@ -15,28 +15,25 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _VMM_PAGER_HPP
-#define _VMM_PAGER_HPP
+#ifndef _TEMPFS_PAGER_HPP
+#define _TEMPFS_PAGER_HPP
 
 #include <stdint.h>
 
-namespace VMM {
-    struct MemoryObject;
-    struct Page;
+#include <Memory/Pager.hpp>
 
-    // physical memory backed pager, subclasses can expand it to be more
-    class DefaultPager {
+namespace FS {
+    class TempFSVNode;
+
+    class TempFSPager : public VMM::DefaultPager {
     public:
-        DefaultPager();
-        virtual ~DefaultPager();
+        TempFSPager();
+        virtual ~TempFSPager() override;
 
-        virtual void* AllocatePage(); // Allocate a physical page
-        virtual bool GetPage(MemoryObject* obj, uint64_t offset, Page** outPage, bool write); // obj is assumed to already be locked
-        virtual void FreePage(void* page); // Free a physical page
-
+        virtual void* AllocatePage() override;
+        virtual bool GetPage(VMM::MemoryObject* obj, uint64_t offset, VMM::Page** outPage, bool write) override; // obj is assumed to already be locked
+        virtual void FreePage(void* page) override;
     };
-
-    extern DefaultPager* g_defaultPager;
 }
 
-#endif /* _VMM_PAGER_HPP */
+#endif /* _TEMPFS_PAGER_HPP */
