@@ -18,9 +18,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _VIRTMEM_REGION_ALLOCATOR_HPP
 #define _VIRTMEM_REGION_ALLOCATOR_HPP
 
-#include "DataStructures/AVLTree.hpp"
-#include "DataStructures/LinkedList.hpp"
 #include <stdint.h>
+
+#include <DataStructures/AVLTree.hpp>
+#include <DataStructures/LinkedList.hpp>
 
 class VMRegionAllocator {
 public:
@@ -32,10 +33,12 @@ public:
 
     void* AllocatePages(uint64_t numPages);
     void* AllocatePages(void* ptr, uint64_t numPages);
-    void FreePages(void* ptr, uint64_t numPages);
+    void FreePages(void* ptr, uint64_t numPages, bool exact = true);
 
     void ReservePages(void* ptr, uint64_t numPages);
     void UnreservePages(void* ptr, uint64_t numPages);
+
+    bool ResizeAllocatedRegion(void* ptr, uint64_t numPages, void* newStart, uint64_t newNumPages);
 
     uint64_t GetStart() const;
     uint64_t GetEnd() const;

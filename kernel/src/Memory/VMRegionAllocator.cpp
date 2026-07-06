@@ -227,23 +227,44 @@ void* VMRegionAllocator::AllocatePages(void* ptr, uint64_t numPages) {
     return ptr;
 }
 
-void VMRegionAllocator::FreePages(void* ptr, uint64_t numPages) {
+void VMRegionAllocator::FreePages(void* ptr, uint64_t numPages, bool exact) {
     m_lock.Lock();
-    // Step 1: Find the exactly matching node in the m_allPagesTree, partial matches are not allowed
-    AVLTree::wAVLTreeNode* allPagesNode = m_allPagesTree.FindNode((uint64_t)ptr);
-    if (allPagesNode == nullptr) {
-        m_lock.Unlock();
-        return;
+    // Step 1: Find the exactly matching node in the m_allPagesTree if exact is specificied, if not, just a containing region
+    AVLTree::wAVLTreeNode* allPagesNode = nullptr;
+    CompleteTreeNodeData nodeData;
+    if (exact) {
+        allPagesNode = m_allPagesTree.FindNode((uint64_t)ptr);
+        if (allPagesNode == nullptr) {
+            m_lock.Unlock();
+            return;
+        }
+        nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
+        if (nodeData.isFree == 1 || nodeData.size != numPages) {
+            m_lock.Unlock();
+            return; // already free or not the right size
+        }
+    } else {
+        allPagesNode = m_allPagesTree.FindNodeOrLower((uint64_t)ptr);
+        if (allPagesNode == nullptr) {
+            m_lock.Unlock();
+            return;
+        }
+        nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
+        if (nodeData.isFree == 1 || allPagesNode->key + nodeData.size * PAGE_SIZE < (uint64_t)ptr + numPages * PAGE_SIZE) { // already free or wrong size
+            m_lock.Unlock();
+            return;
+        }
+        if (allPagesNode->key < (uint64_t)ptr) {
+            allPagesNode = SplitAPTNode(allPagesNode, ((uint64_t)ptr - allPagesNode->key) >> PAGE_SIZE_SHIFT);
+            nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
+        }
+        
+        if (nodeData.size != numPages) {
+            SplitAPTNode(allPagesNode, numPages);
+            nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
+        }
     }
-    CompleteTreeNodeData nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
-    if (nodeData.isFree == 1) {
-        m_lock.Unlock();
-        return; // already free
-    }
-    if (nodeData.size != numPages) {
-        m_lock.Unlock();
-        return; // not the right size
-    }
+
     nodeData.isFree = 1;
     allPagesNode->value = std::bit_cast<uint64_t>(nodeData);
 
@@ -341,6 +362,34 @@ void VMRegionAllocator::ReservePages(void* ptr, uint64_t numPages) {
 
 void VMRegionAllocator::UnreservePages(void* ptr, uint64_t numPages) {
     // TODO
+}
+
+bool VMRegionAllocator::ResizeAllocatedRegion(void* ptr, uint64_t numPages, void* newStart, uint64_t newNumPages) {
+    m_lock.Lock();
+    // Step 1: Find the exactly matching node in the m_allPagesTree
+    AVLTree::wAVLTreeNode* allPagesNode = nullptr;
+    CompleteTreeNodeData nodeData;
+    allPagesNode = m_allPagesTree.FindNode((uint64_t)ptr);
+    if (allPagesNode == nullptr) {
+        m_lock.Unlock();
+        return false;
+    }
+    nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
+    if (nodeData.isFree == 1 || nodeData.size != numPages) {
+        m_lock.Unlock();
+        return false; // free or not the right size
+    }
+
+    if (ptr < newStart) {
+        allPagesNode = SplitAPTNode(allPagesNode, ((uint64_t)newStart - (uint64_t)newStart) >> PAGE_SIZE_SHIFT);
+        nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
+    }
+    
+    if (nodeData.size != numPages)
+        SplitAPTNode(allPagesNode, numPages);
+
+    m_lock.Unlock();
+    return true;
 }
 
 uint64_t VMRegionAllocator::GetStart() const {

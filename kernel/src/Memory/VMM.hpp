@@ -103,7 +103,7 @@ namespace VMM {
             bool zero;
         } flags;
         
-        uint64_t wireCount;
+        uint64_t wireCount; // currently unused
     };
 
     struct AllocFlags {
@@ -153,6 +153,8 @@ namespace VMM {
         VMRegionAllocator* GetAllocator();
 
     private:
+        MapEntry* SplitMapEntry(MapEntry* entry, uint64_t newPageCount); // split a map entry so that entry has a page count of newPageCount, returns the new upper part
+
         // UVM fields
         PageMapper* m_pageMapper;
         VMRegionAllocator* m_vmRegionAllocator;
