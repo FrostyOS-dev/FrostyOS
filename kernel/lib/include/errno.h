@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2023-2025  Frosty515
+Copyright (©) 2023-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,85 +19,114 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define _ERRNO_H
 
 #define ENUMERATE_ERRNO_CODES(E) \
-    E(ESUCCESS, "Success (not an error)") \
-    E(EADDRINUSE, "address in use") \
-    E(EAFNOSUPPORT, "address family not supported") \
-    E(EADDRNOTAVAIL, "address not available") \
-    E(EISCONN, "already connected") \
-    E(E2BIG, "argument list too long") \
-    E(EDOM, "argument out of domain") \
-    E(EFAULT, "bad address") \
-    E(EBADF, "bad file descriptor") \
-    E(EBADMSG, "bad message") \
-    E(EPIPE, "broken pipe") \
-    E(ECONNABORTED, "connection aborted") \
-    E(EALREADY, "connection already in progress") \
-    E(ECONNREFUSED, "connection refused") \
-    E(ECONNRESET, "connection reset") \
-    E(EXDEV, "cross device link") \
-    E(EDESTADDRREQ, "destination address required") \
-    E(EBUSY, "device or resource busy") \
-    E(ENOTEMPTY, "directory not empty") \
-    E(ENOEXEC, "executable format error") \
-    E(EEXIST, "file exists") \
-    E(EFBIG, "file too large") \
-    E(ENAMETOOLONG, "filename too long") \
-    E(ENOSYS, "function not supported") \
-    E(EHOSTUNREACH, "host unreachable") \
-    E(EIDRM, "identifier removed") \
-    E(EILSEQ, "illegal byte sequence") \
-    E(ENOTTY, "inappropriate io control operation") \
-    E(EINTR, "interrupted") \
-    E(EINVAL, "invalid argument") \
-    E(ESPIPE, "invalid seek") \
-    E(EIO, "io error") \
-    E(EISDIR, "is a directory") \
-    E(EMSGSIZE, "message size") \
-    E(ENETDOWN, "network down") \
-    E(ENETRESET, "network reset") \
-    E(ENETUNREACH, "network unreachable") \
-    E(ENOBUFS, "no buffer space") \
-    E(ECHILD, "no child process") \
-    E(ENOLINK, "no link") \
-    E(ENOLOCK, "no lock available") \
-    E(ENOMSG, "no message") \
-    E(ENODATA, "no message available") \
-    E(ENOPROTOOPT, "no protocol option") \
-    E(ENOSPC, "no space on device") \
-    E(ENOSR, "no stream resources") \
-    E(ENODEV, "no such device") \
-    E(ENXIO, "no such device or address") \
-    E(ENOENT, "no such file or directory") \
-    E(ESRCH, "no such process") \
-    E(ENOTDIR, "not a directory") \
-    E(ENOTSOCK, "not a socket") \
-    E(ENOSTR, "not a stream") \
-    E(ENOTCONN, "not connected") \
-    E(ENOMEM, "not enough memory") \
-    E(ENOTSUP, "not supported") \
-    E(ECANCELED, "operation canceled") \
-    E(EINPROGRESS, "operation in progress") \
-    E(EPERM, "operation not permitted") \
-    E(EOPNOTSUPP, "operation not supported") \
-    E(EWOULDBLOCK, "operation would block") \
-    E(EOWNERDEAD, "owner dead") \
-    E(EACCES, "permission denied") \
-    E(EPROTO, "protocol error") \
-    E(EPROTONOSUPPORT, "protocol not supported") \
-    E(EROFS, "read only file system") \
-    E(EDEADLK, "resource deadlock would occur") \
-    E(EAGAIN, "resource unavailable try again") \
-    E(ERANGE, "result out of range") \
-    E(ENOTRECOVERABLE, "state not recoverable") \
-    E(ETIME, "stream timeout") \
-    E(ETXTBSY, "text file busy") \
-    E(ETIMEDOUT, "timed out") \
-    E(EMFILE, "too many files open") \
-    E(ENFILE, "too many files open in system") \
-    E(EMLINK, "too many links") \
-    E(ELOOP, "too many symbolic link levels") \
-    E(EOVERFLOW, "value too large") \
-    E(EPROTOTYPE, "wrong protocol type")
+    E(ESUCCESS, "Success") \
+    E(EAGAIN, "Operation would block (EAGAIN)") \
+    E(EACCES, "Access denied (EACCESS)") \
+    E(EBADF, "Bad file descriptor (EBADF)") \
+    E(EEXIST, "File exists already (EEXIST)") \
+    E(EFAULT, "Access violation (EFAULT)") \
+    E(EINTR, "Operation interrupted (EINTR)") \
+    E(EINVAL, "Invalid argument (EINVAL)") \
+    E(EIO, "I/O error (EIO)") \
+    E(EISDIR, "Resource is directory (EISDIR)") \
+    E(ENOENT, "No such file or directory (ENOENT)") \
+    E(ENOMEM, "Out of memory (ENOMEM)") \
+    E(ENOTDIR, "Expected directory instead of file (ENOTDIR)") \
+    E(ENOSYS, "Operation not implemented (ENOSYS)") \
+    E(EPERM, "Operation not permitted (EPERM)") \
+    E(EPIPE, "Broken pipe (EPIPE)") \
+    E(ESPIPE, "Seek not possible (ESPIPE)") \
+    E(ENXIO, "No such device or address (ENXIO)") \
+    E(ENOEXEC, "Exec format error (ENOEXEC)") \
+    E(ENOSPC, "No space left on device (ENOSPC)") \
+    E(ENOTSOCK, "Socket operation on non-socket (ENOTSOCK)") \
+    E(ENOTCONN, "Transport endpoint is not connected (ENOTCONN)") \
+    E(EDOM, "Numerical argument out of domain (EDOM)") \
+    E(EILSEQ, "Invalid or incomplete multibyte or wide character (EILSEQ)") \
+    E(ERANGE, "Numerical result out of range (ERANGE)") \
+    E(E2BIG, "Argument list too long (E2BIG)") \
+    E(EADDRINUSE, "Address already in use (EADDRINUSE)") \
+    E(EADDRNOTAVAIL, "Cannot assign requested address (EADDRNOTAVAIL)") \
+    E(EAFNOSUPPORT, "Address family not supported by protocol (EAFNOSUPPORT)") \
+    E(EALREADY, "Operation already in progress (EALREADY)") \
+    E(EBADMSG, "Bad message (EBADMSG)") \
+    E(EBUSY, "Device or resource busy (EBUSY)") \
+    E(ECANCELED, "Operation canceled (ECANCELED)") \
+    E(ECHILD, "No child processes (ECHILD)") \
+    E(ECONNABORTED, "Software caused connection abort (ECONNABORTED)") \
+    E(ECONNREFUSED, "Connection refused (ECONNREFUSED)") \
+    E(ECONNRESET, "Connection reset by peer (ECONNRESET)") \
+    E(EDEADLK, "Resource deadlock avoided (EDEADLK)") \
+    E(EDESTADDRREQ, "Destination address required (EDESTADDRREQ)") \
+    E(EDQUOT, "Disk quota exceeded (EDQUOT)") \
+    E(EFBIG, "File too large (EFBIG)") \
+    E(EHOSTUNREACH, "No route to host (EHOSTUNREACH)") \
+    E(EIDRM, "Identifier removed (EIDRM)") \
+    E(EINPROGRESS, "Operation now in progress (EINPROGRESS)") \
+    E(EISCONN, "Transport endpoint is already connected (EISCONN)") \
+    E(ELOOP, "Too many levels of symbolic links (ELOOP)") \
+    E(EMFILE, "Too many open files (EMFILE)") \
+    E(EMLINK, "Too many links (EMLINK)") \
+    E(EMSGSIZE, "Message too long (EMSGSIZE)") \
+    E(EMULTIHOP, "Multihop attempted (EMULTIHOP)") \
+    E(ENAMETOOLONG, "File name too long (ENAMETOOLONG)") \
+    E(ENETDOWN, "Network is down (ENETDOWN)") \
+    E(ENETRESET, "Network dropped connection on reset (ENETRESET)") \
+    E(ENETUNREACH, "Network is unreachable (ENETUNREACH)") \
+    E(ENFILE, "Too many open files in system (ENFILE)") \
+    E(ENOBUFS, "No buffer space available (ENOBUFS)") \
+    E(ENODEV, "No such device (ENODEV)") \
+    E(ENOLCK, "No locks available (ENOLCK)") \
+    E(ENOLINK, "Link has been severed (ENOLINK)") \
+    E(ENOMSG, "No message of desired type (ENOMSG)") \
+    E(ENOPROTOOPT, "Protocol not available (ENOPROTOOPT)") \
+    E(ENOTEMPTY, "Directory not empty (ENOTEMPTY)") \
+    E(ENOTRECOVERABLE, "Sate not recoverable (ENOTRECOVERABLE)") \
+    E(ENOTSUP, "Operation not supported (ENOTSUP)") \
+    E(ENOTTY, "Inappropriate ioctl for device (ENOTTY)") \
+    E(EOVERFLOW, "Value too large for defined datatype (EOVERFLOW)") \
+    E(EOWNERDEAD, "Owner died (EOWNERDEAD)") \
+    E(EPROTO, "Protocol error (EPROTO)") \
+    E(EPROTONOSUPPORT, "Protocol not supported (EPROTONOSUPPORT)") \
+    E(EPROTOTYPE, "Protocol wrong type for socket (EPROTOTYPE)") \
+    E(EROFS, "Read-only file system (EROFS)") \
+    E(ESRCH, "No such process (ESRCH)") \
+    E(ESTALE, "Stale file handle (ESTALE)") \
+    E(ETIMEDOUT, "Connection timed out (ETIMEDOUT)") \
+    E(ETXTBSY, "Text file busy (ETXTBSY)") \
+    E(EXDEV, "Invalid cross-device link (EXDEV)") \
+    E(ENODATA, "No data available (ENODATA)") \
+    E(ETIME, "Timer expired (ETIME)") \
+    E(ENOKEY, "Required key not available (ENOKEY)") \
+    E(ESHUTDOWN, "Cannot send after transport endpoint shutdown (ESHUTDOWN)") \
+    E(EHOSTDOWN, "Host is down (EHOSTDOWN)") \
+    E(EBADFD, "File descriptor in bad state (EBADFD)") \
+    E(ENOMEDIUM, "No medium found (ENOMEDIUM)") \
+    E(ENOTBLK, "Block device required (ENOTBLK)") \
+    E(ENONET, "Machine is not on the network (ENONET)") \
+    E(EPFNOSUPPORT, "Protocol family not supported (EPFNOSUPPORT)") \
+    E(ESOCKTNOSUPPORT, "Socket type not supported (ESOCKTNOSUPPORT)") \
+    E(ESTRPIPE, "Streams pipe error (ESTRPIPE)") \
+    E(EREMOTEIO, "Remote I/O error (EREMOTEIO)") \
+    E(ERFKILL, "Operation not possible due to RF-kill (ERFKILL)") \
+    E(EBADR, "Invalid request descriptor (EBADR)") \
+    E(EUNATCH, "Protocol driver not attached (EUNATCH)") \
+    E(EMEDIUMTYPE, "Wrong medium type (EMEDIUMTYPE)") \
+    E(EREMOTE, "Object is remote (EREMOTE)") \
+    E(EKEYREJECTED, "Key was rejected by service (EKEYREJECTED)") \
+    E(EUCLEAN, "Structure needs cleaning (EUCLEAN)") \
+    E(EBADSLT, "Invalid slot (EBADSLT)") \
+    E(ENOANO, "No anode (ENOANO)") \
+    E(ENOCSI, "No CSI structure available (ENOCSI)") \
+    E(ENOSTR, "Device not a stream (ENOSTR)") \
+    E(ETOOMANYREFS, "Too many references: cannot splice (ETOOMANYREFS)") \
+    E(ENOPKG, "Package not installed (ENOPKG)") \
+    E(EKEYREVOKED, "Key has been revoked (EKEYREVOKED)") \
+    E(EXFULL, "Exchange full (EXFULL)") \
+    E(ELNRNG, "Link number out of range (ELNRNG)") \
+    E(ENOTUNIQ, "Name not unique on network (ENOTUNIQ)") \
+    E(ERESTART, "Interrupted system call should be restarted (ERESTART)") \
+    E(EUSERS, "Too many users (EUSERS)")
 
 enum ErrorCodes {
 #define __ENUMERATE_CODE(c, s) c,
@@ -105,85 +134,141 @@ enum ErrorCodes {
 #undef __ENUMERATE_CODE
 };
 
-#define ESUCCESS ESUCCESS
-#define EADDRINUSE EADDRINUSE
-#define EAFNOSUPPORT EAFNOSUPPORT
-#define EISCONN EISCONN
-#define EADDRNOTAVAIL EADDRNOTAVAIL
-#define EDOM EDOM
-#define E2BIG E2BIG
-#define EBADF EBADF
-#define EFAULT EFAULT
-#define EPIPE EPIPE
-#define EBADMSG EBADMSG
-#define EALREADY EALREADY
-#define ECONNABORTED ECONNABORTED
-#define ECONNRESET ECONNRESET
-#define ECONNREFUSED ECONNREFUSED
-#define EDESTADDRREQ EDESTADDRREQ
-#define EXDEV EXDEV
-#define ENOTEMPTY ENOTEMPTY
-#define EBUSY EBUSY
-#define EEXIST EEXIST
-#define ENOEXEC ENOEXEC
-#define ENAMETOOLONG ENAMETOOLONG
-#define EFBIG EFBIG
-#define EHOSTUNREACH EHOSTUNREACH
-#define ENOSYS ENOSYS
-#define EILSEQ EILSEQ
-#define EIDRM EIDRM
-#define EINTR EINTR
-#define ENOTTY ENOTTY
-#define ESPIPE ESPIPE
-#define EINVAL EINVAL
-#define EISDIR EISDIR
-#define EIO EIO
-#define ENETDOWN ENETDOWN
-#define EMSGSIZE EMSGSIZE
-#define ENETUNREACH ENETUNREACH
-#define ENETRESET ENETRESET
-#define ECHILD ECHILD
-#define ENOBUFS ENOBUFS
-#define ENOLOCK ENOLOCK
-#define ENOLINK ENOLINK
-#define ENODATA ENODATA
-#define ENOMSG ENOMSG
-#define ENOSPC ENOSPC
-#define ENOPROTOOPT ENOPROTOOPT
-#define ENODEV ENODEV
-#define ENOSR ENOSR
-#define ENOENT ENOENT
-#define ENXIO ENXIO
-#define ENOTDIR ENOTDIR
-#define ESRCH ESRCH
-#define ENOSTR ENOSTR
-#define ENOTSOCK ENOTSOCK
-#define ENOMEM ENOMEM
-#define ENOTCONN ENOTCONN
-#define ECANCELED ECANCELED
-#define ENOTSUP ENOTSUP
-#define EPERM EPERM
-#define EINPROGRESS EINPROGRESS
-#define EWOULDBLOCK EWOULDBLOCK
-#define EOPNOTSUPP EOPNOTSUPP
-#define EACCES EACCES
-#define EOWNERDEAD EOWNERDEAD
-#define EPROTONOSUPPORT EPROTONOSUPPORT
-#define EPROTO EPROTO
-#define EDEADLK EDEADLK
-#define EROFS EROFS
-#define ERANGE ERANGE
-#define EAGAIN EAGAIN
-#define ETIME ETIME
-#define ENOTRECOVERABLE ENOTRECOVERABLE
-#define ETIMEDOUT ETIMEDOUT
-#define ETXTBSY ETXTBSY
-#define ENFILE ENFILE
-#define EMFILE EMFILE
-#define ELOOP ELOOP
-#define EMLINK EMLINK
-#define EPROTOTYPE EPROTOTYPE
-#define EOVERFLOW EOVERFLOW
+#define ESUCCESS         0
+#define EPERM            1
+#define ENOENT           2
+#define ESRCH            3
+#define EINTR            4
+#define EIO              5
+#define ENXIO            6
+#define E2BIG            7
+#define ENOEXEC          8
+#define EBADF            9
+#define ECHILD          10
+#define EAGAIN          11
+#define ENOMEM          12
+#define EACCES          13
+#define EFAULT          14
+#define ENOTBLK         15
+#define EBUSY           16
+#define EEXIST          17
+#define EXDEV           18
+#define ENODEV          19
+#define ENOTDIR         20
+#define EISDIR          21
+#define EINVAL          22
+#define ENFILE          23
+#define EMFILE          24
+#define ENOTTY          25
+#define ETXTBSY         26
+#define EFBIG           27
+#define ENOSPC          28
+#define ESPIPE          29
+#define EROFS           30
+#define EMLINK          31
+#define EPIPE           32
+#define EDOM            33
+#define ERANGE          34
+#define EDEADLK         35
+#define ENAMETOOLONG    36
+#define ENOLCK          37
+#define ENOSYS          38
+#define ENOTEMPTY       39
+#define ELOOP           40
+#define EWOULDBLOCK     EAGAIN
+#define ENOMSG          42
+#define EIDRM           43
+#define ECHRNG          44
+#define EL2NSYNC        45
+#define EL3HLT          46
+#define EL3RST          47
+#define ELNRNG          48
+#define EUNATCH         49
+#define ENOCSI          50
+#define EL2HLT          51
+#define EBADE           52
+#define EBADR           53
+#define EXFULL          54
+#define ENOANO          55
+#define EBADRQC         56
+#define EBADSLT         57
+#define EDEADLOCK       EDEADLK
+#define EBFONT          59
+#define ENOSTR          60
+#define ENODATA         61
+#define ETIME           62
+#define ENOSR           63
+#define ENONET          64
+#define ENOPKG          65
+#define EREMOTE         66
+#define ENOLINK         67
+#define EADV            68
+#define ESRMNT          69
+#define ECOMM           70
+#define EPROTO          71
+#define EMULTIHOP       72
+#define EDOTDOT         73
+#define EBADMSG         74
+#define EOVERFLOW       75
+#define ENOTUNIQ        76
+#define EBADFD          77
+#define EREMCHG         78
+#define ELIBACC         79
+#define ELIBBAD         80
+#define ELIBSCN         81
+#define ELIBMAX         82
+#define ELIBEXEC        83
+#define EILSEQ          84
+#define ERESTART        85
+#define ESTRPIPE        86
+#define EUSERS          87
+#define ENOTSOCK        88
+#define EDESTADDRREQ    89
+#define EMSGSIZE        90
+#define EPROTOTYPE      91
+#define ENOPROTOOPT     92
+#define EPROTONOSUPPORT 93
+#define ESOCKTNOSUPPORT 94
+#define EOPNOTSUPP      95
+#define ENOTSUP         EOPNOTSUPP
+#define EPFNOSUPPORT    96
+#define EAFNOSUPPORT    97
+#define EADDRINUSE      98
+#define EADDRNOTAVAIL   99
+#define ENETDOWN        100
+#define ENETUNREACH     101
+#define ENETRESET       102
+#define ECONNABORTED    103
+#define ECONNRESET      104
+#define ENOBUFS         105
+#define EISCONN         106
+#define ENOTCONN        107
+#define ESHUTDOWN       108
+#define ETOOMANYREFS    109
+#define ETIMEDOUT       110
+#define ECONNREFUSED    111
+#define EHOSTDOWN       112
+#define EHOSTUNREACH    113
+#define EALREADY        114
+#define EINPROGRESS     115
+#define ESTALE          116
+#define EUCLEAN         117
+#define ENOTNAM         118
+#define ENAVAIL         119
+#define EISNAM          120
+#define EREMOTEIO       121
+#define EDQUOT          122
+#define ENOMEDIUM       123
+#define EMEDIUMTYPE     124
+#define ECANCELED       125
+#define ENOKEY          126
+#define EKEYEXPIRED     127
+#define EKEYREVOKED     128
+#define EKEYREJECTED    129
+#define EOWNERDEAD      130
+#define ENOTRECOVERABLE 131
+#define ERFKILL         132
+#define EHWPOISON       133
 
 extern int errno;
 
