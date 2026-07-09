@@ -115,6 +115,7 @@ namespace FS {
             if (offset + read >= m_attr.size)
                 break;
             uint64_t blockNum = (offset + read) >> PAGE_SIZE_SHIFT;
+            uint64_t blockOffset = (offset + read) % PAGE_SIZE;
             AVLTree::wAVLTreeNode* node = m_blocks.FindNodeOrLower(blockNum);
             if (node == nullptr || node->key + reinterpret_cast<Block*>(node->value)->pages <= blockNum) {
                 // we are in the range of the file, this block just doesn't exist
@@ -127,7 +128,7 @@ namespace FS {
                         return -ENOMEM;
                     }
 
-                    memcpy((void*)((uint64_t)out + read), block->addr, size - read);
+                    memcpy((void*)((uint64_t)out + read), (void*)((uint64_t)block->addr + blockOffset), size - read);
                     read = size;
                     break;
                 } else {
@@ -138,7 +139,7 @@ namespace FS {
                         return -ENOMEM;
                     }
 
-                    memcpy((void*)((uint64_t)out + read), block->addr, block->pages * PAGE_SIZE);
+                    memcpy((void*)((uint64_t)out + read), (void*)((uint64_t)block->addr + blockOffset), block->pages * PAGE_SIZE);
                     read += block->pages * PAGE_SIZE;
 
                     block = reinterpret_cast<Block*>(nextNode->value);
@@ -156,7 +157,7 @@ namespace FS {
             Block* block = reinterpret_cast<Block*>(node->value);
 
             uint64_t readSize = MIN(size - read, (block->pages - (blockNum - actualBlockNum)) * PAGE_SIZE);
-            memcpy((void*)((uint64_t)out + read), (void*)((uint64_t)block->addr + (blockNum - actualBlockNum) * PAGE_SIZE), readSize);
+            memcpy((void*)((uint64_t)out + read), (void*)((uint64_t)block->addr + (blockNum - actualBlockNum) * PAGE_SIZE + blockOffset), readSize);
             read += readSize;
         }
         
@@ -169,6 +170,7 @@ namespace FS {
         size_t written = 0;
         while (written < size) {
             uint64_t blockNum = (offset + written) >> PAGE_SIZE_SHIFT;
+            uint64_t blockOffset = (offset + written) % PAGE_SIZE;
             if (offset + written >= m_attr.blocks) {
                 Block* block = CreateBlock(blockNum, DIV_ROUNDUP(size - written, PAGE_SIZE));
                 if (block == nullptr) {
@@ -176,7 +178,7 @@ namespace FS {
                     return -ENOMEM;
                 }
 
-                memcpy(block->addr, (void*)((uint64_t)in + written), size - written);
+                memcpy((void*)((uint64_t)block->addr + blockOffset), (void*)((uint64_t)in + written), size - written);
                 m_attr.size += size - written;
                 m_attr.blocks += ALIGN_UP(size - written, PAGE_SIZE);
                 written = size;
@@ -195,7 +197,7 @@ namespace FS {
                         return -ENOMEM;
                     }
 
-                    memcpy(block->addr, (void*)((uint64_t)in + written), size - written);
+                    memcpy((void*)((uint64_t)block->addr + blockOffset), (void*)((uint64_t)in + written), size - written - blockOffset);
                     written = size;
                     break;
                 } else {
@@ -206,7 +208,7 @@ namespace FS {
                         return -ENOMEM;
                     }
 
-                    memcpy(block->addr, (void*)((uint64_t)in + written), block->pages * PAGE_SIZE);
+                    memcpy((void*)((uint64_t)block->addr + blockOffset), (void*)((uint64_t)in + written), block->pages * PAGE_SIZE - blockOffset);
                     written += block->pages * PAGE_SIZE;
 
                     block = reinterpret_cast<Block*>(nextNode->value);
@@ -224,7 +226,7 @@ namespace FS {
             Block* block = reinterpret_cast<Block*>(node->value);
 
             uint64_t writeSize = MIN(size - written, (block->pages - (blockNum - actualBlockNum)) * PAGE_SIZE);
-            memcpy((void*)((uint64_t)block->addr + (blockNum - actualBlockNum) * PAGE_SIZE), (void*)((uint64_t)in + written), writeSize);
+            memcpy((void*)((uint64_t)block->addr + (blockNum - actualBlockNum) * PAGE_SIZE + blockOffset), (void*)((uint64_t)in + written), writeSize - blockOffset);
             written += writeSize;
         }
         
