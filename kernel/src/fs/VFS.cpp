@@ -326,7 +326,7 @@ namespace FS {
         if (vmm == nullptr || vnode == nullptr || addr == nullptr)
             return -EINVAL;
 
-        VMM::AllocFlags allocFlags = {prot, VMM::CacheType::DEFAULT, user, (flags & MAP_PRIVATE) > 0, true, (flags & MAP_POPULATE) > 0, (flags & MAP_FIXED) > 0};
+        VMM::AllocFlags allocFlags = {prot, VMM::CacheType::DEFAULT, user, (flags & MAP_PRIVATE) > 0, true, (flags & MAP_POPULATE) > 0, (flags & MAP_FIXED) == 0};
         VMM::MemoryObject* obj;
 
         int rc = vnode->Mmap(offset, length, &obj, cred);
