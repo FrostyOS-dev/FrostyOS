@@ -77,13 +77,13 @@ namespace VMM {
                 for (uint64_t i = 0; i < map->slotCount; i++) {
                     Anon* anon = map->slots[i + entry->offset];
                     if (anon != nullptr) {
-                        if (anon->physAddr != 0) {
+                        if (anon->physAddr != 0)
                             current->m_pageMapper->UnmapPage(entry->startVirt + i * PAGE_SIZE);
-                            g_PMM->FreePage((void*)anon->physAddr);
-                        }
                         anon->refCount--;
-                        if (anon->refCount == 0)
+                        if (anon->refCount == 0) {
+                            g_PMM->FreePage((void*)anon->physAddr);
                             kfree_vmm(anon);
+                        }
                     }
                 }
                 kfree_vmm(map);
