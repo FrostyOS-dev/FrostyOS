@@ -31,6 +31,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Scheduling/Process.hpp>
 
+#include <SystemCalls/Memory.hpp>
+
 #define STACK_TOP_BUFFER 8
 
 #ifndef __x86_64__
@@ -88,27 +90,35 @@ int ReadFile(const char* path, Process* proc, uint8_t** data, uint64_t* size) {
     return ESUCCESS;
 }
 
-void HandleLoadFail(LinkedList::RearInsertLinkedList<Elf64_Phdr>& regions, VMM::VMM* vmm) {
-    regions.EnumerateDelete([](Elf64_Phdr* phdr, void* data, uint64_t) -> LinkedList::IteratorDecision {
-        VMM::VMM* vmm = static_cast<VMM::VMM*>(data);
-        if (phdr->p_type == PT_LOAD && phdr->p_memsz > 0)
-            vmm->FreePages(ALIGN_DOWN_ADDRESS(phdr->p_vaddr, PAGE_SIZE));
-        return LinkedList::IteratorDecision::DELETE;
-    }, vmm, 0);
+int ReadExact(FS::VNode* vnode, void* buf, size_t size, size_t offset, Credential cred) {
+    size_t bytesRead = 0;
+    int rc = vnode->Read(buf, size, 0, offset, &bytesRead, cred);
+    if (rc < 0 || bytesRead != size)
+        return rc == 0 ? -EINVAL : rc;
+    return 0;
 }
 
 int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* auxv64) {
-    uint8_t* data = nullptr;
-    uint64_t fileSize = 0;
-    int rc = ReadFile(path, proc, &data, &fileSize);
+    const Credential& cred = proc->GetCred();
+    FS::VNode* vnode = nullptr;
+    int rc = FS::VFS_Open(path, &vnode, nullptr, cred);
     if (rc < 0)
         return rc;
 
-    Elf64_Ehdr* header = (Elf64_Ehdr*)data;
-    if (header->e_ident[EI_MAG0] != ELFMAG0 || header->e_ident[EI_MAG1] != ELFMAG1 || header->e_ident[EI_MAG2] != ELFMAG2 || header->e_ident[EI_MAG3] != ELFMAG3
-        || header->e_ident[EI_CLASS] != ELFCLASS64 || header->e_ident[EI_DATA] != ELFDATA2LSB || header->e_ident[EI_OSABI] != ELFOSABI_SYSV
-        || header->e_type != ET_EXEC || header->e_machine != EM_X86_64 || header->e_phoff == 0 || header->e_phnum == 0) {
-        delete[] data;
+    vnode->Lock();
+
+    Elf64_Ehdr header;
+
+    rc = ReadExact(vnode, &header, sizeof(Elf64_Ehdr), 0, cred);
+    if (rc < 0) {
+        FS::VFS_Close(vnode, cred);
+        return rc;
+    }
+
+    if (header.e_ident[EI_MAG0] != ELFMAG0 || header.e_ident[EI_MAG1] != ELFMAG1 || header.e_ident[EI_MAG2] != ELFMAG2 || header.e_ident[EI_MAG3] != ELFMAG3
+        || header.e_ident[EI_CLASS] != ELFCLASS64 || header.e_ident[EI_DATA] != ELFDATA2LSB || header.e_ident[EI_OSABI] != ELFOSABI_SYSV
+        || header.e_type != ET_EXEC || header.e_machine != EM_X86_64 || header.e_phoff == 0 || header.e_phnum == 0) {
+        FS::VFS_Close(vnode, cred);
         return -ENOEXEC;
     }
 
@@ -121,40 +131,35 @@ int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* aux
     auxv64->pagesz.a_type = AT_PAGESZ;
 
     auxv64->secure.a_val = 0; // set later
-    auxv64->phnum.a_val = header->e_phnum;
-    auxv64->phent.a_val = header->e_phentsize;
-    auxv64->entry.a_val = header->e_entry;
+    auxv64->phnum.a_val = header.e_phnum;
+    auxv64->phent.a_val = header.e_phentsize;
+    auxv64->entry.a_val = header.e_entry;
     auxv64->pagesz.a_val = PAGE_SIZE;
 
     VMM::VMM* vmm = proc->GetVMM();
 
-    LinkedList::RearInsertLinkedList<Elf64_Phdr> mappedRegions;
-
-    Elf64_Phdr* phdr = (Elf64_Phdr*)((uint64_t)data + header->e_phoff);
-    for (uint64_t i = 0; i < header->e_phnum; i++) {
-        switch (phdr->p_type) {
+    
+    for (uint64_t i = 0; i < header.e_phnum; i++) {
+        Elf64_Phdr phdr;
+        rc = ReadExact(vnode, &phdr, sizeof(Elf64_Phdr), header.e_phoff + i * header.e_phentsize, cred);
+        if (rc < 0) {
+            FS::VFS_Close(vnode, cred);
+            return rc;
+        }
+        switch (phdr.p_type) {
         case PT_TLS:
         case PT_LOAD: {
-            if (phdr->p_flags == 0 || phdr->p_flags > (PF_X | PF_W | PF_R) || phdr->p_memsz == 0) {
-                HandleLoadFail(mappedRegions, vmm);
+            if (phdr.p_flags == 0 || phdr.p_flags > (PF_X | PF_W | PF_R) || phdr.p_memsz == 0 || phdr.p_vaddr % PAGE_SIZE != phdr.p_offset % PAGE_SIZE) {
+                vnode->Unlock();
+                FS::VFS_Close(vnode, cred);
                 return -ENOEXEC;
             }
-            if (phdr->p_type == PT_TLS)
-                phdr->p_vaddr = 0;
-
-            void* pages = vmm->AllocateAnonPages(DIV_ROUNDUP(phdr->p_memsz, PAGE_SIZE), ALIGN_DOWN_ADDRESS(phdr->p_vaddr, PAGE_SIZE), VMM::DEFAULT_KALLOC_PHYS_FLAGS);
-            if (pages == nullptr) {
-                HandleLoadFail(mappedRegions, vmm);
-                return -ENOMEM;
-            }
-
-            mappedRegions.insert(phdr);
-
-            memcpy((void*)phdr->p_vaddr, (void*)((uint64_t)data + phdr->p_offset), phdr->p_filesz);
+            if (phdr.p_type == PT_TLS)
+                phdr.p_vaddr = 0;
 
             VMM::Protection prot = VMM::Protection::NONE;
 
-            switch(phdr->p_flags) {
+            switch(phdr.p_flags) {
             case PF_X:
                 prot = VMM::Protection::EXECUTE;
                 break;
@@ -178,32 +183,109 @@ int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* aux
                 break;
             }
 
-            if (!vmm->RemapPages(pages, 0, prot, true, VMM::CacheType::DEFAULT)) {
-                HandleLoadFail(mappedRegions, vmm);
-                return -ENOMEM;
+            void* pages = (void*)phdr.p_vaddr;
+
+            uint64_t firstPageOffset = phdr.p_vaddr % PAGE_SIZE;
+
+            // Need to map in 4 sections: unaligned start, aligned middle, unaligned end, difference between p_memsz and p_filesz
+            if (firstPageOffset > 0) {
+                size_t firstPageCount = MIN(PAGE_SIZE - firstPageOffset, phdr.p_filesz);
+                if (nullptr == vmm->AllocateAnonPages(1, ALIGN_DOWN_ADDRESS(pages, PAGE_SIZE), VMM::DEFAULT_KALLOC_PHYS_FLAGS)) {
+                    vnode->Unlock();
+                    FS::VFS_Close(vnode, cred);
+                    return -ENOMEM;
+                }
+
+                rc = ReadExact(vnode, pages, firstPageCount, phdr.p_offset, cred);
+                if (rc < 0) {
+                    vnode->Unlock();
+                    FS::VFS_Close(vnode, cred);
+                    return rc;
+                }
+
+                phdr.p_vaddr += firstPageCount;
+                phdr.p_memsz -= firstPageCount;
+                phdr.p_filesz -= firstPageCount;
+                phdr.p_offset += firstPageCount;
+
+                // no need to do any zeroing as the page is already zeroed by the VMM
+
+                if (!vmm->RemapPages(ALIGN_DOWN_ADDRESS(pages, PAGE_SIZE), 0, prot, true, VMM::CacheType::DEFAULT)) {
+                    vnode->Unlock();
+                    FS::VFS_Close(vnode, cred);
+                    return -ENOEXEC;
+                }
+            }
+
+            uint64_t byteSize = ALIGN_DOWN(phdr.p_filesz, PAGE_SIZE);
+            if (byteSize > 0) { // Don't need to remap this section as no kernel-mode writes occur
+                void* mem = nullptr;
+                rc = FS::VFS_MapFile((void*)phdr.p_vaddr, byteSize, prot, MAP_PRIVATE | MAP_FIXED, true, vnode, phdr.p_offset, &mem, vmm, cred);
+                if (rc < 0 || mem == nullptr) {
+                    vnode->Unlock();
+                    FS::VFS_Close(vnode, cred);
+                    return rc < 0 ? rc : -ENOSYS;
+                }
+            
+                if (phdr.p_type == PT_TLS)
+                    phdr.p_vaddr = (uint64_t)mem;
+
+                phdr.p_vaddr += byteSize;
+                phdr.p_memsz -= byteSize;
+                phdr.p_filesz -= byteSize;
+                phdr.p_offset += byteSize;
+            }
+
+            uint64_t lastPageCount = phdr.p_filesz % PAGE_SIZE;
+            if (lastPageCount > 0) {
+                if (nullptr == vmm->AllocateAnonPages(1, (void*)phdr.p_vaddr, VMM::DEFAULT_KALLOC_PHYS_FLAGS)) {
+                    vnode->Unlock();
+                    FS::VFS_Close(vnode, cred);
+                    return -ENOMEM;
+                }
+
+                rc = ReadExact(vnode, (void*)phdr.p_vaddr, lastPageCount, phdr.p_offset, cred);
+                if (rc < 0) {
+                    vnode->Unlock();
+                    FS::VFS_Close(vnode, cred);
+                    return -ENOMEM;
+                }
+
+                if (!vmm->RemapPages((void*)phdr.p_vaddr, 0, prot, true, VMM::CacheType::DEFAULT)) {
+                    vnode->Unlock();
+                    FS::VFS_Close(vnode, cred);
+                    return -ENOEXEC;
+                }
+
+                phdr.p_memsz -= MIN(phdr.p_memsz, PAGE_SIZE);
+                phdr.p_vaddr += PAGE_SIZE;
+            }
+
+            if (phdr.p_memsz > 0) {
+                if (nullptr == vmm->AllocateAnonPages(DIV_ROUNDUP(phdr.p_memsz, PAGE_SIZE), (void*)phdr.p_vaddr, VMM::DEFAULT_ALLOC_FLAGS)) {
+                    vnode->Unlock();
+                    FS::VFS_Close(vnode, cred);
+                    return -ENOEXEC;
+                }
             }
 
             break;
         }
         case PT_INTERP:
-            HandleLoadFail(mappedRegions, vmm);
+            vnode->Unlock();
+            FS::VFS_Close(vnode, cred);
             return -ENOSYS;
         case PT_PHDR:
-            auxv64->phdr.a_val = phdr->p_vaddr;
+            auxv64->phdr.a_val = phdr.p_vaddr;
         default:
             break;
         }
-
-        phdr = (Elf64_Phdr*)((uint64_t)phdr + header->e_phentsize);
     }
 
-    *entry = (void*)header->e_entry;
+    *entry = (void*)header.e_entry;
 
-    mappedRegions.EnumerateDelete([](Elf64_Phdr*, void*, uint64_t) -> LinkedList::IteratorDecision {
-        return LinkedList::IteratorDecision::DELETE;
-    }, nullptr, 0);
-
-    delete[] data;
+    vnode->Unlock();
+    FS::VFS_Close(vnode, cred);
     return ESUCCESS;
 }
 
