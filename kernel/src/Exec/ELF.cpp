@@ -39,57 +39,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #error ELF format is only supported on x86_64
 #endif
 
-// Read a file, *data is allocated with new[], and must be freed by the caller
-int ReadFile(const char* path, Process* proc, uint8_t** data, uint64_t* size) {
-    const Credential& cred = proc->GetCred();
-    FS::VNode* vnode = nullptr;
-    int rc = FS::VFS_Open(path, &vnode, nullptr, cred);
-    if (rc < 0)
-        return rc;
-
-    vnode->Lock();
-
-    FS::VAttr attr{};
-    rc = vnode->GetAttr(&attr);
-    if (rc < 0) {
-        vnode->Unlock();
-        FS::VFS_Close(vnode, cred);
-        return rc;
-    }
-
-    uint64_t fileSize = attr.size;
-    if (fileSize == 0) {
-        vnode->Unlock();
-        FS::VFS_Close(vnode, cred);
-        return -EINVAL;
-    }
-
-    uint8_t* buffer = new uint8_t[fileSize];
-    if (buffer == nullptr) {
-        vnode->Unlock();
-        FS::VFS_Close(vnode, cred);
-        return -ENOMEM;
-    }
-
-    uint64_t read = 0;
-    rc = vnode->Read(buffer, fileSize, 0, 0, &read, cred);
-    vnode->Unlock();
-    if (rc < 0 || read != fileSize) {
-        FS::VFS_Close(vnode, cred);
-        delete[] buffer;
-        if (rc == 0)
-            return -ENOSYS; // amount read didn't match file size, but no error?
-        return rc;
-    }
-
-    FS::VFS_Close(vnode, cred);
-
-    *data = buffer;
-    *size = fileSize;
-
-    return ESUCCESS;
-}
-
 int ReadExact(FS::VNode* vnode, void* buf, size_t size, size_t offset, Credential cred) {
     size_t bytesRead = 0;
     int rc = vnode->Read(buf, size, 0, offset, &bytesRead, cred);
