@@ -379,117 +379,172 @@ namespace VMM {
         return pages;
     }
 
-    bool VMM::FreePages(void* virtAddr, uint64_t count) {
+    bool VMM::FreePages(void* virtAddr, uint64_t totalCount, bool multipleRegions) {
         uint64_t virt = reinterpret_cast<uint64_t>(virtAddr);
 
         bool full = false;
-        if (count == 0) {
+        if (totalCount == 0) {
             full = true;
-            count = 1;
+            totalCount = 1;
+            if (multipleRegions)
+                return false;
         }
 
-        if (m_vmRegionAllocator == nullptr || virt < m_vmRegionAllocator->GetStart() || (virt + count * PAGE_SIZE) > m_vmRegionAllocator->GetEnd())
+        if (m_vmRegionAllocator == nullptr || virt < m_vmRegionAllocator->GetStart() || (virt + totalCount * PAGE_SIZE) > m_vmRegionAllocator->GetEnd())
             return false; // outside the region
 
-        m_mapEntries.lock();
-        AVLTree::wAVLTreeNode* node = nullptr;
-        if (full)
-            node = m_mapEntries.FindNode(virt);
-        else
-            node = m_mapEntries.FindNodeOrLower(virt);
-        if (node == nullptr || node->value == 0) {
-            m_mapEntries.unlock();
-            return false;
-        }
+        bool first = true;
+        uint64_t currentCount = 0;
 
-        MapEntry* entry = reinterpret_cast<MapEntry*>(node->value);
-        if ((full && entry->startVirt != virt) || (!full && entry->endVirt < virt + count * PAGE_SIZE)) {
-            m_mapEntries.unlock();
-            return false;
-        }
-
-        if (!full && (entry->startVirt != virt || entry->endVirt != virt + count * PAGE_SIZE)) {
-            if (entry->startVirt < virt) {
-                MapEntry* newEntry = SplitMapEntry(entry, (virt - entry->startVirt) >> PAGE_SIZE_SHIFT);
-                if (newEntry == nullptr) {
-                    m_mapEntries.unlock();
-                    return false;
-                }
-                entry = newEntry;
-            } else
-                m_mapEntries.RemoveNode(node);
-            if (entry->endVirt > virt + count * PAGE_SIZE) {
-                MapEntry* newEntry = SplitMapEntry(entry, count);
-                if (newEntry == nullptr) {
-                    m_mapEntries.unlock();
-                    return false;
-                }
-                m_mapEntries.Insert(newEntry->startVirt, newEntry);
+        while (currentCount < totalCount) {
+            m_mapEntries.lock();
+            AVLTree::wAVLTreeNode* node = nullptr;
+            if (full)
+                node = m_mapEntries.FindNode(virt);
+            else
+                node = m_mapEntries.FindNodeOrLower(virt);
+            if (node == nullptr || node->value == 0) {
+                m_mapEntries.unlock();
+                return false;
             }
-        } else if (full) {
-            count = (entry->endVirt - entry->startVirt) >> PAGE_SIZE_SHIFT;
-            m_mapEntries.RemoveNode(node);
-        }
 
-        m_mapEntries.unlock();
+            uint64_t count = 1;
+            if (first && !multipleRegions)
+                count = totalCount;
 
-        m_vmRegionAllocator->FreePages(virtAddr, count, full);
+            MapEntry* entry = reinterpret_cast<MapEntry*>(node->value);
+            if ((full && entry->startVirt != virt) || (!full && entry->endVirt < virt + count * PAGE_SIZE)) {
+                m_mapEntries.unlock();
+                return false;
+            }
 
-        
-        if (entry->anonMap != nullptr) {
-            AnonMap* map = entry->anonMap;
-            spinlock_acquire(&map->lock);
-            map->refCount--;
+            if (!first && multipleRegions)
+                count = MIN((entry->endVirt - entry->startVirt) >> PAGE_SIZE_SHIFT, totalCount - currentCount);
+
+            if (!full && (entry->startVirt != virt || entry->endVirt != virt + count * PAGE_SIZE)) {
+                if (entry->startVirt < virt) {
+                    MapEntry* newEntry = SplitMapEntry(entry, (virt - entry->startVirt) >> PAGE_SIZE_SHIFT);
+                    if (newEntry == nullptr) {
+                        m_mapEntries.unlock();
+                        return false;
+                    }
+                    entry = newEntry;
+                } else
+                    m_mapEntries.RemoveNode(node);
+                if (entry->endVirt > virt + count * PAGE_SIZE) {
+                    MapEntry* newEntry = SplitMapEntry(entry, count);
+                    if (newEntry == nullptr) {
+                        m_mapEntries.unlock();
+                        return false;
+                    }
+                    m_mapEntries.Insert(newEntry->startVirt, newEntry);
+                }
+            } else if (full) {
+                count = (entry->endVirt - entry->startVirt) >> PAGE_SIZE_SHIFT;
+                m_mapEntries.RemoveNode(node);
+            }
+
+            m_mapEntries.unlock();
+
+            m_vmRegionAllocator->FreePages(virtAddr, count, full);
+
             
-            MemoryObject* obj = entry->memoryObject;
-            if (obj != nullptr)
-                spinlock_acquire(&obj->lock);
+            if (entry->anonMap != nullptr) {
+                AnonMap* map = entry->anonMap;
+                spinlock_acquire(&map->lock);
+                map->refCount--;
+                
+                MemoryObject* obj = entry->memoryObject;
+                if (obj != nullptr)
+                    spinlock_acquire(&obj->lock);
 
-            uint64_t lowestMapped = UINT64_MAX;
-            uint64_t highestMapped = 0;
+                uint64_t lowestMapped = UINT64_MAX;
+                uint64_t highestMapped = 0;
 
-            // go through once and unmap the pages
-            for (uint64_t i = 0; i < map->slotCount; i++) {
-                Anon* anon = map->slots[i];
-                if (anon != nullptr) {
-                    if (lowestMapped > i)
-                        lowestMapped = i;
-                    highestMapped = i;
-                    m_pageMapper->UnmapPage(entry->startVirt + i * PAGE_SIZE);
-                } else if (obj != nullptr) {
-                    Page* page = obj->pages.Find(entry->offset + i);
-                    if (page != nullptr) {
+                // go through once and unmap the pages
+                for (uint64_t i = 0; i < map->slotCount; i++) {
+                    Anon* anon = map->slots[i];
+                    if (anon != nullptr) {
                         if (lowestMapped > i)
                             lowestMapped = i;
                         highestMapped = i;
                         m_pageMapper->UnmapPage(entry->startVirt + i * PAGE_SIZE);
+                    } else if (obj != nullptr) {
+                        Page* page = obj->pages.Find(entry->offset + i);
+                        if (page != nullptr) {
+                            if (lowestMapped > i)
+                                lowestMapped = i;
+                            highestMapped = i;
+                            m_pageMapper->UnmapPage(entry->startVirt + i * PAGE_SIZE);
+                        }
                     }
                 }
-            }
 
-            // Invalidate the unmapped pages
-            if (lowestMapped != UINT64_MAX)
-                m_pageMapper->InvalidatePages(reinterpret_cast<uint64_t>(virtAddr) + lowestMapped * PAGE_SIZE, (highestMapped - lowestMapped) * PAGE_SIZE, true);
+                // Invalidate the unmapped pages
+                if (lowestMapped != UINT64_MAX)
+                    m_pageMapper->InvalidatePages(reinterpret_cast<uint64_t>(virtAddr) + lowestMapped * PAGE_SIZE, (highestMapped - lowestMapped) * PAGE_SIZE, true);
 
-            // go through a second time and free the underlying pages and structures
-            for (uint64_t i = 0; i < map->slotCount; i++) {
-                Anon* anon = map->slots[i];
-                if (anon != nullptr) {
-                    map->slots[i] = nullptr;
-                    g_PMM->FreePage(reinterpret_cast<void*>(anon->physAddr));
-                    anon->refCount--;
-                    if (anon->refCount == 0)
-                        kfree_vmm(anon);
+                // go through a second time and free the underlying pages and structures
+                for (uint64_t i = 0; i < map->slotCount; i++) {
+                    Anon* anon = map->slots[i];
+                    if (anon != nullptr) {
+                        map->slots[i] = nullptr;
+                        g_PMM->FreePage(reinterpret_cast<void*>(anon->physAddr));
+                        anon->refCount--;
+                        if (anon->refCount == 0)
+                            kfree_vmm(anon);
+                    }
                 }
-            }
 
-            if (map->refCount == 0)
-                kfree_vmm(map);
-            else
-                spinlock_release(&map->lock);
+                if (map->refCount == 0)
+                    kfree_vmm(map);
+                else
+                    spinlock_release(&map->lock);
 
-            if (obj != nullptr) {
+                if (obj != nullptr) {
+                    obj->refCount--;
+                    if (obj->refCount == 0) {
+                        obj->pages.forEach([](void*, uint64_t addr, Page* page) -> bool {
+                            if (page->physAddr != 0)
+                                g_PMM->FreePage(reinterpret_cast<void*>(page->physAddr));
+                            kfree_vmm(page);
+                            return true;
+                        }, nullptr, entry->offset);
+
+                        kfree_vmm(obj);
+                    } else
+                        spinlock_release(&obj->lock);
+                }
+            } else if (entry->memoryObject != nullptr) {
+                // must be a pure memory object entry
+                MemoryObject* obj = entry->memoryObject;
+                spinlock_acquire(&obj->lock);
                 obj->refCount--;
+
+                struct Data {
+                    PageMapper* mapper;
+                    MapEntry* entry;
+                    uint64_t lowest;
+                    uint64_t highest;
+                } data = {m_pageMapper, entry, UINT64_MAX, 0};
+
+                // go through once and unmap the pages
+                obj->pages.forEach([](void* data, uint64_t addr, Page* page) -> bool {
+                    Data* d = (Data*)data;
+                    if (page->physAddr == 0)
+                        return true;
+                    d->mapper->UnmapPage(addr);
+                    if (d->lowest > addr)
+                        d->lowest = addr;
+                    d->highest = addr;
+                    return true;
+                }, &data, entry->offset);
+
+                // Invalidate the unmapped pages
+                if (data.lowest != UINT64_MAX)
+                    m_pageMapper->InvalidatePages(data.lowest, data.highest - data.lowest, true);
+
+                // go through a second time and free the underlying pages and structures
                 if (obj->refCount == 0) {
                     obj->pages.forEach([](void*, uint64_t addr, Page* page) -> bool {
                         if (page->physAddr != 0)
@@ -502,125 +557,140 @@ namespace VMM {
                 } else
                     spinlock_release(&obj->lock);
             }
-        } else if (entry->memoryObject != nullptr) {
-            // must be a pure memory object entry
-            MemoryObject* obj = entry->memoryObject;
-            spinlock_acquire(&obj->lock);
-            obj->refCount--;
 
-            struct Data {
-                PageMapper* mapper;
-                MapEntry* entry;
-                uint64_t lowest;
-                uint64_t highest;
-            } data = {m_pageMapper, entry, UINT64_MAX, 0};
+            // If somehow both the map and memory object are null, just delete the entry anyway
 
-            // go through once and unmap the pages
-            obj->pages.forEach([](void* data, uint64_t addr, Page* page) -> bool {
-                Data* d = (Data*)data;
-                if (page->physAddr == 0)
-                    return true;
-                d->mapper->UnmapPage(addr);
-                if (d->lowest > addr)
-                    d->lowest = addr;
-                d->highest = addr;
-                return true;
-            }, &data, entry->offset);
+            kfree_vmm(entry);
 
-            // Invalidate the unmapped pages
-            if (data.lowest != UINT64_MAX)
-                m_pageMapper->InvalidatePages(data.lowest, data.highest - data.lowest, true);
-
-            // go through a second time and free the underlying pages and structures
-            if (obj->refCount == 0) {
-                obj->pages.forEach([](void*, uint64_t addr, Page* page) -> bool {
-                    if (page->physAddr != 0)
-                        g_PMM->FreePage(reinterpret_cast<void*>(page->physAddr));
-                    kfree_vmm(page);
-                    return true;
-                }, nullptr, entry->offset);
-
-                kfree_vmm(obj);
-            } else
-                spinlock_release(&obj->lock);
+            first = false;
+            currentCount += count;
+            virt += count * PAGE_SIZE;
         }
-
-        // If somehow both the map and memory object are null, just delete the entry anyway
-
-        kfree_vmm(entry);
 
         return true;
     }
 
-    bool VMM::RemapPages(void* virtAddr, uint64_t count, Protection prot, bool user, CacheType cacheType) {
+    bool VMM::RemapPages(void* virtAddr, uint64_t totalCount, Protection prot, bool user, CacheType cacheType, bool multipleRegions) {
         uint64_t virt = reinterpret_cast<uint64_t>(virtAddr);
 
         bool full = false;
-        if (count == 0) {
+        if (totalCount == 0) {
             full = true;
-            count = 1;
+            totalCount = 1;
+            if (multipleRegions)
+                return false;
         }
         
-        if (m_vmRegionAllocator == nullptr || virt < m_vmRegionAllocator->GetStart() || (virt + count * PAGE_SIZE) > m_vmRegionAllocator->GetEnd())
+        if (m_vmRegionAllocator == nullptr || virt < m_vmRegionAllocator->GetStart() || (virt + totalCount * PAGE_SIZE) > m_vmRegionAllocator->GetEnd())
             return false; // outside the region
-    
-        m_mapEntries.lock();
-        AVLTree::wAVLTreeNode* node = nullptr;
-        if (full)
-            node = m_mapEntries.FindNode(virt);
-        else
-            node = m_mapEntries.FindNodeOrLower(virt);
-        if (node == nullptr || node->value == 0) {
-            m_mapEntries.unlock();
-            return false;
-        }
+        
+        bool first = true;
+        uint64_t currentCount = 0;
+        bool shootdown = false;
 
-        MapEntry* entry = reinterpret_cast<MapEntry*>(node->value);
-        if ((full && entry->startVirt != virt) || (!full && entry->endVirt < virt + count * PAGE_SIZE)) {
-            m_mapEntries.unlock();
-            return false;
-        }
-
-        if (!full && (entry->startVirt != virt || entry->endVirt != virt + count * PAGE_SIZE)) {
-            uint64_t start = entry->startVirt;
-            uint64_t end = entry->endVirt;
-            if (entry->startVirt < virt) {
-                MapEntry* newEntry = SplitMapEntry(entry, (virt - entry->startVirt) >> PAGE_SIZE_SHIFT);
-                if (newEntry == nullptr) {
-                    m_mapEntries.unlock();
-                    return false;
-                }
-                m_mapEntries.Insert(newEntry->startVirt, newEntry);
-                entry = newEntry;
-            }
-            if (entry->endVirt > virt + count * PAGE_SIZE) {
-                MapEntry* newEntry = SplitMapEntry(entry, count);
-                if (newEntry == nullptr) {
-                    m_mapEntries.unlock();
-                    return false;
-                }
-                m_mapEntries.Insert(newEntry->startVirt, newEntry);
-            }
-            if (!m_vmRegionAllocator->ResizeAllocatedRegion((void*)start, (end - start) >> PAGE_SIZE_SHIFT, virtAddr, count)) {
+        while (currentCount < totalCount) {
+            m_mapEntries.lock();
+            AVLTree::wAVLTreeNode* node = nullptr;
+            if (full)
+                node = m_mapEntries.FindNode(virt);
+            else
+                node = m_mapEntries.FindNodeOrLower(virt);
+            if (node == nullptr || node->value == 0) {
                 m_mapEntries.unlock();
                 return false;
             }
-        } else if (full)
-            count = (entry->endVirt - entry->startVirt) >> PAGE_SIZE_SHIFT;
 
-        AnonMap* map = entry->anonMap;
-        MemoryObject* obj = entry->memoryObject;
+            uint64_t count = 1;
+            if (first && !multipleRegions)
+                count = totalCount;
 
-        if (map != nullptr) {
-            spinlock_acquire(&map->lock);
+            MapEntry* entry = reinterpret_cast<MapEntry*>(node->value);
+            if ((full && entry->startVirt != virt) || (!full && entry->endVirt < virt + count * PAGE_SIZE)) {
+                m_mapEntries.unlock();
+                return false;
+            }
 
-            if (obj != nullptr) {
+            if (!first && multipleRegions)
+                count = MIN((entry->endVirt - entry->startVirt) >> PAGE_SIZE_SHIFT, totalCount - currentCount);
+
+            if (!full && (entry->startVirt != virt || entry->endVirt != virt + count * PAGE_SIZE)) {
+                uint64_t start = entry->startVirt;
+                uint64_t end = entry->endVirt;
+                if (entry->startVirt < virt) {
+                    MapEntry* newEntry = SplitMapEntry(entry, (virt - entry->startVirt) >> PAGE_SIZE_SHIFT);
+                    if (newEntry == nullptr) {
+                        m_mapEntries.unlock();
+                        return false;
+                    }
+                    m_mapEntries.Insert(newEntry->startVirt, newEntry);
+                    entry = newEntry;
+                }
+                if (entry->endVirt > virt + count * PAGE_SIZE) {
+                    MapEntry* newEntry = SplitMapEntry(entry, count);
+                    if (newEntry == nullptr) {
+                        m_mapEntries.unlock();
+                        return false;
+                    }
+                    m_mapEntries.Insert(newEntry->startVirt, newEntry);
+                }
+                if (!m_vmRegionAllocator->ResizeAllocatedRegion((void*)start, (end - start) >> PAGE_SIZE_SHIFT, virtAddr, count)) {
+                    m_mapEntries.unlock();
+                    return false;
+                }
+            } else if (full)
+                count = (entry->endVirt - entry->startVirt) >> PAGE_SIZE_SHIFT;
+
+            AnonMap* map = entry->anonMap;
+            MemoryObject* obj = entry->memoryObject;
+
+            if (map != nullptr) {
+                spinlock_acquire(&map->lock);
+
+                if (obj != nullptr) {
+                    spinlock_acquire(&obj->lock);
+                    struct Data {
+                        Protection prot;
+                        bool valid;
+                    } data = {prot, true};
+                    obj->pages.forEach([](void* data, uint64_t addr, Page* page) -> bool {
+                        Data* d = static_cast<Data*>(data);
+                        if (!isLessOrEqualProt(d->prot, page->protection)) {
+                            d->valid = false;
+                            return false;
+                        }
+                        return true;
+                    }, &data, entry->offset);
+                    if (!data.valid) {
+                        spinlock_release(&obj->lock);
+                        spinlock_release(&map->lock);
+                        m_mapEntries.unlock();
+                        return false;
+                    }
+                }
+                
+                // Now that it is confirmed to be valid, we can remap
+                for (uint64_t i = 0; i < count; i++) {
+                    Anon* anon = map->slots[i];
+                    if (anon != nullptr) {
+                        m_pageMapper->RemapPage(virt + i * PAGE_SIZE, prot, user, cacheType);
+                    } else if (obj != nullptr) {
+                        Page* page = obj->pages.Find(entry->offset + i);
+                        if (page != nullptr)
+                            m_pageMapper->RemapPage(virt + i * PAGE_SIZE, prot, user, cacheType);
+                    }
+                }
+
+                if (obj != nullptr)
+                    spinlock_release(&obj->lock);
+
+                spinlock_release(&entry->anonMap->lock);
+            } else if (obj != nullptr) {
                 spinlock_acquire(&obj->lock);
                 struct Data {
                     Protection prot;
                     bool valid;
                 } data = {prot, true};
-                obj->pages.forEach([](void* data, uint64_t addr, Page* page) -> bool {
+                obj->pages.forEach([](void* data, uint64_t offset, Page* page) -> bool {
                     Data* d = static_cast<Data*>(data);
                     if (!isLessOrEqualProt(d->prot, page->protection)) {
                         d->valid = false;
@@ -634,70 +704,39 @@ namespace VMM {
                     m_mapEntries.unlock();
                     return false;
                 }
-            }
-            
-            // Now that it is confirmed to be valid, we can remap
-            for (uint64_t i = 0; i < count; i++) {
-                Anon* anon = map->slots[i];
-                if (anon != nullptr) {
-                    m_pageMapper->RemapPage((uint64_t)virtAddr + i * PAGE_SIZE, prot, user, cacheType);
-                } else if (obj != nullptr) {
-                    Page* page = obj->pages.Find(entry->offset + i);
-                    if (page != nullptr)
-                        m_pageMapper->RemapPage((uint64_t)virtAddr + i * PAGE_SIZE, prot, user, cacheType);
-                }
-            }
 
-            if (obj != nullptr)
+                struct RemapData {
+                    uint64_t virt;
+                    uint64_t entryOffset;
+                    Protection prot;
+                    bool user;
+                    CacheType cacheType;
+                    PageMapper* pageMapper;
+                } remapData = {virt, entry->offset, prot, user, cacheType, m_pageMapper};
+                obj->pages.forEach([](void* data, uint64_t offset, Page* page) -> void {
+                    RemapData* d = static_cast<RemapData*>(data);
+                    d->pageMapper->RemapPage((uint64_t)d->virt + (offset - d->entryOffset) * PAGE_SIZE, d->prot, d->user, d->cacheType);
+                }, &remapData);
+
                 spinlock_release(&obj->lock);
-
-            spinlock_release(&entry->anonMap->lock);
-        } else if (obj != nullptr) {
-            spinlock_acquire(&obj->lock);
-            struct Data {
-                Protection prot;
-                bool valid;
-            } data = {prot, true};
-            obj->pages.forEach([](void* data, uint64_t offset, Page* page) -> bool {
-                Data* d = static_cast<Data*>(data);
-                if (!isLessOrEqualProt(d->prot, page->protection)) {
-                    d->valid = false;
-                    return false;
-                }
-                return true;
-            }, &data, entry->offset);
-            if (!data.valid) {
-                spinlock_release(&obj->lock);
-                spinlock_release(&map->lock);
-                m_mapEntries.unlock();
-                return false;
             }
 
-            struct RemapData {
-                void* virtAddr;
-                uint64_t entryOffset;
-                Protection prot;
-                bool user;
-                CacheType cacheType;
-                PageMapper* pageMapper;
-            } remapData = {virtAddr, entry->offset, prot, user, cacheType, m_pageMapper};
-            obj->pages.forEach([](void* data, uint64_t offset, Page* page) -> void {
-                RemapData* d = static_cast<RemapData*>(data);
-                d->pageMapper->RemapPage((uint64_t)d->virtAddr + (offset - d->entryOffset) * PAGE_SIZE, d->prot, d->user, d->cacheType);
-            }, &remapData);
+            Protection oldProt = entry->flags.protection;
+            bool wasUser = entry->flags.user;
 
-            spinlock_release(&obj->lock);
+            entry->flags.protection = prot;
+            entry->flags.user = user;
+
+            m_mapEntries.unlock(); // need to hold the lock for the whole function to ensure it can't be unmapped on us part way through
+
+            shootdown |= (user ^ wasUser ) || m_pageMapper->isPermsReduction(oldProt, prot);
+
+            currentCount += count;
+            first = false;
+            virt += count * PAGE_SIZE;
         }
 
-        Protection oldProt = entry->flags.protection;
-        bool wasUser = entry->flags.user;
-
-        entry->flags.protection = prot;
-        entry->flags.user = user;
-
-        m_mapEntries.unlock(); // need to hold the lock for the whole function to ensure it can't be unmapped on us part way through
-
-        m_pageMapper->InvalidatePages((uint64_t)virtAddr, count, (user ^ wasUser ) || m_pageMapper->isPermsReduction(oldProt, prot));
+        m_pageMapper->InvalidatePages((uint64_t)virtAddr, totalCount, shootdown);
         return true;
     }
 

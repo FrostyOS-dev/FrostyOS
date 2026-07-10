@@ -116,7 +116,7 @@ int sys_munmap(void* addr, size_t length) {
     addr = ALIGN_DOWN_ADDRESS(addr, PAGE_SIZE);
     uint64_t pageCount = DIV_ROUNDUP(length, PAGE_SIZE);
 
-    return vmm->FreePages(addr, pageCount) ? ESUCCESS : -EINVAL;
+    return vmm->FreePages(addr, pageCount, true) ? ESUCCESS : -EINVAL;
 }
 
 int sys_mprotect(void* addr, size_t size, int prot) {
@@ -143,5 +143,5 @@ int sys_mprotect(void* addr, size_t size, int prot) {
     if (prot & PROT_EXEC)
         protection = (VMM::Protection)((uint8_t)protection | (uint8_t)VMM::Protection::EXECUTE);
 
-    return vmm->RemapPages(addr, pageCount, protection, true) ? ESUCCESS : -EINVAL;
+    return vmm->RemapPages(addr, pageCount, protection, true, VMM::CacheType::DEFAULT, true) ? ESUCCESS : -EINVAL;
 }

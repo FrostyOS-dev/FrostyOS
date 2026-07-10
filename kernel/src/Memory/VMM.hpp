@@ -140,8 +140,9 @@ namespace VMM {
         // Allocate anonymous pages, but managed through a memory object. Intended for ram-based file system usage.
         void* AllocMemObjAnonPages(uint64_t count, void* pagerData, uint64_t offset = 0, AllocFlags flags = DEFAULT_KALLOC_FLAGS, MemoryObject** objOut = nullptr, DefaultPager* pager = g_defaultPager);
 
-        bool FreePages(void* virtAddr, uint64_t count = 0);
-        bool RemapPages(void* virtAddr, uint64_t count = 0, Protection prot = Protection::READ_WRITE, bool user = false, CacheType cacheType = CacheType::DEFAULT);
+        // For both FreePages and RemapPages, specifying a count of 0 (full region), and multipleRegions = true is invalid
+        bool FreePages(void* virtAddr, uint64_t count = 0, bool multipleRegions = false);
+        bool RemapPages(void* virtAddr, uint64_t count = 0, Protection prot = Protection::READ_WRITE, bool user = false, CacheType cacheType = CacheType::DEFAULT, bool multipleRegions = false);
         bool MapPages(void* virtAddr, uint64_t count);
 
         bool HandlePageFault(PageFaultCode code, uint64_t virtAddr);
