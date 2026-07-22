@@ -18,6 +18,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _x86_64_PAGE_MAPPER_HPP
 #define _x86_64_PAGE_MAPPER_HPP
 
+#include <spinlock.h>
+#include <stddef.h>
+#include <stdint.h>
+
 #include <Memory/PageMapper.hpp>
 
 class x86_64_PageMapper : public PageMapper {
@@ -47,6 +51,7 @@ public:
 
 private:
     void* m_pageTable;
+    spinlock_t m_lock;
 };
 
 PageMapper* CreatePageMapper();

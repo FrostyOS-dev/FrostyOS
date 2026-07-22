@@ -27,6 +27,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../Processor.hpp"
 
+#include <spinlock.h>
 #include <util.h>
 
 #include <Memory/PageMapper.hpp>
@@ -34,11 +35,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Memory/PMM.hpp>
 #include <Memory/VMM.hpp>
 
-x86_64_PageMapper::x86_64_PageMapper() : m_pageTable(nullptr) {
+x86_64_PageMapper::x86_64_PageMapper() : m_pageTable(nullptr), m_lock(SPINLOCK_DEFAULT_VALUE) {
     
 }
 
-x86_64_PageMapper::x86_64_PageMapper(void* pageTable) : m_pageTable(pageTable) {
+x86_64_PageMapper::x86_64_PageMapper(void* pageTable) : m_pageTable(pageTable), m_lock(SPINLOCK_DEFAULT_VALUE) {
 
 }
 
@@ -85,7 +86,9 @@ bool x86_64_PageMapper::MapPage(uint64_t virt, uint64_t phys, VMM::Protection pr
         break;
     }
     flags |= x86_64_PAT_GetPageMappingFlags(offset);
+    spinlock_acquire(&m_lock);
     x86_64_MapPage(m_pageTable, virt, phys, flags);
+    spinlock_release(&m_lock);
     return true;
 }
 
@@ -98,7 +101,9 @@ bool x86_64_PageMapper::MapPages(uint64_t virt, uint64_t phys, size_t count, VMM
 }
 
 bool x86_64_PageMapper::UnmapPage(uint64_t virt) {
+    spinlock_acquire(&m_lock);
     x86_64_UnmapPage(m_pageTable, virt);
+    spinlock_release(&m_lock);
     return true;
 }
 
@@ -149,7 +154,9 @@ bool x86_64_PageMapper::RemapPage(uint64_t virt, VMM::Protection prot, bool user
         break;
     }
     flags |= x86_64_PAT_GetPageMappingFlags(offset);
+    spinlock_acquire(&m_lock);
     x86_64_RemapPage(m_pageTable, virt, flags);
+    spinlock_release(&m_lock);
     return true;
 }
 
