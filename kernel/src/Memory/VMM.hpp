@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <spinlock.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include <DataStructures/AVLTree.hpp>
 
@@ -150,8 +151,12 @@ namespace VMM {
         bool ValidateRead(const void* addr, size_t size, bool user = true);
         bool ValidateWrite(const void* addr, size_t size, bool user = true);
 
+        bool Fork(VMM* other); // this function does NOT perform cleanup of created regions on error
+
         PageMapper* GetPageMapper();
         VMRegionAllocator* GetAllocator();
+
+        void DumpRegions(fd_t fd);
 
     private:
         MapEntry* SplitMapEntry(MapEntry* entry, uint64_t newPageCount); // split a map entry so that entry has a page count of newPageCount, returns the new upper part

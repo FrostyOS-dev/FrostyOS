@@ -392,6 +392,40 @@ bool VMRegionAllocator::ResizeAllocatedRegion(void* ptr, uint64_t numPages, void
     return true;
 }
 
+bool VMRegionAllocator::Fork(VMRegionAllocator* other) {
+    other->m_lock.Lock();
+    m_lock.Lock();
+
+    // start with the allPagesTree
+    other->m_allPagesTree.forEach([](void* data, uint64_t k, uint64_t d) -> void {
+        VMRegionAllocator* vma = static_cast<VMRegionAllocator*>(data);
+        vma->m_allPagesTree.Insert(k, d);
+    }, this);
+
+    // now for the freePagesTree
+    other->m_freePagesTree.forEach([](void* data, uint64_t k, LinkedList::Node* list) -> void {
+        VMRegionAllocator* vma = static_cast<VMRegionAllocator*>(data);
+        LinkedList::Node* newList = nullptr;
+        while (list != nullptr) {
+            LinkedList::insertNode(newList, list->data, true);
+            list = list->next;
+        }
+        vma->m_freePagesTree.Insert(k, newList);
+    }, this);
+
+    // now everything else
+    m_start = other->m_start;
+    m_end = other->m_end;
+    m_freePageCount = other->m_freePageCount;
+    m_usedPageCount = other->m_usedPageCount;
+    m_reservedPageCount = other->m_reservedPageCount;
+    m_totalPageCount = other->m_totalPageCount;
+
+    m_lock.Unlock();
+    other->m_lock.Unlock();
+    return true;
+}
+
 uint64_t VMRegionAllocator::GetStart() const {
     return m_start;
 }

@@ -316,6 +316,28 @@ int FileDescriptor::GetDents(FS::Dentry* buf, size_t count, size_t* realCount) {
     return rc;
 }
 
+bool FileDescriptor::Fork(FileDescriptor* other, Process* newProc) { // no special logic is needed, just a direct data copy
+    other->m_mutex.Lock();
+    m_mutex.Lock();
+
+    m_proc = newProc;
+    m_type = other->m_type;
+
+    m_offset = other->m_offset;
+    m_open = other->m_open;
+    m_append = other->m_append;
+
+    m_vnode = other->m_vnode;
+
+    m_tty = other->m_tty;
+    m_ttyStream = other->m_ttyStream;
+
+    other->m_mutex.Unlock();
+    m_mutex.Unlock();
+
+    return true;
+}
+
 FDType FileDescriptor::GetType() const {
     return m_type;
 }

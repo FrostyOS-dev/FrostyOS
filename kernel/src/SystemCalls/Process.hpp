@@ -38,4 +38,6 @@ uid_t sys_geteuid();
 gid_t sys_getgid();
 gid_t sys_getegid();
 
+pid_t sys_fork();
+
 #endif /* _SYSCALL_PROCESS_HPP */

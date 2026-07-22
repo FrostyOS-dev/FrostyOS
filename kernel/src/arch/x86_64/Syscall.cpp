@@ -21,10 +21,21 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Syscall.hpp"
 
 #include <stdint.h>
+#include <string.h>
+
+#include <HAL/HAL.hpp>
+
+#include <Scheduling/Scheduler.hpp>
 
 #include <SystemCalls/SystemCall.hpp>
 
 extern "C" uint64_t x86_64_SyscallHandler(uint64_t num, uint64_t a, uint64_t b, uint64_t c, uint64_t d, uint64_t e) {
+    Scheduler::ProcessorState* state = GetCurrentProcessorState();
+    Thread* currentThread = state->currentThread;
+    memcpy(&currentThread->GetMutableRegisters(), &state->registers, sizeof(CPU_Registers));
+
+    Processor::EnableInterrupts();
+
     return HandleSystemCall(num, a, b, c, d, e);
 }
 

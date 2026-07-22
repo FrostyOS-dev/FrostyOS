@@ -46,6 +46,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <HAL/HAL.hpp>
 #include <HAL/Processor.hpp>
 
+#include <Memory/PagingUtil.hpp>
 #include <Memory/VMM.hpp>
 
 #include <Scheduling/Process.hpp>
@@ -412,6 +413,13 @@ void Processor::SwapStackWithReturn(void (*func)(uint64_t, void*), uint64_t a, v
     x86_64_SwapStackWithReturn(func, a, b, stack);
 }
 
+void Processor::ForkRegisters(CPU_Registers* regs, CPU_Registers* old, uint64_t newReturnValue, void* pageTable) {
+    memcpy(regs, old, sizeof(CPU_Registers));
+    regs->RAX = newReturnValue;
+    regs->CR3 = (uint64_t)from_HHDM(pageTable);
+    regs->CS = x86_64_GDT_USER_CODE_SEGMENT | 3;
+    regs->SS = x86_64_GDT_USER_DATA_SEGMENT | 3;
+}
 
 
 void x86_64_AP_Init(x86_64_Processor* proc, uint64_t stackTop) {

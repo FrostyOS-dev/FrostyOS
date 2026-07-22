@@ -25,7 +25,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <util.h>
 
 #include <HAL/HAL.hpp>
+#include <HAL/Processor.hpp>
 
+#include <Memory/PageMapper.hpp>
 #include <Memory/VMM.hpp>
 
 Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, -1) {
@@ -242,6 +244,41 @@ bool Thread::ShouldDeleteParent() const {
 
 int64_t Thread::GetIntState() const {
     return m_deleteProp.intState;
+}
+
+bool Thread::Fork(Thread* other, uint64_t newReturnValue) {
+    // start with the stacks, then copy everything else
+    if (m_Parent == nullptr)
+        return false;
+
+    VMM::VMM* vmm = m_Parent->GetVMM();
+    if (vmm == nullptr)
+        return false;
+
+    // Need to create a new kernel stack as it is kernel address space
+    void* stack = VMM::g_KVMM->AllocateAnonPages(DIV_ROUNDUP(KERNEL_STACK_SIZE, PAGE_SIZE), VMM::DEFAULT_KALLOC_PHYS_FLAGS);
+    if (stack == nullptr)
+        return false;
+    m_KernelStack = reinterpret_cast<uint64_t>(stack) + KERNEL_STACK_SIZE;
+
+    // Don't need to create a new user stack as the entire user address space is duplicated
+    m_Stack = other->m_Stack;
+
+    m_EntryPoint = other->m_EntryPoint;
+    m_TimeRemaining = 0;
+    
+    memcpy(&m_deleteProp, &other->m_deleteProp, sizeof(m_deleteProp));
+
+    int state = Processor::DisableInterrupts();
+    Processor* proc = GetCurrentProcessor();
+    proc->InitExtraContext(&m_extraContext);
+    proc->CopyExtraContext(&m_extraContext, &other->m_extraContext);
+    Processor::EnableInterrupts(state);
+    
+    PageMapper* pageMapper = vmm->GetPageMapper();
+    Processor::ForkRegisters(&m_Registers, &other->m_Registers, 0, pageMapper->GetPageTable());
+
+    return true;
 }
 
 [[noreturn]] void Thread_ExitHelper(void* data) {

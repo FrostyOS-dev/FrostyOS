@@ -152,3 +152,64 @@ FileDescriptor* FileDescriptorManager::Get(fd_t fd) {
     m_currentFDs.unlock();
     return fDesc;
 }
+
+bool FileDescriptorManager::Fork(FileDescriptorManager* other, Process* newProc) {
+    other->m_bitmapLock.Lock();
+    size_t size = other->m_bitmap.GetSize();
+
+    uint8_t* buffer = new uint8_t[size];
+    if (buffer == nullptr)
+        return false;
+    memcpy(buffer, other->m_bitmap.GetBuffer(), size);
+    other->m_bitmapLock.Unlock();
+    
+    m_bitmapLock.Lock();
+    m_bitmap.SetBuffer(buffer);
+    m_bitmap.SetSize(size);
+    m_bitmapLock.Unlock();
+
+    other->m_currentFDs.lock();
+    m_currentFDs.lock();
+    struct Data {
+        FileDescriptorManager* current;
+        FileDescriptorManager* other;
+        Process* newProc;
+        bool success;
+    } data = {this, other, newProc, true};
+    other->m_currentFDs.forEach([](void* data, fd_t fd, FileDescriptor* desc) -> bool {
+        Data* d = static_cast<Data*>(data);
+        FileDescriptor* newDesc = new FileDescriptor;
+        if (newDesc == nullptr || !newDesc->Fork(desc, d->newProc)) {
+            if (newDesc != nullptr)
+                delete newDesc;
+            d->success = false;
+            return false;
+        }
+        d->current->m_currentFDs.Insert(fd, newDesc);
+
+        return true;
+    }, &data);
+    other->m_currentFDs.unlock();
+    if (!data.success) {
+        m_currentFDs.forEach([](void*, fd_t, FileDescriptor* desc) -> bool {
+            if (desc != nullptr) {
+                if (desc->isOpen())
+                    desc->Close();
+                delete desc;
+            }
+            return true;
+        }, nullptr);
+        m_currentFDs.Clear();
+    }
+    m_currentFDs.unlock();
+    if (!data.success) {
+        m_bitmapLock.Lock();
+        delete[] m_bitmap.GetBuffer();
+        m_bitmap.SetBuffer(nullptr);
+        m_bitmap.SetSize(0);
+        m_bitmapLock.Unlock();
+        return false;
+    }
+
+    return true;
+}

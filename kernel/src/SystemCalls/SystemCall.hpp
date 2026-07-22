@@ -48,7 +48,8 @@ bool UserWrite(void* userBuf, const void* kBuf, size_t size, Process* currentPro
     SC(GETEGID, getegid) \
     SC(CLOCKGET, clockget) \
     SC(ISATTY, isatty) \
-    SC(GETDENTS, getdents)
+    SC(GETDENTS, getdents) \
+    SC(FORK, fork)
 
 enum SystemCalls : uint64_t {
 #define ENUMERATE_CALL(u, l) SYS_##u,
@@ -56,6 +57,6 @@ enum SystemCalls : uint64_t {
 #undef ENUMERATE_CALL
 };
 
-#define SYSTEM_CALL_COUNT 20
+#define SYSTEM_CALL_COUNT 21
 
 #endif /* _SYSTEM_CALL_HPP */

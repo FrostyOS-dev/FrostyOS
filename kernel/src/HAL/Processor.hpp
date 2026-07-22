@@ -59,6 +59,8 @@ public:
     static void SwapStack(void (*func)(void*), void* data, void* stack); // Should only return on error
     static void SwapStackWithReturn(void (*func)(uint64_t, void*), uint64_t a, void* b, void* stack);
 
+    static void ForkRegisters(CPU_Registers* regs, CPU_Registers* old, uint64_t newReturnValue, void* pageTable);
+    
 protected:
     bool m_BSP;
 };

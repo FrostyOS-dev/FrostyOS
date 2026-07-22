@@ -53,7 +53,7 @@ public:
     ~Process();
 
     bool Start();
-    bool Create();
+    bool Create(bool initAlloc = true);
     void Delete();
 
     bool CreateMainThread(ThreadEntryPoint entryPoint);
@@ -87,6 +87,8 @@ public:
 
     FS::VNode* GetCWD();
     void SetCWD(FS::VNode* cwd);
+
+    bool Fork(Process* other, uint64_t newMainReturn);
 
 private:
     ProcessMode m_Mode;

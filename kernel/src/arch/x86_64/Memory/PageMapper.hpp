@@ -40,7 +40,7 @@ public:
     void InvalidatePages(uint64_t virt, size_t count, bool shootdown) override;
 
     void SetPageTable(void* pageTable);
-    void* GetPageTable() const;
+    void* GetPageTable() const override;
 
     bool isPermsReduction(VMM::Protection oldProt, VMM::Protection newProt) const override;
 

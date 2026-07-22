@@ -40,6 +40,8 @@ public:
 
     bool ResizeAllocatedRegion(void* ptr, uint64_t numPages, void* newStart, uint64_t newNumPages);
 
+    bool Fork(VMRegionAllocator* other); // copy other into this
+
     uint64_t GetStart() const;
     uint64_t GetEnd() const;
 

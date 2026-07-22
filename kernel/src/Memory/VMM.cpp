@@ -74,8 +74,11 @@ namespace VMM {
             MemoryObject* obj = entry->memoryObject;
             if (map != nullptr) {
                 spinlock_acquire(&map->lock);
+
+                map->refCount--;
+
                 for (uint64_t i = 0; i < map->slotCount; i++) {
-                    Anon* anon = map->slots[i + entry->offset];
+                    Anon* anon = map->slots[i];
                     if (anon != nullptr) {
                         if (anon->physAddr != 0)
                             current->m_pageMapper->UnmapPage(entry->startVirt + i * PAGE_SIZE);
@@ -86,7 +89,12 @@ namespace VMM {
                         }
                     }
                 }
-                kfree_vmm(map);
+                
+                if (map->refCount == 0) {
+                    kfree_vmm(map->slots);
+                    kfree_vmm(map);
+                } else
+                    spinlock_release(&map->lock);
             }
             if (obj != nullptr) {
                 spinlock_acquire(&obj->lock);
@@ -839,11 +847,64 @@ namespace VMM {
             Anon* anon = map->slots[pageIndex];
 
             if (anon != nullptr) { // not mapped here, but is somewhere else
-                bool result;
-                if (code.present)
-                    result = m_pageMapper->RemapPage(virtAddr, prot, user, cacheType);
-                else
-                    result = m_pageMapper->MapPage(virtAddr, anon->physAddr, prot, user, cacheType);
+                bool result = true;
+
+                bool isShared = anon->refCount > 1;
+
+                if (code.write && isShared) {
+                    Anon* newAnon = (Anon*)kcalloc_vmm(1, sizeof(Anon));
+                    if (newAnon == nullptr) {
+                        spinlock_release(&map->lock);
+                        return false;
+                    }
+
+                    newAnon->refCount = 1;
+                    newAnon->physAddr = reinterpret_cast<uint64_t>(g_PMM->AllocatePage());
+                    if (newAnon->physAddr == 0) {
+                        kfree_vmm(newAnon);
+                        spinlock_release(&map->lock);
+                        return false;
+                    }
+
+                    if (obj == nullptr)
+                        memcpy(to_HHDM((void*)newAnon->physAddr), to_HHDM((void*)anon->physAddr), PAGE_SIZE);
+                    else {
+                        Page* page = nullptr;
+                        spinlock_acquire(&obj->lock);
+                        result = obj->pager->GetPage(obj, offset + pageIndex * PAGE_SIZE, &page, code.write);
+                        if (result)
+                            memcpy(to_HHDM((void*)newAnon->physAddr), to_HHDM((void*)page->physAddr), PAGE_SIZE);
+                        spinlock_release(&obj->lock);
+                    }
+                    if (result)
+                        result = m_pageMapper->MapPage(virtAddr, newAnon->physAddr, prot, user, cacheType);
+
+                    if (result) {
+                        map->slots[pageIndex] = newAnon;
+                        anon->refCount--;
+                        if (anon->refCount == 0) {
+                            g_PMM->FreePage((void*)anon->physAddr);
+                            kfree_vmm(anon);
+                        }
+                    } else {
+                        g_PMM->FreePage((void*)newAnon->physAddr);
+                        kfree_vmm(newAnon);
+                    }
+
+                    spinlock_release(&map->lock);
+                    return result;
+                } else {
+                    // If isShared is false, we naturally restore Read-Write access without an unnecessary copy!
+                    Protection mapProt = prot;
+                    if (isShared) {
+                        mapProt = static_cast<Protection>(static_cast<uint8_t>(prot) & ~static_cast<uint8_t>(Protection::WRITE));
+                    }
+
+                    if (code.present)
+                        result = m_pageMapper->RemapPage(virtAddr, mapProt, user, cacheType);
+                    else
+                        result = m_pageMapper->MapPage(virtAddr, anon->physAddr, mapProt, user, cacheType);
+                }
                 spinlock_release(&map->lock);
                 return result;
             }
@@ -857,23 +918,57 @@ namespace VMM {
                     spinlock_release(&obj->lock);
                     return false;
                 }
+
                 if (code.write && copy) {
-                    anon = (Anon*)kcalloc_vmm(1, sizeof(Anon));
-                    if (anon == nullptr) {
-                        spinlock_release(&map->lock);
+                    if (map == nullptr) {
+                        map = (AnonMap*)kcalloc_vmm(1, sizeof(AnonMap));
+                        if (map == nullptr) {
+                            spinlock_release(&obj->lock);
+                            return false;
+                        }
+
+                        map->slotCount = (entry->endVirt - entry->startVirt) >> PAGE_SIZE_SHIFT;
+                        map->refCount = 1;
+                        map->slots = (Anon**)kcalloc_vmm(map->slotCount, sizeof(Anon*));
+                        if (map->slots == nullptr) {
+                            kfree_vmm(map);
+                            spinlock_release(&obj->lock);
+                            return false;
+                        }
+
+                        entry->anonMap = map;
+                    }
+
+                    Anon* newAnon = (Anon*)kcalloc_vmm(1, sizeof(Anon));
+                    if (newAnon == nullptr) {
+                        spinlock_release(&obj->lock);
                         return false;
                     }
 
-                    anon->refCount = 1;
-                    anon->physAddr = reinterpret_cast<uint64_t>(g_PMM->AllocatePage());
-                    map->slots[pageIndex] = anon;
-                    memcpy(to_HHDM((void*)anon->physAddr), to_HHDM((void*)page->physAddr), PAGE_SIZE);
-                    result = m_pageMapper->MapPage(virtAddr, anon->physAddr, prot, user, cacheType);
-                } else {
-                    if (copy) // map as read-only if this is not a write fault, and it would need to be copied
-                        prot = (Protection)((uint8_t)prot & ~(uint8_t)Protection::WRITE);
-                    result = m_pageMapper->MapPage(virtAddr, page->physAddr, prot, user, cacheType);
+                    newAnon->refCount = 1;
+                    newAnon->physAddr = reinterpret_cast<uint64_t>(g_PMM->AllocatePage());
+                    if (newAnon->physAddr == 0) {
+                        kfree_vmm(newAnon);
+                        spinlock_release(&obj->lock);
+                        return false;
+                    }
+
+                    memcpy(to_HHDM((void*)newAnon->physAddr), to_HHDM((void*)page->physAddr), PAGE_SIZE);
+                    result = m_pageMapper->MapPage(virtAddr, newAnon->physAddr, prot, user, cacheType);
+                    if (result)
+                        map->slots[pageIndex] = newAnon;
+                    else {
+                        g_PMM->FreePage((void*)newAnon->physAddr);
+                        kfree_vmm(newAnon);
+                    }
+
+                    spinlock_release(&obj->lock);
+                    return result;
                 }
+
+                if (copy) // map as read-only if this is not a write fault, and it would need to be copied
+                    prot = (Protection)((uint8_t)prot & ~(uint8_t)Protection::WRITE);
+                result = m_pageMapper->MapPage(virtAddr, page->physAddr, prot, user, cacheType);
                 spinlock_release(&obj->lock);
             } else {
                 if (!code.present) {
@@ -986,6 +1081,83 @@ namespace VMM {
         }
     }
 
+    bool VMM::Fork(VMM* other) {
+        other->m_mapEntries.lock();
+        m_mapEntries.lock();
+        struct Data {
+            VMM* current;
+            VMM* other;
+            bool success;
+        } data = {this, other, true};
+        other->m_mapEntries.forEach([](void* data, uint64_t virt, MapEntry* entry) -> bool {
+            Data* d = static_cast<Data*>(data);
+            MapEntry* newEntry = (MapEntry*)kcalloc_vmm(1, sizeof(MapEntry));
+            if (newEntry == nullptr) {
+                d->success = false;
+                return false;
+            }
+
+            if (entry->anonMap != nullptr) {
+                spinlock_acquire(&entry->anonMap->lock);
+                AnonMap* map = (AnonMap*)kcalloc_vmm(1, sizeof(AnonMap));
+                Anon** slots = (Anon**)kcalloc_vmm(entry->anonMap->slotCount, sizeof(Anon*));
+                if (map == nullptr || slots == nullptr) {
+                    if (map != nullptr)
+                        kfree_vmm(map);
+                    if (slots != nullptr)
+                        kfree_vmm(slots);
+                    kfree_vmm(newEntry);
+                    spinlock_release(&entry->anonMap->lock);
+                    d->success = false;
+                    return false;
+                }
+
+                memcpy(slots, entry->anonMap->slots, entry->anonMap->slotCount * sizeof(Anon*));
+
+                for (uint64_t i = 0; i < entry->anonMap->slotCount; i++) {
+                    if (slots[i] != nullptr)
+                        slots[i]->refCount++;
+                }
+
+                map->slotCount = entry->anonMap->slotCount;
+                map->slots = slots;
+                map->refCount = 1;
+
+                spinlock_release(&entry->anonMap->lock);
+
+                newEntry->anonMap = map;
+            }
+
+            if (entry->memoryObject != nullptr) {
+                spinlock_acquire(&entry->memoryObject->lock);
+                newEntry->memoryObject = entry->memoryObject;
+                newEntry->memoryObject->refCount++;
+                spinlock_release(&entry->memoryObject->lock);
+            }
+
+            newEntry->startVirt = entry->startVirt;
+            newEntry->endVirt = entry->endVirt;
+            newEntry->offset = entry->offset;
+
+            entry->flags.needsCopy = entry->flags.isPrivate; // needs to be set on both, only for private mappings
+            newEntry->flags = entry->flags;
+
+            // Downgrade the parent's page tables to Read-Only so it catches COW faults
+            if (entry->flags.isPrivate && (static_cast<uint8_t>(entry->flags.protection) & static_cast<uint8_t>(Protection::WRITE))) {
+                Protection roProt = static_cast<Protection>(static_cast<uint8_t>(entry->flags.protection) & ~static_cast<uint8_t>(Protection::WRITE));
+                uint64_t count = (entry->endVirt - entry->startVirt) >> PAGE_SIZE_SHIFT;
+                d->other->m_pageMapper->RemapPages(entry->startVirt, count, roProt, entry->flags.user, entry->flags.cacheType);
+                d->other->m_pageMapper->InvalidatePages(entry->startVirt, count, true); // Flush the TLB![cite: 10]
+            }
+
+            d->current->m_mapEntries.Insert(newEntry->startVirt, newEntry);
+
+            return true;
+        }, &data);
+        m_mapEntries.unlock();
+        other->m_mapEntries.unlock();
+        return data.success;
+    }
 
     PageMapper* VMM::GetPageMapper() {
         return m_pageMapper;
@@ -993,6 +1165,30 @@ namespace VMM {
 
     VMRegionAllocator* VMM::GetAllocator() {
         return m_vmRegionAllocator;
+    }
+
+    void VMM::DumpRegions(fd_t fd) {
+        fprintf(fd, "\nMap Entries:\n");
+        m_mapEntries.lock();
+        m_mapEntries.forEach([](void* data, uint64_t key, MapEntry* entry) -> void {
+            fd_t fd = (fd_t)data;
+            fprintf(fd, "Entry: %lx-%lx, offset = %lx, anonMap = %p, memoryObject = %p, Flags:\n\tprot = %x\n\tcacheType = %x\n\tuser = %s, needsCopy = %s, isPrivate = %s, zero = %s\n", entry->startVirt, entry->endVirt, entry->offset, entry->anonMap, entry->memoryObject, entry->flags.protection, entry->flags.cacheType, entry->flags.user ? "true" : "false", entry->flags.needsCopy ? "true" : "false", entry->flags.isPrivate ? "true" : "false", entry->flags.zero ? "true" : "false");
+            if (entry->anonMap != nullptr) {
+                AnonMap* map = entry->anonMap;
+                spinlock_acquire(&map->lock);
+                fprintf(fd, "AnonMap: refCount = %lu, slotCount = %lx\n", map->refCount, map->slotCount);
+                spinlock_release(&map->lock);
+            }
+            if (entry->memoryObject != nullptr) {
+                MemoryObject* obj = entry->memoryObject;
+                spinlock_acquire(&obj->lock);
+                fprintf(fd, "MemoryObject: size = %lx, refCount = %lu, pager = %p, pagerData = %p\n", obj->size, obj->refCount, obj->pager, obj->pagerData);
+                spinlock_release(&obj->lock);
+            }
+            fputc(fd, '\n');
+        }, (void*)fd);
+        m_mapEntries.unlock();
+        fputc(fd, '\n');
     }
 
     // split a map entry so that entry has a page count of newPageCount, returns the new upper part

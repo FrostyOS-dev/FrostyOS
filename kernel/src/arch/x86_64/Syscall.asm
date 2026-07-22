@@ -50,18 +50,21 @@ x86_64_SyscallEntry:
     mov rsi, rdi ; a
     mov rdi, rax ; num
 
+    mov rax, cr3
+    mov QWORD [gs:176], rax
+
     mov ax, cs
-    mov WORD [gs:176], ax
+    mov WORD [gs:184], ax
 
     mov ax, ss
-    mov WORD [gs:178], ax
+    mov WORD [gs:186], ax
 
     xor rbp, rbp ; clear rbp
     cld
 
-    
-
     call x86_64_SyscallHandler
+
+    cli ; need to disable them again
 
     ; skip rax
     mov rbx, QWORD [gs:40]

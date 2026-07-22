@@ -20,7 +20,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <errno.h>
 #include <stdint.h>
 
+#include <fs/FDManager.hpp>
+
+#include <Memory/PageMapper.hpp>
 #include <Memory/VMM.hpp>
+#include <Memory/VMRegionAllocator.hpp>
 
 #include <Scheduling/Process.hpp>
 #include <Scheduling/Thread.hpp>
@@ -93,4 +97,56 @@ gid_t sys_getegid() {
     Thread* current = Thread::GetCurrentThread();
     Process* proc = current->GetParent();
     return proc->GetCred().egid;
+}
+
+pid_t sys_fork() {
+    Thread* current = Thread::GetCurrentThread();
+    Process* currentProc = current->GetParent();
+    VMM::VMM* currentVMM = currentProc->GetVMM();
+
+    Process* proc = new Process(ProcessMode::USER, nullptr, 15);
+    FileDescriptorManager* FDManager = new FileDescriptorManager(); // need to create here so we can fork it
+    if (proc == nullptr || FDManager == nullptr) {
+        if (proc != nullptr)
+            delete proc;
+        if (FDManager != nullptr)
+            delete FDManager;
+        return -ENOMEM;
+    }
+
+    if (!FDManager->Fork(currentProc->GetFDManager(), proc)) {
+        delete FDManager;
+        delete proc;
+        return -ENOMEM;
+    }
+
+    proc->SetFDManager(FDManager);
+    proc->SetCred(currentProc->GetCred());
+    proc->SetCWD(currentProc->GetCWD());
+
+    if (!proc->Create(false)) {
+        FDManager->Delete();
+        delete FDManager;
+        delete proc;
+        return -ENOMEM;
+    }
+
+    proc->SetPPID(currentProc->GetPID());
+
+    VMM::VMM* vmm = proc->GetVMM();
+    if (vmm == nullptr || vmm->GetAllocator() == nullptr || currentVMM == nullptr || currentVMM->GetAllocator() == nullptr) {
+        proc->Delete();
+        delete proc;
+        return -ENOSYS;
+    }
+
+    VMRegionAllocator* allocator = vmm->GetAllocator();
+
+    if (!vmm->Fork(currentVMM) || !allocator->Fork(currentVMM->GetAllocator()) || !proc->Fork(currentProc, 0)) {
+        proc->Delete();
+        delete proc;
+        return -ENOMEM;
+    }
+
+    return proc->GetPID();
 }

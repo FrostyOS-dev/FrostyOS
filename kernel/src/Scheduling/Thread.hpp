@@ -104,6 +104,8 @@ public:
     bool ShouldDeleteParent() const;
     int64_t GetIntState() const;
 
+    bool Fork(Thread* other, uint64_t newReturnValue);
+
     uint64_t sleepRemainingTime;
     YieldCallback yieldCallback;
 

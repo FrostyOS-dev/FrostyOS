@@ -30,6 +30,8 @@ typedef long fd_t;
 
 class FileDescriptor;
 
+class Process;
+
 class FileDescriptorManager {
 public:
     FileDescriptorManager();
@@ -44,6 +46,8 @@ public:
     bool ReserveFD(fd_t fd, FileDescriptor* desc);
 
     FileDescriptor* Get(fd_t fd);
+
+    bool Fork(FileDescriptorManager* other, Process* newProc); // copy from other into this
 
 private:
     AVLTree::wAVLTree<fd_t, FileDescriptor*> m_currentFDs;

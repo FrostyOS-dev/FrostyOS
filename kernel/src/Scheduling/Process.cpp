@@ -57,14 +57,15 @@ bool Process::Start() {
     return true;
 }
 
-bool Process::Create() {
+bool Process::Create(bool initAlloc) {
     if (m_VMM == nullptr) {
         VMRegionAllocator* alloc = new VMRegionAllocator();
         if (alloc == nullptr)
             return false;
         uint64_t start, end;
         GetDefaultUserRegion(&start, &end);
-        alloc->Init(start, end);
+        if (initAlloc)
+            alloc->Init(start, end);
         PageMapper* mapper = CreatePageMapper();
         if (mapper == nullptr) {
             delete alloc;
@@ -272,6 +273,23 @@ FS::VNode* Process::GetCWD() {
 
 void Process::SetCWD(FS::VNode* cwd) {
     m_cwd = cwd;
+}
+
+bool Process::Fork(Process* other, uint64_t newMainReturn) {
+    m_MainThread = new Thread();
+    m_MainThread->SetParent(this);
+    m_MainThread->SetTID(0);
+    if (!m_MainThread->Fork(other->m_MainThread, newMainReturn))
+        return false;
+    Scheduler::AddProcess(this);
+    int state = Processor::DisableInterrupts();
+    if (!Scheduler::AddExistingThread(m_MainThread)) {
+        Processor::EnableInterrupts(state);
+        Scheduler::RemoveProcess(m_PID);
+        return false;
+    }
+    Processor::EnableInterrupts(state);
+    return true;
 }
 
 
