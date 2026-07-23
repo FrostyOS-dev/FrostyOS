@@ -152,25 +152,29 @@ void* VMRegionAllocator::AllocatePages(uint64_t numPages) {
     return (void*)start;
 }
 
-void* VMRegionAllocator::AllocatePages(void* ptr, uint64_t numPages) {
-    m_lock.Lock();
+void* VMRegionAllocator::AllocatePages(void* ptr, uint64_t numPages, bool lock) {
+    if (lock)
+        m_lock.Lock();
 
     // Step 1: Find the all pages tree node
     AVLTree::wAVLTreeNode* allPagesNode = m_allPagesTree.FindNodeOrLower((uint64_t)ptr);
     if (allPagesNode == nullptr) {
-        m_lock.Unlock();
+        if (lock)
+            m_lock.Unlock();
         return nullptr;
     }
     CompleteTreeNodeData nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
     if (nodeData.isFree == 0 || allPagesNode->key + (nodeData.size << PAGE_SIZE_SHIFT) < (uint64_t)ptr + (numPages << PAGE_SIZE_SHIFT)) {
-        m_lock.Unlock();
+        if (lock)
+            m_lock.Unlock();
         return nullptr;
     }
 
     // Step 2: Remove the free pages tree node
     AVLTree::wAVLTreeNode* freePagesNode = m_freePagesTree.FindNode(nodeData.size);
     if (freePagesNode == nullptr) {
-        m_lock.Unlock();
+        if (lock)
+            m_lock.Unlock();
         return nullptr;
     }
 
@@ -222,36 +226,42 @@ void* VMRegionAllocator::AllocatePages(void* ptr, uint64_t numPages) {
     m_freePageCount -= numPages;
     m_usedPageCount += numPages;
 
-    m_lock.Unlock();
+    if (lock)
+        m_lock.Unlock();
 
     return ptr;
 }
 
-void VMRegionAllocator::FreePages(void* ptr, uint64_t numPages, bool exact) {
-    m_lock.Lock();
+void VMRegionAllocator::FreePages(void* ptr, uint64_t numPages, bool exact, bool lock) {
+    if (lock)
+        m_lock.Lock();
     // Step 1: Find the exactly matching node in the m_allPagesTree if exact is specificied, if not, just a containing region
     AVLTree::wAVLTreeNode* allPagesNode = nullptr;
     CompleteTreeNodeData nodeData;
     if (exact) {
         allPagesNode = m_allPagesTree.FindNode((uint64_t)ptr);
         if (allPagesNode == nullptr) {
-            m_lock.Unlock();
+            if (lock)
+                m_lock.Unlock();
             return;
         }
         nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
         if (nodeData.isFree == 1 || nodeData.size != numPages) {
-            m_lock.Unlock();
+            if (lock)
+                m_lock.Unlock();
             return; // already free or not the right size
         }
     } else {
         allPagesNode = m_allPagesTree.FindNodeOrLower((uint64_t)ptr);
         if (allPagesNode == nullptr) {
-            m_lock.Unlock();
+            if (lock)
+                m_lock.Unlock();
             return;
         }
         nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
         if (nodeData.isFree == 1 || allPagesNode->key + nodeData.size * PAGE_SIZE < (uint64_t)ptr + numPages * PAGE_SIZE) { // already free or wrong size
-            m_lock.Unlock();
+            if (lock)
+                m_lock.Unlock();
             return;
         }
         if (allPagesNode->key < (uint64_t)ptr) {
@@ -353,7 +363,8 @@ void VMRegionAllocator::FreePages(void* ptr, uint64_t numPages, bool exact) {
     m_freePageCount += numPages;
     m_usedPageCount -= numPages;
 
-    m_lock.Unlock();
+    if (lock)
+        m_lock.Unlock();
 }
 
 void VMRegionAllocator::ReservePages(void* ptr, uint64_t numPages) {
@@ -381,12 +392,12 @@ bool VMRegionAllocator::ResizeAllocatedRegion(void* ptr, uint64_t numPages, void
     }
 
     if (ptr < newStart) {
-        allPagesNode = SplitAPTNode(allPagesNode, ((uint64_t)newStart - (uint64_t)newStart) >> PAGE_SIZE_SHIFT);
+        allPagesNode = SplitAPTNode(allPagesNode, ((uint64_t)newStart - (uint64_t)ptr) >> PAGE_SIZE_SHIFT);
         nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
     }
     
-    if (nodeData.size != numPages)
-        SplitAPTNode(allPagesNode, numPages);
+    if (nodeData.size != newNumPages)
+        SplitAPTNode(allPagesNode, newNumPages);
 
     m_lock.Unlock();
     return true;
@@ -432,6 +443,14 @@ uint64_t VMRegionAllocator::GetStart() const {
 
 uint64_t VMRegionAllocator::GetEnd() const {
     return m_end;
+}
+
+void VMRegionAllocator::Lock() {
+    m_lock.Lock();
+}
+
+void VMRegionAllocator::Unlock() {
+    m_lock.Unlock();
 }
 
 AVLTree::wAVLTreeNode* VMRegionAllocator::SplitAPTNode(AVLTree::wAVLTreeNode* node, uint64_t numPages) {

@@ -32,8 +32,8 @@ public:
     void Delete();
 
     void* AllocatePages(uint64_t numPages);
-    void* AllocatePages(void* ptr, uint64_t numPages);
-    void FreePages(void* ptr, uint64_t numPages, bool exact = true);
+    void* AllocatePages(void* ptr, uint64_t numPages, bool lock = true);
+    void FreePages(void* ptr, uint64_t numPages, bool exact = true, bool lock = true);
 
     void ReservePages(void* ptr, uint64_t numPages);
     void UnreservePages(void* ptr, uint64_t numPages);
@@ -44,6 +44,9 @@ public:
 
     uint64_t GetStart() const;
     uint64_t GetEnd() const;
+
+    void Lock();
+    void Unlock();
 
 private:
     // Split a node in the allPagesTree, returning the new node for the upper half. numPage is the number of pages to split at into the old node.

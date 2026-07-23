@@ -115,11 +115,12 @@ namespace VMM {
         bool zero;
         bool allocPhys;
         bool addrIsHint; // if provided address is unavailable and not null, allocate at a different address
+        bool replace; // Allow for this allocation to replace any exisiting allocation(s)
     };
 
-    constexpr AllocFlags DEFAULT_KALLOC_FLAGS = {Protection::READ_WRITE, CacheType::DEFAULT, false, true, true, false, false};
-    constexpr AllocFlags DEFAULT_KALLOC_PHYS_FLAGS = {Protection::READ_WRITE, CacheType::DEFAULT, false, true, true, true, false};
-    constexpr AllocFlags DEFAULT_ALLOC_FLAGS = {Protection::READ_WRITE, CacheType::DEFAULT, true, true, true, false, false};
+    constexpr AllocFlags DEFAULT_KALLOC_FLAGS = {Protection::READ_WRITE, CacheType::DEFAULT, false, true, true, false, false, false};
+    constexpr AllocFlags DEFAULT_KALLOC_PHYS_FLAGS = {Protection::READ_WRITE, CacheType::DEFAULT, false, true, true, true, false, false};
+    constexpr AllocFlags DEFAULT_ALLOC_FLAGS = {Protection::READ_WRITE, CacheType::DEFAULT, true, true, true, false, false, false};
 
 
     // The core VMM.
@@ -160,6 +161,7 @@ namespace VMM {
 
     private:
         MapEntry* SplitMapEntry(MapEntry* entry, uint64_t newPageCount); // split a map entry so that entry has a page count of newPageCount, returns the new upper part
+        bool Internal_FreePages(void* virtAddr, uint64_t totalCount, bool multipleRegions, bool lock); // lock controls whether the mapEntries should be locked, and if the vmRegionAllocator should be locked
 
         // UVM fields
         PageMapper* m_pageMapper;

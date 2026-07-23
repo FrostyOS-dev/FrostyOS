@@ -33,16 +33,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Scheduling/Thread.hpp>
 
 bool ValidateMmapFlags(int flags) {
-    if (flags <= 0 || flags >= (MAP_POPULATE * 2)) // out of bounds
+    if (flags <= 0 || flags >= (MAP_FIXED_NOREPLACE * 2)) // out of bounds
         return false;
     if ((flags & (MAP_SHARED | MAP_PRIVATE)) == 0 || (flags & (MAP_SHARED | MAP_PRIVATE)) == (MAP_SHARED | MAP_PRIVATE)) // neither shared or private OR both shared and private
+        return false;
+    if ((flags & (MAP_FIXED | MAP_FIXED_NOREPLACE)) == (MAP_FIXED | MAP_FIXED_NOREPLACE)) // can't be both FIXED and FIXED_NOREPLACE
         return false;
     return true;
 }
 
 void* sys_mmap(void* addr, size_t length, int prot, int flags, sys_mmapExtraArgs* args) {
     if ((addr == nullptr && (flags & MAP_FIXED) > 0) || length == 0
-            || prot <= PROT_NONE || prot > (PROT_READ | PROT_WRITE | PROT_EXEC)
+            || prot > (PROT_READ | PROT_WRITE | PROT_EXEC)
             || !ValidateMmapFlags(flags))
         return (void*)-EINVAL;
 
@@ -76,9 +78,10 @@ void* sys_mmap(void* addr, size_t length, int prot, int flags, sys_mmapExtraArgs
     if ((flags & MAP_ANONYMOUS) > 0) {
         VMM::AllocFlags allocFlags = VMM::DEFAULT_ALLOC_FLAGS;
         allocFlags.protection = protection;
-        allocFlags.isPrivate = flags & MAP_PRIVATE;
-        allocFlags.allocPhys = flags & MAP_POPULATE;
-        allocFlags.addrIsHint = flags & MAP_FIXED;
+        allocFlags.isPrivate = (flags & MAP_PRIVATE) > 0;
+        allocFlags.allocPhys = (flags & MAP_POPULATE) > 0;
+        allocFlags.addrIsHint = (flags & (MAP_FIXED | MAP_FIXED_NOREPLACE)) == 0;
+        allocFlags.replace = (flags & MAP_FIXED) > 0;
         mem = vmm->AllocateAnonPages(pageCount, addr, allocFlags);
         if (mem == nullptr)
             return (void*)((flags & MAP_FIXED) == 0 ? (int64_t)-ENOMEM : (int64_t)-EEXIST);
