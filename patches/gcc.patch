@@ -33,7 +33,7 @@ diff -ruN gcc-clean/gcc/config/frostyos.h gcc-dirty/gcc/config/frostyos.h
 +#define LIB_SPEC "-lc" /* link against C standard library */
 +
 +#undef LINK_SPEC
-+#define LINK_SPEC "%{shared:-shared} %{static:-static} %{!shared: %{!static: %{rdynamic:-export-dynamic}}} %{!dynamic-linker:-dynamic-linker /data/lib/ld.so}"
++#define LINK_SPEC "%{shared:-shared} %{static:-static} %{!shared: %{!static: %{rdynamic:-export-dynamic}}} %{!dynamic-linker:-dynamic-linker /data/lib/ld.so} -z max-page-size=4096"
 +
 +#undef STARTFILE_SPEC
 +#define STARTFILE_SPEC "%{!shared:crt1.o%s} crti.o%s %{shared:crtbeginS.o%s;:crtbegin.o%s}"
@@ -101,7 +101,7 @@ diff -ruN gcc-clean/libgcc/config.host gcc-dirty/libgcc/config.host
  	esac
  	;;
 +x86_64-*-frostyos*)
-+	extra_parts="$extra_parts crtbegin.o crtend.o crtbeginS.o crtendS.o crtprec32.o crtprec64.o crtprec80.o crtfastmath.o"
++	extra_parts="$extra_parts crti.o crtbegin.o crtend.o crtn.o crtbeginS.o crtendS.o crtprec32.o crtprec64.o crtprec80.o crtfastmath.o"
 +	tmake_file="$tmake_file t-crtstuff-pic t-libgcc-pic i386/t-crtpc t-crtfm i386/t-crtstuff t-dfprules"
 +	;;
  x86_64-*-fuchsia*)

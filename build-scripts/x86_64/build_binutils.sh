@@ -43,7 +43,7 @@ rm binutils-$BINUTILS_VERSION.tar.xz
 cd binutils-$BINUTILS_VERSION
 patch -p1 < ../../../../patches/binutils.patch
 cd ../../build
-../src/binutils-$BINUTILS_VERSION/configure --target=x86_64-frostyos --prefix="$TOOLCHAIN_PREFIX" --with-sysroot=$SYSROOT --disable-nls --disable-werror --enable-shared --disable-gdb
+../src/binutils-$BINUTILS_VERSION/configure --target=x86_64-frostyos --prefix="$TOOLCHAIN_PREFIX" --with-sysroot=$SYSROOT --disable-nls --disable-werror --enable-shared --disable-gdb --enable-default-execstack=no
 make -j$(nproc)
 make install
 cd ../../..

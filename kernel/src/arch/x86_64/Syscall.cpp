@@ -34,7 +34,7 @@ extern "C" uint64_t x86_64_SyscallHandler(uint64_t num, uint64_t a, uint64_t b, 
     Thread* currentThread = state->currentThread;
     memcpy(&currentThread->GetMutableRegisters(), &state->registers, sizeof(CPU_Registers));
 
-    Processor::EnableInterrupts();
+    // Processor::EnableInterrupts();
 
     return HandleSystemCall(num, a, b, c, d, e);
 }

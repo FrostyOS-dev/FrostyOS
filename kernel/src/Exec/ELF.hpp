@@ -140,9 +140,11 @@ struct auxv64list_t {
     auxv64_t null;
 };
 
+#define INTERP_BASE ((void*)0x800000000)
+
 class Process;
 
-int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* auxv64);
+int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv64list_t* auxv64, char** interp);
 
 int CreateELFProcess(const char* path, Process* parent, char** argv, char** env);
 

@@ -47,7 +47,7 @@ int ReadExact(FS::VNode* vnode, void* buf, size_t size, size_t offset, Credentia
     return 0;
 }
 
-int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* auxv64) {
+int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv64list_t* auxv64, char** interp) {
     const Credential& cred = proc->GetCred();
     FS::VNode* vnode = nullptr;
     int rc = FS::VFS_Open(path, &vnode, nullptr, cred);
@@ -66,10 +66,14 @@ int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* aux
 
     if (header.e_ident[EI_MAG0] != ELFMAG0 || header.e_ident[EI_MAG1] != ELFMAG1 || header.e_ident[EI_MAG2] != ELFMAG2 || header.e_ident[EI_MAG3] != ELFMAG3
         || header.e_ident[EI_CLASS] != ELFCLASS64 || header.e_ident[EI_DATA] != ELFDATA2LSB || header.e_ident[EI_OSABI] != ELFOSABI_SYSV
-        || header.e_type != ET_EXEC || header.e_machine != EM_X86_64 || header.e_phoff == 0 || header.e_phnum == 0) {
+        || (header.e_type != ET_EXEC && header.e_type != ET_DYN) || header.e_machine != EM_X86_64 || header.e_phoff == 0 || header.e_phnum == 0) {
         FS::VFS_Close(vnode, cred);
+        dbgprintf("bad header\n");
         return -ENOEXEC;
     }
+
+    if (base == nullptr && header.e_type == ET_DYN)
+        base = (void*)0x400000;
 
     auxv64->null.a_type = AT_NULL;
     auxv64->phdr.a_type = AT_PHDR;
@@ -87,6 +91,9 @@ int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* aux
 
     VMM::VMM* vmm = proc->GetVMM();
 
+    Elf64_Phdr interpPhdr;
+    bool hasInterp = false;
+
     
     for (uint64_t i = 0; i < header.e_phnum; i++) {
         Elf64_Phdr phdr;
@@ -95,12 +102,14 @@ int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* aux
             FS::VFS_Close(vnode, cred);
             return rc;
         }
+        phdr.p_vaddr += (uint64_t)base;
         switch (phdr.p_type) {
         case PT_TLS:
         case PT_LOAD: {
             if (phdr.p_flags == 0 || phdr.p_flags > (PF_X | PF_W | PF_R) || phdr.p_memsz == 0 || phdr.p_vaddr % PAGE_SIZE != phdr.p_offset % PAGE_SIZE) {
                 vnode->Unlock();
                 FS::VFS_Close(vnode, cred);
+                dbgprintf("bad phdr\n");
                 return -ENOEXEC;
             }
             if (phdr.p_type == PT_TLS)
@@ -157,11 +166,24 @@ int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* aux
                 phdr.p_filesz -= firstPageCount;
                 phdr.p_offset += firstPageCount;
 
+                size_t remaining = PAGE_SIZE - (phdr.p_vaddr % PAGE_SIZE);
+                if (remaining > 0 && phdr.p_memsz > 0) {
+                    size_t remMSize = MIN(phdr.p_memsz, remaining);
+                    size_t pageDiff = ALIGN_UP(phdr.p_vaddr, PAGE_SIZE) - phdr.p_memsz;
+                    if (remMSize > pageDiff)
+                        remMSize = pageDiff;
+
+                    phdr.p_memsz -= remMSize;
+                    phdr.p_vaddr += remMSize;
+                }
+
                 // no need to do any zeroing as the page is already zeroed by the VMM
+
 
                 if (!vmm->RemapPages(ALIGN_DOWN_ADDRESS(pages, PAGE_SIZE), 0, prot, true, VMM::CacheType::DEFAULT)) {
                     vnode->Unlock();
                     FS::VFS_Close(vnode, cred);
+                    dbgprintf("remap error\n");
                     return -ENOEXEC;
                 }
             }
@@ -197,12 +219,13 @@ int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* aux
                 if (rc < 0) {
                     vnode->Unlock();
                     FS::VFS_Close(vnode, cred);
-                    return -ENOMEM;
+                    return rc;
                 }
 
                 if (!vmm->RemapPages((void*)phdr.p_vaddr, 0, prot, true, VMM::CacheType::DEFAULT)) {
                     vnode->Unlock();
                     FS::VFS_Close(vnode, cred);
+                    dbgprintf("remap error 2\n");
                     return -ENOEXEC;
                 }
 
@@ -211,9 +234,10 @@ int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* aux
             }
 
             if (phdr.p_memsz > 0) {
-                if (nullptr == vmm->AllocateAnonPages(DIV_ROUNDUP(phdr.p_memsz, PAGE_SIZE), (void*)phdr.p_vaddr, VMM::DEFAULT_ALLOC_FLAGS)) {
+                if (nullptr == vmm->AllocateAnonPages(DIV_ROUNDUP(phdr.p_memsz, PAGE_SIZE), (void*)ALIGN_DOWN(phdr.p_vaddr, PAGE_SIZE), VMM::DEFAULT_ALLOC_FLAGS)) {
                     vnode->Unlock();
                     FS::VFS_Close(vnode, cred);
+                    dbgprintf("memsz align error: count = %lx, addr = %p\n", DIV_ROUNDUP(phdr.p_memsz, PAGE_SIZE), (void*)ALIGN_DOWN(phdr.p_vaddr, PAGE_SIZE));
                     return -ENOEXEC;
                 }
             }
@@ -221,9 +245,9 @@ int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* aux
             break;
         }
         case PT_INTERP:
-            vnode->Unlock();
-            FS::VFS_Close(vnode, cred);
-            return -ENOSYS;
+            memcpy(&interpPhdr, &phdr, sizeof(Elf64_Phdr));
+            hasInterp = true;
+            break;
         case PT_PHDR:
             auxv64->phdr.a_val = phdr.p_vaddr;
         default:
@@ -231,7 +255,24 @@ int LoadELFFile(const char* path, Process* proc, void** entry, auxv64list_t* aux
         }
     }
 
-    *entry = (void*)header.e_entry;
+    if (hasInterp) {
+        char* buf = (char*)kmalloc(interpPhdr.p_filesz);
+        if (buf == nullptr) {
+            vnode->Unlock();
+            FS::VFS_Close(vnode, cred);
+            return -ENOMEM;
+        }
+        rc = ReadExact(vnode, buf, interpPhdr.p_filesz, interpPhdr.p_offset, cred);
+        if (rc < 0) {
+            delete buf;
+            vnode->Unlock();
+            FS::VFS_Close(vnode, cred);
+            return rc;
+        }
+        *interp = buf;
+    }
+
+    *entry = (void*)(header.e_entry + (uint64_t)base);
 
     vnode->Unlock();
     FS::VFS_Close(vnode, cred);
@@ -330,13 +371,29 @@ int CreateELFProcess(const char* path, Process* parent, char** argv, char** env)
     auxv64list_t auxv64;
     memset(&auxv64, 0, sizeof(auxv64list_t));
 
+    char* interp = nullptr;
     void* entry = nullptr;
-    int rc = LoadELFFile(path, proc, &entry, &auxv64);
+    int rc = LoadELFFile(path, nullptr, proc, &entry, &auxv64, &interp);
     if (rc < 0) {
         g_KPageMapper->SwapToThis();
         proc->Delete();
         delete proc;
         return rc;
+    }
+
+    if (interp != nullptr) {
+        auxv64list_t interpauxv64;
+        memset(&interpauxv64, 0, sizeof(auxv64list_t));
+        char* interpinterp = nullptr;
+        rc = LoadELFFile(interp, INTERP_BASE, proc, &entry, &interpauxv64, &interpinterp);
+        if (rc < 0 || interpinterp != nullptr) {
+            g_KPageMapper->SwapToThis();
+            proc->Delete();
+            delete proc;
+            dbgprintf("interpinterp = %p\n", interpinterp);
+            return interpinterp == nullptr ? rc : -ENOEXEC;
+        }
+        delete interp;
     }
 
     if (!proc->CreateMainThread({(void (*)(void*))entry, nullptr})) {

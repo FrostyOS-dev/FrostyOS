@@ -49,7 +49,7 @@ rm gcc-$GCC_VERSION.tar.xz
 cd gcc-$GCC_VERSION
 patch -p1 < ../../../../patches/gcc.patch
 cd ../../build
-../src/gcc-$GCC_VERSION/configure --target=x86_64-frostyos --prefix="$TOOLCHAIN_PREFIX" --with-sysroot=$SYSROOT --enable-languages=c,c++ --enable-threads=posix --disable-multilib --enable-shared --enable-host-shared CXXFLAGS="-fno-char8_t"
+../src/gcc-$GCC_VERSION/configure --target=x86_64-frostyos --prefix="$TOOLCHAIN_PREFIX" --with-sysroot=$SYSROOT --enable-languages=c,c++ --enable-threads=posix --disable-multilib --enable-shared --enable-host-shared --with-pic CXXFLAGS="-fno-char8_t"
 make -j$(nproc) all-gcc all-target-libgcc
 make install-gcc install-target-libgcc
 cd ../../..

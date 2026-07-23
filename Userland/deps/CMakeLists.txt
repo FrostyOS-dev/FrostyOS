@@ -36,7 +36,7 @@ endif ()
 
 if (NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/mlibc_build)
     add_custom_target(mlibc_configure
-        COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_CURRENT_BINARY_DIR} meson setup --cross-file=${CMAKE_CURRENT_SOURCE_DIR}/frostyos.cross-file --prefix=/data -Ddefault_library=static -Ddefault_library_paths=/data/lib -Dno_headers=true mlibc_build ${CMAKE_CURRENT_SOURCE_DIR}/mlibc
+        COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_CURRENT_BINARY_DIR} meson setup --cross-file=${CMAKE_CURRENT_SOURCE_DIR}/frostyos.cross-file --prefix=/data -Ddefault_library=shared -Ddefault_library_paths=/data/lib -Dno_headers=true mlibc_build ${CMAKE_CURRENT_SOURCE_DIR}/mlibc
         USES_TERMINAL
     )
 

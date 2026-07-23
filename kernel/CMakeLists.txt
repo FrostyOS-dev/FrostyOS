@@ -198,7 +198,9 @@ target_link_options(kernel
     PUBLIC ${LINKER_SCRIPT}
     PUBLIC -static
     PUBLIC -Bsymbolic
+    PUBLIC -ffreestanding
     PUBLIC -nostdlib
+    PUBLIC -nodefaultlibs
     PUBLIC -zmax-page-size=0x1000
     PRIVATE -mno-red-zone
 )
