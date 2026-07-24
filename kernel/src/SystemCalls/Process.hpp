@@ -40,4 +40,6 @@ gid_t sys_getegid();
 
 pid_t sys_fork();
 
+int sys_exec(const char* path, char* const argv[], char* const env[]);
+
 #endif /* _SYSCALL_PROCESS_HPP */

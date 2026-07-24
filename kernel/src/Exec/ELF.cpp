@@ -344,7 +344,7 @@ void* PrepareELFStack(void* stackTop, auxv64list_t* auxv64, char** argv, char** 
     return argcPoint;
 }
 
-int CreateELFProcess(const char* path, Process* parent, char** argv, char** env) {
+int CreateELFProcess(const char* path, Process* parent, char** argv, char** env, bool noStart, Process** newProc) {
     Process* proc = new Process(ProcessMode::USER, nullptr, 15);
     if (!proc->Create()) {
         delete proc;
@@ -416,12 +416,15 @@ int CreateELFProcess(const char* path, Process* parent, char** argv, char** env)
 
     rc = ESUCCESS;
 
-    if (!proc->Start()) {
+    if (!noStart && !proc->Start()) {
         proc->Delete();
         delete proc;
         rc = -ENOSYS;
     }
 
     g_KPageMapper->SwapToThis();
+
+    if (newProc != nullptr)
+        *newProc = proc;
     return rc;
 }

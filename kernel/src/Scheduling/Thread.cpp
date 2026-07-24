@@ -30,7 +30,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Memory/PageMapper.hpp>
 #include <Memory/VMM.hpp>
 
-Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, -1) {
+Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true, -1) {
     sleepRemainingTime = 0;
     yieldCallback = {nullptr, nullptr};
     m_InSchedList = false;
@@ -38,7 +38,7 @@ Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UI
 
 }
 
-Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, -1) {
+Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true -1) {
     sleepRemainingTime = 0;
     yieldCallback = {nullptr, nullptr};
 
@@ -84,14 +84,14 @@ bool Thread::Delete() {
     return true;
 }
 
-bool Thread::ExitCurrentThread(bool deleteThis, bool deleteParent) {
+bool Thread::ExitCurrentThread(bool deleteThis, bool deleteParent, bool removeProc) {
     int exitIntState = Processor::DisableInterrupts();
     Thread* thread = Scheduler::RemoveCurrentThread(true);
     if (thread == nullptr)
         return false;
     // Clear any pending yield callback to prevent use-after-free when thread is deleted
     thread->yieldCallback = {};
-    thread->m_deleteProp = {deleteThis, deleteParent, exitIntState};
+    thread->m_deleteProp = {deleteThis, deleteParent, removeProc, exitIntState};
     Scheduler::ProcessorState* state = GetCurrentProcessorState();
     Processor::SwapStack(Thread_ExitHelper, thread, state->kernelStack);
     return false;
@@ -240,6 +240,10 @@ bool Thread::ShouldDelete() const {
 
 bool Thread::ShouldDeleteParent() const {
     return m_deleteProp.deleteParent;
+}
+
+bool Thread::ShouldRemoveProc() const {
+    return m_deleteProp.removeProc;
 }
 
 int64_t Thread::GetIntState() const {

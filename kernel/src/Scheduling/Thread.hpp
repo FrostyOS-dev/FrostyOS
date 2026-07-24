@@ -58,7 +58,7 @@ public:
 
     bool Delete(); // Assumed to be removed from scheduler, and not running
 
-    static bool ExitCurrentThread(bool deleteThis, bool deleteParent);
+    static bool ExitCurrentThread(bool deleteThis, bool deleteParent, bool removeProc);
     static Thread* GetCurrentThread();
 
     void SetEntryPoint(ThreadEntryPoint entryPoint);
@@ -102,6 +102,7 @@ public:
     void SetDeleteProp(bool deleteSelf, bool deleteParent);
     bool ShouldDelete() const;
     bool ShouldDeleteParent() const;
+    bool ShouldRemoveProc() const;
     int64_t GetIntState() const;
 
     bool Fork(Thread* other, uint64_t newReturnValue);
@@ -129,6 +130,7 @@ private:
     struct {
         bool deleteThis;
         bool deleteParent;
+        bool removeProc;
         int64_t intState;
     } m_deleteProp;
 };

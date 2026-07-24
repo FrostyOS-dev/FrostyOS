@@ -16,9 +16,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "Process.hpp"
+#include "SystemCall.hpp"
 
 #include <errno.h>
 #include <stdint.h>
+
+#include <Exec/ELF.hpp>
 
 #include <fs/FDManager.hpp>
 
@@ -27,6 +30,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Memory/VMRegionAllocator.hpp>
 
 #include <Scheduling/Process.hpp>
+#include <Scheduling/Scheduler.hpp>
 #include <Scheduling/Thread.hpp>
 
 #ifdef __x86_64__
@@ -34,7 +38,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #endif
 
 [[noreturn]] void sys_exit(uint64_t code) {
-    Thread::ExitCurrentThread(true, true);
+    Thread::ExitCurrentThread(true, true, true);
 
     PANIC("sys_exit failed!");
 }
@@ -150,3 +154,160 @@ pid_t sys_fork() {
 
     return proc->GetPID();
 }
+
+void CleanupArgEnv(uint64_t argc, uint64_t argIndex, char** argv, uint64_t envc, uint64_t envIndex, char** env) {
+    if (argv != nullptr) {
+        for (uint64_t i = argIndex; i > 0; i--) { // work backwards as at and after the current index is still the user pointer
+            if (argv[i - 1] != nullptr)
+                kfree(argv[i - 1]);
+        }
+        kfree(argv);
+    }
+
+    if (env != nullptr) {
+        for (uint64_t i = envIndex; i > 0; i--) { // work backwards as at and after the current index is still the user pointer
+            if (env[i - 1] != nullptr)
+                kfree(env[i - 1]);
+        }
+        kfree(env);
+    }
+}
+
+int CopyArgEnvFromUser(const char** argv, const char** envv, uint64_t* kArgc, char*** kArgv, uint64_t* kEnvc, char*** kEnv, Process* currentProc) {
+    char** currentArgv = (char**)kmalloc(8 * sizeof(char*));
+    uint64_t argc = 0;
+    uint64_t maxArgc = 8;
+    while (true) {
+        char* arg;
+        if (!UserRead(&argv[argc], &arg, sizeof(char*), currentProc)) {
+            kfree(currentArgv);
+            return -EFAULT;
+        }
+        if (argc == maxArgc) {
+            maxArgc += 8;
+            currentArgv = (char**)krealloc(currentArgv, maxArgc * sizeof(char*));
+            if (currentArgv == nullptr)
+                return -ENOMEM;
+        }
+        currentArgv[argc] = arg;
+        if (arg == nullptr)
+            break;
+        argc++;
+    }
+
+    char** currentEnv = (char**)kmalloc(8 * sizeof(char*));
+    uint64_t envc = 0;
+    uint64_t maxEnvc = 8;
+    while (true) {
+        char* env;
+        if (!UserRead(&envv[argc], &env, sizeof(char*), currentProc)) {
+            kfree(currentArgv);
+            kfree(currentEnv);
+            return -EFAULT;
+        }
+        if (envc == maxEnvc) {
+            maxEnvc += 8;
+            currentEnv = (char**)krealloc(currentEnv, maxEnvc * sizeof(char*));
+            if (currentEnv == nullptr) {
+                kfree(currentEnv);
+                return -ENOMEM;
+            }
+        }
+        currentEnv[envc] = env;
+        if (env == nullptr)
+            break;
+        envc++;
+    }
+
+    for (uint64_t i = 0; i < argc; i++) {
+        char* arg;
+        size_t size;
+        if (!UserReadString(currentArgv[i], &arg, &size, currentProc)) {
+            CleanupArgEnv(argc, i, currentArgv, envc, 0, currentEnv);
+            return -EFAULT;
+        }
+        currentArgv[i] = arg;
+    }
+
+    for (uint64_t i = 0; i < envc; i++) {
+        char* env;
+        size_t size;
+        if (!UserReadString(currentEnv[i], &env, &size, currentProc)) {
+            CleanupArgEnv(argc, argc, currentArgv, envc, i, currentEnv);
+            return -EFAULT;
+        }
+        currentEnv[i] = env;
+    }
+
+    *kArgc = argc;
+    *kArgv = currentArgv;
+    *kEnvc = envc;
+    *kEnv = currentEnv;
+    return ESUCCESS;
+}
+
+int sys_exec(const char* path, char* const argv[], char* const env[]) {
+    if (path == nullptr || argv == nullptr || env == nullptr)
+        return -EFAULT;
+
+    Thread* current = Thread::GetCurrentThread();
+    Process* currentProc = current->GetParent();
+
+    Process* newProc = nullptr;
+
+    Process* parent = nullptr;
+    pid_t parentPID = currentProc->GetPPID();
+    if (parentPID >= 0) {
+        parent = Scheduler::GetProcess(parentPID);
+        if (parent == nullptr) { // process must have died, try again with PID 1
+            parentPID = 1;
+            parent = Scheduler::GetProcess(parentPID);
+            if (parent == nullptr) // no process with PID 1???
+                return -ENOSYS;
+        }
+    }
+
+    size_t pathLen = 0;
+    char* kPath = nullptr;
+    if (!UserReadString(path, &kPath, &pathLen, currentProc))
+        return -EFAULT;
+
+    uint64_t argc;
+    uint64_t envc;
+    char** kArgv;
+    char** kEnv;
+    int rc = CopyArgEnvFromUser(const_cast<const char**>(argv), const_cast<const char**>(env), &argc, &kArgv, &envc, &kEnv, currentProc);
+    if (rc < 0) {
+        delete kPath;
+        return rc;
+    }
+
+    rc = CreateELFProcess(kPath, parent, kArgv, kEnv, true, &newProc);
+
+    delete kPath;
+    CleanupArgEnv(argc, argc, kArgv, envc, envc, kEnv);
+
+    if (rc < 0)
+        return rc;
+
+    newProc->SetPID(currentProc->GetPID());
+    newProc->SetPPID(parentPID);
+    newProc->SetCWD(currentProc->GetCWD());
+    newProc->SetCred(currentProc->GetCred());
+
+    FileDescriptorManager* FDManager = newProc->GetFDManager();
+    FDManager->Delete();
+    FDManager->Fork(currentProc->GetFDManager(), newProc);
+
+    Scheduler::RemoveProcess(currentProc->GetPID());
+
+    if (!newProc->Start()) {
+        newProc->Delete();
+        delete newProc;
+    }
+
+    Thread::ExitCurrentThread(true, true, false);
+
+    PANIC("sys_exec: Thread::ExitCurrentThread returned!");
+}
+

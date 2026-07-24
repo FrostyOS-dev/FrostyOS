@@ -926,6 +926,118 @@ namespace VMM {
         }
     }
 
+    bool VMM::CopyStringFromUser(char* kernelDst, const void* userSrc, size_t maxSize, size_t* outSize, bool user) {
+        uint64_t virtAddr = reinterpret_cast<uint64_t>(userSrc);
+        size_t totalCopied = 0;
+
+        if (maxSize == 0) {
+            if (outSize != nullptr)
+                *outSize = 0;
+            return false;
+        }
+
+        m_mapEntries.lock();
+
+        while (totalCopied < maxSize) {
+            AVLTree::wAVLTreeNode* node = m_mapEntries.FindNodeOrLower(virtAddr);
+            if (node == nullptr || node->value == 0) {
+                m_mapEntries.unlock();
+                if (outSize != nullptr)
+                    *outSize = totalCopied;
+                return false; // Unmapped memory hit
+            }
+
+            MapEntry* entry = reinterpret_cast<MapEntry*>(node->value);
+            Protection prot = entry->flags.protection;
+
+            // Verify bounds and READ permissions
+            if (virtAddr < entry->startVirt || virtAddr >= entry->endVirt || 
+            (user && !entry->flags.user) || 
+            (static_cast<uint8_t>(prot) & static_cast<uint8_t>(Protection::READ)) == 0) {
+                m_mapEntries.unlock();
+                if (outSize != nullptr)
+                    *outSize = totalCopied;
+                return false; // Access violation
+            }
+
+            uint64_t pageIndex = (virtAddr - entry->startVirt) >> PAGE_SIZE_SHIFT;
+            uint64_t pageOffset = virtAddr & (PAGE_SIZE - 1);
+            size_t bytesInPage = PAGE_SIZE - pageOffset;
+            size_t bytesInRegion = entry->endVirt - virtAddr;
+            size_t bytesToProcess = MIN(bytesInPage, MIN(bytesInRegion, maxSize - totalCopied));
+
+            const char* srcHHDM = nullptr;
+            bool isZeroPage = false;
+
+            // Step 1: Resolve HHDM pointer or demand-zero state
+            if (entry->anonMap != nullptr) {
+                spinlock_acquire(&entry->anonMap->lock);
+                Anon* anon = entry->anonMap->slots[pageIndex];
+                if (anon != nullptr && anon->physAddr != 0)
+                    srcHHDM = reinterpret_cast<const char*>(to_HHDM(anon->physAddr)) + pageOffset;
+                else if (entry->flags.zero)
+                    isZeroPage = true;
+                spinlock_release(&entry->anonMap->lock);
+            } else if (entry->memoryObject != nullptr) {
+                MemoryObject* obj = entry->memoryObject;
+                spinlock_acquire(&obj->lock);
+                Page* page = obj->pages.Find(entry->offset + pageIndex * PAGE_SIZE);
+                if (page != nullptr && page->physAddr != 0)
+                    srcHHDM = reinterpret_cast<const char*>(to_HHDM(page->physAddr)) + pageOffset;
+                else if (entry->flags.zero)
+                    isZeroPage = true;
+                spinlock_release(&obj->lock);
+            }
+
+            // Step 2: Handle unpopulated file-backed pages safely
+            if (srcHHDM == nullptr && !isZeroPage) {
+                // Memory is mapped but frame isn't in RAM yet (e.g., pager needs to load it).
+                // Unlock m_mapEntries, trigger Page Fault to bring frame into RAM, then retry.
+                m_mapEntries.unlock();
+                PageFaultCode code = { .present = false, .write = false, .user = user, .execute = false };
+                if (!HandlePageFault(code, virtAddr)) {
+                    if (outSize != nullptr)
+                        *outSize = totalCopied;
+                    return false; // Pager failed to load page
+                }
+                m_mapEntries.lock();
+                continue; // Retry this address now that it's paged in
+            }
+
+            // Step 3: Copy & scan bytes
+            if (isZeroPage) {
+                // Demand-zero page: first byte is '\0'
+                kernelDst[totalCopied] = '\0';
+                m_mapEntries.unlock();
+                if (outSize != nullptr)
+                    *outSize = totalCopied + 1;
+                return true; // Successfully found null terminator!
+            }
+
+            for (size_t i = 0; i < bytesToProcess; ++i) {
+                char c = srcHHDM[i];
+                kernelDst[totalCopied] = c;
+                totalCopied++;
+
+                if (c == '\0') {
+                    m_mapEntries.unlock();
+                    if (outSize != nullptr)
+                        *outSize = totalCopied;
+                    return true; // Null terminator reached
+                }
+            }
+
+            virtAddr += bytesToProcess;
+        }
+
+        m_mapEntries.unlock();
+
+        // Reached maxSize without seeing '\0'
+        if (outSize != nullptr)
+            *outSize = totalCopied;
+        return false;
+    }
+
     bool VMM::Fork(VMM* other) {
         other->m_mapEntries.lock();
         m_mapEntries.lock();

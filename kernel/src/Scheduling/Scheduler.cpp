@@ -641,9 +641,11 @@ namespace Scheduler {
                 if (thread->ShouldDelete())
                     delete thread;
                 if (thread->ShouldDeleteParent()) {
-                    g_Processes.lock();
-                    g_Processes.remove(proc);
-                    g_Processes.unlock();
+                    if (thread->ShouldRemoveProc()) {
+                        g_Processes.lock();
+                        g_Processes.remove(proc);
+                        g_Processes.unlock();
+                    }
                     proc->Delete();
                     delete proc;
                 }

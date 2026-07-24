@@ -69,3 +69,27 @@ bool UserWrite(void* userBuf, const void* kBuf, size_t size, Process* currentPro
     memcpy(userBuf, kBuf, size);
     return true;
 }
+
+bool UserReadString(const char* userStr, char** kBuf, size_t* size, Process* currentProc) {
+    if (userStr == nullptr || kBuf == nullptr || size == nullptr || currentProc == nullptr)
+        return false;
+    VMM::VMM* vmm = currentProc->GetVMM();
+    size_t currentSize = 0;
+    char* buffer = (char*)kmalloc(64);
+    while (true) {
+        size_t blockSize = 0;
+        bool rc = vmm->CopyStringFromUser(&buffer[currentSize], &userStr[currentSize], 64, &blockSize);
+        currentSize += blockSize;
+        if (!rc) {
+            if (blockSize == 64)
+                buffer = (char*)krealloc(buffer, currentSize + 64);
+            else {
+                kfree(buffer);
+                return false;
+            }
+        }
+        *size = currentSize;
+        *kBuf = buffer;
+        return true;
+    }
+}

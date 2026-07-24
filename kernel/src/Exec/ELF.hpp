@@ -146,6 +146,6 @@ class Process;
 
 int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv64list_t* auxv64, char** interp);
 
-int CreateELFProcess(const char* path, Process* parent, char** argv, char** env);
+int CreateELFProcess(const char* path, Process* parent, char** argv, char** env, bool noStart = false, Process** newProc = nullptr);
 
 #endif /* _ELF_HPP */

@@ -151,6 +151,7 @@ namespace VMM {
 
         bool ValidateRead(const void* addr, size_t size, bool user = true);
         bool ValidateWrite(const void* addr, size_t size, bool user = true);
+        bool CopyStringFromUser(char* kernelDst, const void* userSrc, size_t maxSize, size_t* outSize, bool user = true);
 
         bool Fork(VMM* other); // this function does NOT perform cleanup of created regions on error
 
