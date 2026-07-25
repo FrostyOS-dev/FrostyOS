@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "File.hpp"
+#include "Futex.hpp"
 #include "Memory.hpp"
 #include "Process.hpp"
 #include "SystemCall.hpp"
@@ -92,4 +93,14 @@ bool UserReadString(const char* userStr, char** kBuf, size_t* size, Process* cur
         *kBuf = buffer;
         return true;
     }
+}
+
+bool UserReadAtomic32(const uint32_t* userBuf, uint32_t* kBuf, Process* currentProc) {
+    if (userBuf == nullptr || kBuf == nullptr || currentProc == nullptr)
+        return false;
+    VMM::VMM* vmm = currentProc->GetVMM();
+    if (!vmm->ValidateRead(userBuf, 4))
+        return false;
+    *kBuf = __atomic_load_n(userBuf, __ATOMIC_SEQ_CST);
+    return true;
 }

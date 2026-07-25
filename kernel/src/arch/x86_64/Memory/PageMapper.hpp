@@ -37,6 +37,8 @@ public:
     bool RemapPage(uint64_t virt, VMM::Protection prot, bool user, VMM::CacheType cacheType) override;
     bool RemapPages(uint64_t virt, size_t count, VMM::Protection prot, bool user, VMM::CacheType cacheType) override;
 
+    uint64_t GetPhysicalAddr(uint64_t virt) override;
+
     void InvalidatePages(uint64_t virt, size_t count, bool shootdown) override;
 
     void SetPageTable(void* pageTable);

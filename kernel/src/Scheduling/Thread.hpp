@@ -37,6 +37,15 @@ namespace Scheduler {
     struct ProcessorState;
 }
 
+enum class FutexWakeReason : uint8_t {
+    None,
+    Woken,
+    TimedOut,
+    Interrupted
+};
+
+class FutexWaitQueue;
+
 class Thread {
 public:
     struct CPUInfo {
@@ -109,6 +118,9 @@ public:
 
     uint64_t sleepRemainingTime;
     YieldCallback yieldCallback;
+
+    FutexWaitQueue* blockedFutex = nullptr;
+    FutexWakeReason wakeReason = FutexWakeReason::None;
 
 private:
     ThreadEntryPoint m_EntryPoint;

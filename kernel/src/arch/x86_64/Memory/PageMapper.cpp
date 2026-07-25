@@ -168,6 +168,13 @@ bool x86_64_PageMapper::RemapPages(uint64_t virt, size_t count, VMM::Protection 
     return true;
 }
 
+uint64_t x86_64_PageMapper::GetPhysicalAddr(uint64_t virt) {
+    spinlock_acquire(&m_lock);
+    uint64_t phys = x86_64_GetPhysicalAddress(m_pageTable, virt);
+    spinlock_release(&m_lock);
+    return phys;
+}
+
 void x86_64_PageMapper::InvalidatePages(uint64_t virt, size_t count, bool shootdown) {
     x86_64_InvalidatePages(virt, count * PAGE_SIZE);
     if (shootdown) {

@@ -33,6 +33,8 @@ public:
     virtual bool RemapPage(uint64_t virt, VMM::Protection prot, bool user, VMM::CacheType cacheType) = 0;
     virtual bool RemapPages(uint64_t virt, size_t count, VMM::Protection prot, bool user, VMM::CacheType cacheType) = 0;
 
+    virtual uint64_t GetPhysicalAddr(uint64_t virt) = 0;
+
     virtual void InvalidatePages(uint64_t virt, size_t count, bool shootdown = false) = 0;
 
     virtual void* GetPageTable() const = 0;

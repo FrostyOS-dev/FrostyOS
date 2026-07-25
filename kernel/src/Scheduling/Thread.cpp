@@ -30,6 +30,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Memory/PageMapper.hpp>
 #include <Memory/VMM.hpp>
 
+#include <SystemCalls/Futex.hpp>
+
 Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true, -1) {
     sleepRemainingTime = 0;
     yieldCallback = {nullptr, nullptr};
@@ -78,6 +80,9 @@ bool Thread::Delete() {
 
     if (m_Parent->GetMode() == ProcessMode::USER && !vmm->FreePages(reinterpret_cast<void*>(m_Stack - DEFAULT_USER_STACK_SIZE)))
         return false;
+
+    if (blockedFutex != nullptr)
+        blockedFutex->Remove(this, FutexWakeReason::Interrupted);
 
     m_Stack = 0;
     m_KernelStack = 0;

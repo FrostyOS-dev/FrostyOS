@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
+#include <DataStructures/AVLTree.hpp>
 #include <DataStructures/LinkedList.hpp>
 
 #include <Memory/VMM.hpp>
@@ -42,6 +43,7 @@ struct Credential {
 };
 
 class FileDescriptorManager;
+class FutexWaitQueue;
 
 namespace FS {
     class VNode;
@@ -90,6 +92,8 @@ public:
 
     bool Fork(Process* other, uint64_t newMainReturn);
 
+    AVLTree::wAVLTree<uint64_t, FutexWaitQueue*>& GetFutextList();
+
 private:
     ProcessMode m_Mode;
     VMM::VMM* m_VMM;
@@ -102,6 +106,7 @@ private:
     Credential m_cred;
     FileDescriptorManager* m_FDManager;
     FS::VNode* m_cwd;
+    AVLTree::wAVLTree<uint64_t, FutexWaitQueue*> m_futexList;
 };
 
 extern Process* g_KProcess;

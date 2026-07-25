@@ -292,5 +292,9 @@ bool Process::Fork(Process* other, uint64_t newMainReturn) {
     return true;
 }
 
+AVLTree::wAVLTree<uint64_t, FutexWaitQueue*>& Process::GetFutextList() {
+    return m_futexList;
+}
+
 
 Process* g_KProcess = nullptr;

@@ -28,6 +28,7 @@ uint64_t HandleSystemCall(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t a
 bool UserRead(const void* userBuf, void* kBuf, size_t size, Process* currentProc);
 bool UserWrite(void* userBuf, const void* kBuf, size_t size, Process* currentProc, bool validate = true);
 bool UserReadString(const char* userStr, char** kBuf, size_t* size, Process* currentProc);
+bool UserReadAtomic32(const uint32_t* userBuf, uint32_t* kBuf, Process* currentProc);
 
 #define ENUMERATE_SYSTEM_CALLS(SC) \
     SC(EXIT, exit) \
@@ -51,7 +52,8 @@ bool UserReadString(const char* userStr, char** kBuf, size_t* size, Process* cur
     SC(ISATTY, isatty) \
     SC(GETDENTS, getdents) \
     SC(FORK, fork) \
-    SC(EXEC, exec)
+    SC(EXEC, exec) \
+    SC(FUTEX, futex)
 
 enum SystemCalls : uint64_t {
 #define ENUMERATE_CALL(u, l) SYS_##u,
@@ -59,6 +61,6 @@ enum SystemCalls : uint64_t {
 #undef ENUMERATE_CALL
 };
 
-#define SYSTEM_CALL_COUNT 22
+#define SYSTEM_CALL_COUNT 23
 
 #endif /* _SYSTEM_CALL_HPP */
