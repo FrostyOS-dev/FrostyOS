@@ -20,4 +20,4 @@ set -e
 
 # This script is used to enter the build environment.
 
-env PATH=$PATH:$PWD/toolchain/local/bin /bin/bash
+env PATH=$PATH:$PWD/toolchain/local/bin SYSROOT=$PWD/root /bin/bash
