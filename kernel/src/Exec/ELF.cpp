@@ -68,7 +68,6 @@ int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv6
         || header.e_ident[EI_CLASS] != ELFCLASS64 || header.e_ident[EI_DATA] != ELFDATA2LSB || header.e_ident[EI_OSABI] != ELFOSABI_SYSV
         || (header.e_type != ET_EXEC && header.e_type != ET_DYN) || header.e_machine != EM_X86_64 || header.e_phoff == 0 || header.e_phnum == 0) {
         FS::VFS_Close(vnode, cred);
-        dbgprintf("bad header\n");
         return -ENOEXEC;
     }
 
@@ -109,7 +108,6 @@ int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv6
             if (phdr.p_flags == 0 || phdr.p_flags > (PF_X | PF_W | PF_R) || phdr.p_memsz == 0 || phdr.p_vaddr % PAGE_SIZE != phdr.p_offset % PAGE_SIZE) {
                 vnode->Unlock();
                 FS::VFS_Close(vnode, cred);
-                dbgprintf("bad phdr\n");
                 return -ENOEXEC;
             }
             if (phdr.p_type == PT_TLS)
@@ -183,7 +181,6 @@ int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv6
                 if (!vmm->RemapPages(ALIGN_DOWN_ADDRESS(pages, PAGE_SIZE), 0, prot, true, VMM::CacheType::DEFAULT)) {
                     vnode->Unlock();
                     FS::VFS_Close(vnode, cred);
-                    dbgprintf("remap error\n");
                     return -ENOEXEC;
                 }
             }
@@ -225,7 +222,6 @@ int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv6
                 if (!vmm->RemapPages((void*)phdr.p_vaddr, 0, prot, true, VMM::CacheType::DEFAULT)) {
                     vnode->Unlock();
                     FS::VFS_Close(vnode, cred);
-                    dbgprintf("remap error 2\n");
                     return -ENOEXEC;
                 }
 
@@ -237,7 +233,6 @@ int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv6
                 if (nullptr == vmm->AllocateAnonPages(DIV_ROUNDUP(phdr.p_memsz, PAGE_SIZE), (void*)ALIGN_DOWN(phdr.p_vaddr, PAGE_SIZE), VMM::DEFAULT_ALLOC_FLAGS)) {
                     vnode->Unlock();
                     FS::VFS_Close(vnode, cred);
-                    dbgprintf("memsz align error: count = %lx, addr = %p\n", DIV_ROUNDUP(phdr.p_memsz, PAGE_SIZE), (void*)ALIGN_DOWN(phdr.p_vaddr, PAGE_SIZE));
                     return -ENOEXEC;
                 }
             }
@@ -390,7 +385,6 @@ int CreateELFProcess(const char* path, Process* parent, char** argv, char** env,
             g_KPageMapper->SwapToThis();
             proc->Delete();
             delete proc;
-            dbgprintf("interpinterp = %p\n", interpinterp);
             return interpinterp == nullptr ? rc : -ENOEXEC;
         }
         delete interp;
