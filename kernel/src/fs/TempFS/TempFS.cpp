@@ -405,6 +405,14 @@ namespace FS {
         return -ENOSYS;
     }
 
+    int TempFSVNode::GetName(char* buf, size_t size, size_t* realSize) {
+        if (size <= m_nameLen)
+            return -ERANGE;
+        memcpy(buf, m_name, m_nameLen);
+        *realSize = m_nameLen;
+        return ESUCCESS;
+    }
+
     void* TempFSVNode::GetAddr(uint64_t offset) {
         AVLTree::wAVLTreeNode* node = m_blocks.FindNodeOrLower(offset);
         if (node == nullptr || node->value == 0)

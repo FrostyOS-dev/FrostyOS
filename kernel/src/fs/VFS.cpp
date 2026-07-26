@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "TempFS/TempFS.hpp"
 
+#include <cstddef>
 #include <errno.h>
 #include <string.h>
 #include <util.h>
@@ -345,6 +346,66 @@ namespace FS {
             return -ENOMEM;
 
         *addr = pages;
+        return ESUCCESS;
+    }
+
+    int VFS_BuildPath(VNode* vnode, char* buf, size_t size, Credential cred) {
+        if (vnode == nullptr || buf == nullptr || size == 0)
+            return -EINVAL;
+
+        if (g_rootVFS == nullptr || g_rootVFS->GetRoot() == nullptr)
+            return -ENOSYS;
+
+        if (vnode == g_rootVFS->GetRoot()) { // Fast path: the VNode is the absolute root
+            if (size < 2)
+                return -ERANGE;
+            buf[0] = '/';
+            buf[1] = '\0';
+            return ESUCCESS;
+        }
+
+        // Start writing from the end of the buffer
+        char* ptr = buf + size - 1;
+        *ptr = '\0';
+
+        VNode* current = vnode;
+
+        while (current != g_rootVFS->GetRoot()) {
+            char nameBuf[NAME_MAX + 1];
+            size_t nameLen = 0;
+
+            int rc = current->GetName(nameBuf, NAME_MAX + 1, &nameLen);
+            if (rc < 0)
+                return rc;
+
+            if (ptr - buf < static_cast<ptrdiff_t>(nameLen + 1))
+                return -ERANGE;
+
+            ptr -= nameLen;
+            memcpy(ptr, nameBuf, nameLen);
+
+            ptr--;
+            *ptr = '/';
+
+            // Move up the tree
+            VNode* parent = current->GetParent();
+
+            if (parent == nullptr) { // No parent, maybe root of a mounted VFS?
+                VFS* vfs = current->GetVFS();
+                if (vfs != nullptr)
+                    parent = vfs->GetCoveredVNode();
+
+                if (parent == nullptr) // still no parent, disconnected vnode
+                    return -ENOENT;
+            }
+
+            current = parent;
+        }
+
+        // Shift the completely built path to the start of buf
+        size_t pathLen = static_cast<size_t>((buf + size - 1) - ptr);
+        memmove(buf, ptr, pathLen + 1);
+
         return ESUCCESS;
     }
 

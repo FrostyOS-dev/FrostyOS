@@ -81,4 +81,6 @@ int sys_isatty(int fd);
 
 int sys_getdents(int fd, void* buf, size_t maxRead, size_t* bytesRead);
 
+int sys_getcwd(char* buf, size_t size);
+
 #endif /* _SYSCALL_FILE_HPP */

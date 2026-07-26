@@ -306,3 +306,32 @@ int sys_getdents(int fd, void* buf, size_t maxRead, size_t* bytesRead) {
     delete[] kBuf;
     return rc;
 }
+
+int sys_getcwd(char* buf, size_t size) {
+    if (buf == nullptr || size == 0)
+        return -EINVAL;
+
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+    VMM::VMM* vmm = proc->GetVMM();
+    if (!vmm->ValidateWrite(buf, size))
+        return -EFAULT;
+
+    FS::VNode* vnode = proc->GetCWD();
+
+    char* kBuf = new char[size];
+    if (kBuf == nullptr)
+        return -ENOMEM;
+
+    int rc = FS::VFS_BuildPath(vnode, kBuf, size, proc->GetCred());
+    if (rc < 0) {
+        delete[] kBuf;
+        return rc;
+    }
+
+    bool ret = UserWrite(buf, kBuf, size, proc, false);
+
+    delete[] kBuf;
+
+    return ret ? ESUCCESS : -EFAULT;
+}

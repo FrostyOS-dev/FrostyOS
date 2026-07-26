@@ -75,6 +75,7 @@ namespace FS {
         virtual int Munmap() override;
         virtual int Resize() override;
         virtual int Rename() override;
+        virtual int GetName(char* buf, size_t size, size_t* realSize) override; // copy the null-terminated name into buf
 
         void* GetAddr(uint64_t offset);
         VMM::Protection GetDefaultProt() const;

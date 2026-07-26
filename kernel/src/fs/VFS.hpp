@@ -130,6 +130,7 @@ namespace FS {
         virtual int Munmap() = 0;
         virtual int Resize() = 0;
         virtual int Rename() = 0;
+        virtual int GetName(char* buf, size_t size, size_t* realSize) = 0;
 
         virtual VFS* GetVFS();
         virtual VFS* GetMountedVFS();
@@ -163,6 +164,8 @@ namespace FS {
 
     // Map a vnode into memory. Flags are assumed to be pre-validated.
     int VFS_MapFile(void* hint, size_t length, VMM::Protection prot, int flags, bool user, VNode* vnode, uint64_t offset, void** addr, VMM::VMM* vmm, const Credential& cred);
+
+    int VFS_BuildPath(VNode* vnode, char* buf, size_t size, Credential cred);
 
     uint8_t VFS_GetPosixType(VType type);
 
