@@ -22,33 +22,40 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "TTYBackend.hpp"
 
+#define DEBUG_MIRRORING_DEFAULT_ENABLED true
+
 class TTY {
 public:
     TTY();
 
     void Init();
 
-    void WriteChar(char c, TTYBackendStream stream = TTYBackendStream::OUT);
-    void WriteString(const char* str, TTYBackendStream stream = TTYBackendStream::OUT);
-    void WriteString(const char* str, uint64_t length, TTYBackendStream stream = TTYBackendStream::OUT, bool flush = false);
+    void WriteChar(char c, TTYStream stream = TTYStream::OUT);
+    void WriteString(const char* str, TTYStream stream = TTYStream::OUT);
+    void WriteString(const char* str, uint64_t length, TTYStream stream = TTYStream::OUT, bool flush = false);
 
-    char ReadChar(TTYBackendStream stream = TTYBackendStream::IN);
-    void ReadString(char* str, uint64_t length, TTYBackendStream stream = TTYBackendStream::IN);
+    char ReadChar(TTYStream stream = TTYStream::IN);
+    void ReadString(char* str, uint64_t length, TTYStream stream = TTYStream::IN);
 
-    void SetCursor(uint64_t x, uint64_t y, TTYBackendStream stream = TTYBackendStream::OUT);
-    void GetCursor(uint64_t& x, uint64_t& y, TTYBackendStream stream = TTYBackendStream::OUT);
+    void SetCursor(uint64_t x, uint64_t y, TTYStream stream = TTYStream::OUT);
+    void GetCursor(uint64_t& x, uint64_t& y, TTYStream stream = TTYStream::OUT);
 
-    void SetBackend(TTYBackend* backend, TTYBackendStream stream);
-    TTYBackend* GetBackend(TTYBackendStream stream) const;
+    void SetBackend(TTYBackend* backend, TTYStream stream);
+    TTYBackend* GetBackend(TTYStream stream) const;
 
-    void Seek(TTYBackendStream stream, uint64_t pos);
+    void Seek(TTYStream stream, uint64_t pos);
 
-    void Lock(TTYBackendStream stream) const;
-    void Unlock(TTYBackendStream stream) const;
+    void Lock(TTYStream stream) const;
+    void Unlock(TTYStream stream) const;
     void ForceUnlockAll() const;
+
+    void EnableDebugMirroring();
+    void DisableDebugMirroring();
+    bool IsDebugMirroring() const;
 
 private:
     TTYBackend* m_backends[4];
+    bool m_debugMirroring;
 };
 
 extern TTY* g_CurrentTTY;

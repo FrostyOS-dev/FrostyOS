@@ -80,25 +80,25 @@ void uacpi_kernel_log(uacpi_log_level level, const uacpi_char* format, ...) {
 void uacpi_kernel_vlog(uacpi_log_level level, const uacpi_char* format, uacpi_va_list args) {
     switch (level) {
         case UACPI_LOG_DEBUG:
-            dbgputs("[uACPI DEBUG] ");
+            puts("[uACPI DEBUG] ");
             break;
         case UACPI_LOG_TRACE:
-            dbgputs("[uACPI TRACE] ");
+            puts("[uACPI TRACE] ");
             break;
         case UACPI_LOG_INFO:
-            dbgputs("[uACPI INFO] ");
+            puts("[uACPI INFO] ");
             break;
         case UACPI_LOG_WARN:
-            dbgputs("[uACPI WARN] ");
+            puts("[uACPI WARN] ");
             break;
         case UACPI_LOG_ERROR:
-            dbgputs("[uACPI ERROR] ");
+            puts("[uACPI ERROR] ");
             break;
         default:
             break;
     }
 
-    dbgvprintf(format, args);
+    vprintf(format, args);
 }
 
 #ifndef UACPI_BAREBONES_MODE

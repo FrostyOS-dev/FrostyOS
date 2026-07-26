@@ -78,7 +78,7 @@ bool InitMADT() {
             if (lapic->flags & 1)
                 lapics.insert(lapic);
 #ifdef MADT_DEBUG
-            dbgprintf("LAPIC: Processor ID = %hhu, APIC ID = %hhu, flags = %u\n", lapic->uid, lapic->id, lapic->flags);
+            printf("LAPIC: Processor ID = %hhu, APIC ID = %hhu, flags = %u\n", lapic->uid, lapic->id, lapic->flags);
 #endif
             break;
         }
@@ -86,7 +86,7 @@ bool InitMADT() {
             acpi_madt_ioapic* ioapic = reinterpret_cast<acpi_madt_ioapic*>(entry);
             ioapics.insert(ioapic);
 #ifdef MADT_DEBUG
-            dbgprintf("IOAPIC: ID = %hhu, address = %x, GSI base = %u\n", ioapic->id, ioapic->address, ioapic->gsi_base);
+            printf("IOAPIC: ID = %hhu, address = %x, GSI base = %u\n", ioapic->id, ioapic->address, ioapic->gsi_base);
 #endif
             break;
         }
@@ -94,7 +94,7 @@ bool InitMADT() {
             acpi_madt_interrupt_source_override* iso = reinterpret_cast<acpi_madt_interrupt_source_override*>(entry);
             ISOs.insert(iso);
 #ifdef MADT_DEBUG
-            dbgprintf("Interrupt Source Override: Bus = %hhu, Source = %hhu, GSI = %u, flags = %hu\n", iso->bus, iso->source, iso->gsi, iso->flags);
+            printf("Interrupt Source Override: Bus = %hhu, Source = %hhu, GSI = %u, flags = %hu\n", iso->bus, iso->source, iso->gsi, iso->flags);
 #endif
             break;
         }
@@ -102,7 +102,7 @@ bool InitMADT() {
             acpi_madt_nmi_source* nmi = reinterpret_cast<acpi_madt_nmi_source*>(entry);
             NMIs.insert(nmi);
 #ifdef MADT_DEBUG
-            dbgprintf("NMI Source: flags = %hu, GSI = %u\n", nmi->flags, nmi->gsi);
+            printf("NMI Source: flags = %hu, GSI = %u\n", nmi->flags, nmi->gsi);
 #endif
             break;
         }
@@ -110,7 +110,7 @@ bool InitMADT() {
             acpi_madt_lapic_nmi* lnmi = reinterpret_cast<acpi_madt_lapic_nmi*>(entry);
             LNMIs.insert(lnmi);
 #ifdef MADT_DEBUG
-            dbgprintf("LAPIC NMI: Processor ID: %hhu, flags = %hu, LINT = %hhu\n", lnmi->uid, lnmi->flags, lnmi->lint);
+            printf("LAPIC NMI: Processor ID: %hhu, flags = %hu, LINT = %hhu\n", lnmi->uid, lnmi->flags, lnmi->lint);
 #endif
             break;
         }
@@ -122,7 +122,7 @@ bool InitMADT() {
 #endif
         default:
 #ifdef MADT_DEBUG
-            dbgprintf("MADT entry: type = %lu\n", entry->type);
+            printf("MADT entry: type = %lu\n", entry->type);
 #endif
             break;
         }

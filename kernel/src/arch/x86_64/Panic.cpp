@@ -29,6 +29,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Scheduling/Scheduler.hpp>
 
+#include <tty/TTY.hpp>
+
 char const* g_x86_64_PanicReason;
 
 x86_64_Registers g_x86_64_PanicRegisters;
@@ -61,6 +63,8 @@ extern "C" [[noreturn]] void __attribute__((no_sanitize("undefined"))) x86_64_Pa
         message = g_x86_64_PanicReason;
 
     stdio_force_unlock(); // Everything must be unlocked
+
+    g_CurrentTTY->DisableDebugMirroring();
 
     // all to debug first
     dbgputs("KERNEL PANIC!\n");

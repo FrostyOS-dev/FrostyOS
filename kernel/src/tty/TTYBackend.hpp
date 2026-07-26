@@ -27,7 +27,7 @@ enum class TTYBackendType {
     INVALID
 };
 
-enum class TTYBackendStream {
+enum class TTYStream {
     IN,
     OUT,
     ERR,

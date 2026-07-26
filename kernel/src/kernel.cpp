@@ -85,9 +85,9 @@ void StartKernel() {
     g_KVGABackend.Init(&g_KVGA);
 
     g_KTTY.Init();
-    g_KTTY.SetBackend(&g_KVGABackend, TTYBackendStream::OUT);
-    g_KTTY.SetBackend(&g_KVGABackend, TTYBackendStream::ERR);
-    g_KTTY.SetBackend(&g_KDebugBackend, TTYBackendStream::DEBUG);
+    g_KTTY.SetBackend(&g_KVGABackend, TTYStream::OUT);
+    g_KTTY.SetBackend(&g_KVGABackend, TTYStream::ERR);
+    g_KTTY.SetBackend(&g_KDebugBackend, TTYStream::DEBUG);
 
     g_CurrentTTY = &g_KTTY;
 
@@ -129,7 +129,6 @@ void StartKernel() {
 
 void Kernel_Stage2(void* data) {
     puts("Starting FrostyOS\n");
-    dbgputs("Starting FrostyOS\n");
 
     KernelStage2Params* params = (KernelStage2Params*)data;
 
@@ -141,7 +140,7 @@ void Kernel_Stage2(void* data) {
     if (FS::VFS_MountRoot(FS::FSType::TempFS, 0, nullptr, KCred) < 0)
         PANIC("VFS MountRoot failed!");
 
-    dbgprintf("VFS root mounted!\n");
+    printf("VFS root mounted!\n");
 
     if (params->initramfs != nullptr && params->initramfsSize > 0)
         LoadInitRAMFS(params->initramfs, params->initramfsSize);

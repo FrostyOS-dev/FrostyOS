@@ -30,15 +30,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <tty/TTY.hpp>
 #include <tty/TTYBackend.hpp>
 
-FileDescriptor::FileDescriptor() : m_proc(nullptr), m_type(FDType::Invalid), m_offset(0), m_open(false), m_append(false), m_vnode(nullptr), m_tty(nullptr), m_ttyStream(TTYBackendStream::INVALID) {
+FileDescriptor::FileDescriptor() : m_proc(nullptr), m_type(FDType::Invalid), m_offset(0), m_open(false), m_append(false), m_vnode(nullptr), m_tty(nullptr), m_ttyStream(TTYStream::INVALID) {
 
 }
 
-FileDescriptor::FileDescriptor(Process* proc, FDType type, FS::VNode* vnode) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_append(false), m_vnode(vnode), m_tty(nullptr), m_ttyStream(TTYBackendStream::INVALID) {
+FileDescriptor::FileDescriptor(Process* proc, FDType type, FS::VNode* vnode) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_append(false), m_vnode(vnode), m_tty(nullptr), m_ttyStream(TTYStream::INVALID) {
 
 }
 
-FileDescriptor::FileDescriptor(Process* proc, FDType type, TTY* tty, TTYBackendStream stream) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_append(false), m_vnode(nullptr), m_tty(tty), m_ttyStream(stream) {
+FileDescriptor::FileDescriptor(Process* proc, FDType type, TTY* tty, TTYStream stream) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_append(false), m_vnode(nullptr), m_tty(tty), m_ttyStream(stream) {
 
 }
 
@@ -50,7 +50,7 @@ void FileDescriptor::Init(Process* proc, FDType type, FS::VNode* vnode) {
 
 }
 
-void FileDescriptor::Init(Process* proc, FDType type, TTY* tty, TTYBackendStream stream) {
+void FileDescriptor::Init(Process* proc, FDType type, TTY* tty, TTYStream stream) {
 
 }
 
@@ -133,7 +133,7 @@ int FileDescriptor::Read(void* buf, size_t count, size_t* realCount) {
         break;
     }
     case FDType::TTY: {
-        if (m_tty == nullptr || m_ttyStream == TTYBackendStream::INVALID) {
+        if (m_tty == nullptr || m_ttyStream == TTYStream::INVALID) {
             m_mutex.Unlock();
             return -EBADF;
         }
@@ -194,7 +194,7 @@ int FileDescriptor::Write(const void* buf, size_t count, size_t* realCount) {
         break;
     }
     case FDType::TTY: {
-        if (m_tty == nullptr || m_ttyStream == TTYBackendStream::INVALID) {
+        if (m_tty == nullptr || m_ttyStream == TTYStream::INVALID) {
             m_mutex.Unlock();
             return -EBADF;
         }

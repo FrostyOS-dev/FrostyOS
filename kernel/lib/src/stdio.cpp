@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2022-2025  Frosty515
+Copyright (©) 2022-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,7 +16,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "stdio.h"
-#include "tty/backends/VGABackend.hpp"
 
 #include <assert.h>
 #include <string.h> // just used for strlen function
@@ -26,28 +25,30 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <tty/TTY.hpp>
 #include <tty/TTYBackend.hpp>
 
+#include <tty/backends/VGABackend.hpp>
+
 #define max(a, b) ((a) > (b) ? (a) : (b))
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
-TTYBackendStream FDToTTYBackendStream(fd_t file) {
+TTYStream FDToTTYStream(fd_t file) {
     switch (file) {
         case stdin:
-            return TTYBackendStream::IN;
+            return TTYStream::IN;
         case stdout:
-            return TTYBackendStream::OUT;
+            return TTYStream::OUT;
         case stderr:
-            return TTYBackendStream::ERR;
+            return TTYStream::ERR;
         case stddebug:
-            return TTYBackendStream::DEBUG;
+            return TTYStream::DEBUG;
         default:
-            return TTYBackendStream::INVALID;
+            return TTYStream::INVALID;
     }
 }
 
 int64_t internal_read(fd_t file, void* data, size_t size) {
     if (g_CurrentTTY != nullptr) {
-        TTYBackendStream stream = FDToTTYBackendStream(file);
-        if (stream != TTYBackendStream::INVALID) {
+        TTYStream stream = FDToTTYStream(file);
+        if (stream != TTYStream::INVALID) {
             for (size_t i = 0; i < size; i++)
                 ((char*)data)[i] = g_CurrentTTY->ReadChar(stream);
             return size;
@@ -59,8 +60,8 @@ int64_t internal_read(fd_t file, void* data, size_t size) {
 
 int64_t internal_write(fd_t file, const void* data, size_t size) {
     if (g_CurrentTTY != nullptr) {
-        TTYBackendStream stream = FDToTTYBackendStream(file);
-        if (stream != TTYBackendStream::INVALID) {
+        TTYStream stream = FDToTTYStream(file);
+        if (stream != TTYStream::INVALID) {
             for (size_t i = 0; i < size; i++)
                 g_CurrentTTY->WriteChar(((char*)data)[i], stream);
             return size;
@@ -80,8 +81,8 @@ int internal_close(fd_t file) {
 
 long internal_seek(fd_t file, long offset) {
     if (g_CurrentTTY != nullptr) {
-        TTYBackendStream stream = FDToTTYBackendStream(file);
-        if (stream != TTYBackendStream::INVALID) {
+        TTYStream stream = FDToTTYStream(file);
+        if (stream != TTYStream::INVALID) {
             g_CurrentTTY->Seek(stream, offset);
             return offset;
         }
@@ -104,8 +105,8 @@ extern "C" int fgetc(const fd_t file) {
 
 void internal_swap_buffers(const fd_t file) {
     if (g_CurrentTTY != nullptr) {
-        TTYBackendStream stream = FDToTTYBackendStream(file);
-        if (stream != TTYBackendStream::INVALID) {
+        TTYStream stream = FDToTTYStream(file);
+        if (stream != TTYStream::INVALID) {
             TTYBackend* backend = g_CurrentTTY->GetBackend(stream);
             if (backend->GetType() == TTYBackendType::VGA)
                 ((TTYBackendVGA*)backend)->SwapBuffers();
@@ -115,16 +116,16 @@ void internal_swap_buffers(const fd_t file) {
 
 void internal_lock(const fd_t file) {
     if (g_CurrentTTY != nullptr) {
-        TTYBackendStream stream = FDToTTYBackendStream(file);
-        if (stream != TTYBackendStream::INVALID)
+        TTYStream stream = FDToTTYStream(file);
+        if (stream != TTYStream::INVALID)
             g_CurrentTTY->Lock(stream);
     }
 }
 
 void internal_unlock(const fd_t file) {
     if (g_CurrentTTY != nullptr) {
-        TTYBackendStream stream = FDToTTYBackendStream(file);
-        if (stream != TTYBackendStream::INVALID)
+        TTYStream stream = FDToTTYStream(file);
+        if (stream != TTYStream::INVALID)
             g_CurrentTTY->Unlock(stream);
     }
 }

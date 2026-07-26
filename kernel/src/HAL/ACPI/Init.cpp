@@ -51,7 +51,7 @@ namespace ACPI {
 
         uacpi_status rc = uacpi_setup_early_table_access(to_HHDM(g_PMM->AllocatePage()), PAGE_SIZE);
         if (uacpi_unlikely_error(rc)) {
-            dbgprintf("Failed to setup early table access: %d\n", rc);
+            printf("Failed to setup early table access: %d\n", rc);
             PANIC("ACPI: Failed to setup early table access");
         }
 
@@ -59,31 +59,31 @@ namespace ACPI {
 
         uacpi_status rc = uacpi_initialize(0);
         if (uacpi_unlikely_error(rc)) {
-            dbgprintf("Failed to initialize uACPI: %d\n", rc);
+            printf("Failed to initialize uACPI: %d\n", rc);
             PANIC("ACPI: Failed to initialize uACPI");
         }
 
         if (!InitMADT()) {
-            dbgprintf("MADT init failed.\n");
+            printf("MADT init failed.\n");
             PANIC("Failed to initialise MADT table");
         }
 
         if (!InitMCFG()) {
-            dbgprintf("MCFG init failed.\n");
+            printf("MCFG init failed.\n");
             PANIC("Failed to initialise MCFG table");
         }
 
         if (!InitHPET()) {
-            dbgprintf("HPET init failed.\n");
+            printf("HPET init failed.\n");
             PANIC("Failed to initialise HPET table");
         }
 
         if (!InitFADT()) {
-            dbgprintf("FADT init failed.\n");
+            printf("FADT init failed.\n");
             PANIC("Failed to initialise FADT table");
         }
 
-        dbgprintf("ACPI: Early init complete\n");
+        printf("ACPI: Early init complete\n");
 #endif
     }
 
@@ -92,18 +92,18 @@ namespace ACPI {
         int state = Processor::DisableInterrupts();
         uacpi_status rc = uacpi_namespace_load();
         if (uacpi_unlikely_error(rc)) {
-            dbgprintf("Failed to load ACPI namespace: %d\n", rc);
+            printf("Failed to load ACPI namespace: %d\n", rc);
             PANIC("ACPI: Failed to load ACPI namespace");
         }
         Processor::EnableInterrupts(state);
 
         rc = uacpi_namespace_initialize();
         if (uacpi_unlikely_error(rc)) {
-            dbgprintf("Failed to initialize ACPI namespace: %d\n", rc);
+            printf("Failed to initialize ACPI namespace: %d\n", rc);
             PANIC("ACPI: Failed to initialize ACPI namespace");
         }
 
-        dbgprintf("ACPI: Stage 2 init complete\n");
+        printf("ACPI: Stage 2 init complete\n");
 #endif
     }
 

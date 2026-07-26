@@ -168,7 +168,7 @@ void x86_64_Processor::InitTSS(Scheduler::ProcessorState* state) {
 void x86_64_Processor::InitTime() {
     m_TSCAvailable = x86_64_TSCInit(this);
     if (!m_LAPIC->InitTimer() && m_BSP) {
-        dbgprintf("Warning: Local APIC timer is unavailable, falling back to the PIT\n");
+        printf("Warning: Local APIC timer is unavailable, falling back to the PIT\n");
         
         x86_64_PIT_Init();
         x86_64_UnmaskGSI(x86_64_GetGSIFromSource(0));

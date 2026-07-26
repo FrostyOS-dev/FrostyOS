@@ -50,11 +50,11 @@ class FileDescriptor {
 public:
     FileDescriptor();
     FileDescriptor(Process* proc, FDType type, FS::VNode* vnode);
-    FileDescriptor(Process* proc, FDType type, TTY* tty, TTYBackendStream stream);
+    FileDescriptor(Process* proc, FDType type, TTY* tty, TTYStream stream);
     ~FileDescriptor();
 
     void Init(Process* proc, FDType type, FS::VNode* vnode);
-    void Init(Process* proc, FDType type, TTY* tty, TTYBackendStream stream);
+    void Init(Process* proc, FDType type, TTY* tty, TTYStream stream);
 
     int Open(int flags);
     void Close();
@@ -83,7 +83,7 @@ private:
     FS::VNode* m_vnode;
 
     TTY* m_tty;
-    TTYBackendStream m_ttyStream;
+    TTYStream m_ttyStream;
 
     Mutex m_mutex;
 };

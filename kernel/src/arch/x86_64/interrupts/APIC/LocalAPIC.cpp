@@ -254,7 +254,7 @@ void x86_64_LAPIC::StartCPU() {
 
     memcpy(AP_TRAMP_DATA_ADDR, &info, sizeof(x86_64_APInfo));
 
-    dbgprintf("Starting AP %hhu\n", m_ID);
+    printf("Starting AP %hhu\n", m_ID);
 
     {
         using namespace x86_64_IPI;
@@ -271,7 +271,7 @@ void x86_64_LAPIC::StartCPU() {
     }
     spinlock_acquire(&proc->apLock);
 
-    dbgprintf("AP %hhu is online!\n", m_ID);
+    printf("AP %hhu is online!\n", m_ID);
 
     g_KPageMapper->UnmapPage(AP_TRAMP_LOAD);
 

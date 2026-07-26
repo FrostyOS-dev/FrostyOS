@@ -47,7 +47,7 @@ int LoadInitRAMFS(void* data, size_t size) {
     if (rc < 0)
         return rc;
 
-    dbgprintf("Loading initramfs...\n");
+    printf("Loading initramfs...\n");
 
     uint64_t count = 0;
 
@@ -158,7 +158,7 @@ int LoadInitRAMFS(void* data, size_t size) {
         count++;
     }
 
-    dbgprintf("initramfs: loaded %lu items\n", count);
+    printf("initramfs: loaded %lu items\n", count);
 
     return ESUCCESS;
 }

@@ -16,10 +16,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "TTY.hpp"
+#include "TTYBackend.hpp"
 
 TTY* g_CurrentTTY = nullptr;
 
-TTY::TTY() : m_backends{nullptr, nullptr, nullptr, nullptr} {
+TTY::TTY() : m_backends{nullptr, nullptr, nullptr, nullptr}, m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED) {
     
 }
 
@@ -27,69 +28,75 @@ void TTY::Init() {
     
 }
 
-void TTY::WriteChar(char c, TTYBackendStream stream) {
+void TTY::WriteChar(char c, TTYStream stream) {
     if (m_backends[(uint64_t)stream] != nullptr) {
         m_backends[(uint64_t)stream]->WriteChar(c);
+        if (m_debugMirroring && (stream == TTYStream::OUT || stream == TTYStream::ERR))
+            m_backends[(uint64_t)TTYStream::DEBUG]->WriteChar(c);
     }
 }
 
-void TTY::WriteString(const char* str, TTYBackendStream stream) {
+void TTY::WriteString(const char* str, TTYStream stream) {
     if (m_backends[(uint64_t)stream] != nullptr) {
         m_backends[(uint64_t)stream]->WriteString(str);
+        if (m_debugMirroring && (stream == TTYStream::OUT || stream == TTYStream::ERR))
+            m_backends[(uint64_t)TTYStream::DEBUG]->WriteString(str);
     }
 }
 
-void TTY::WriteString(const char* str, uint64_t length, TTYBackendStream stream, bool flush) {
+void TTY::WriteString(const char* str, uint64_t length, TTYStream stream, bool flush) {
     if (m_backends[(uint64_t)stream] != nullptr) {
         m_backends[(uint64_t)stream]->WriteString(str, length, flush);
+        if (m_debugMirroring && (stream == TTYStream::OUT || stream == TTYStream::ERR))
+            m_backends[(uint64_t)TTYStream::DEBUG]->WriteString(str, length, flush);
     }
 }
 
-char TTY::ReadChar(TTYBackendStream stream) {
+char TTY::ReadChar(TTYStream stream) {
     if (m_backends[(uint64_t)stream] != nullptr) {
         return m_backends[(uint64_t)stream]->ReadChar();
     }
     return '\0';
 }
 
-void TTY::ReadString(char* str, uint64_t length, TTYBackendStream stream) {
+void TTY::ReadString(char* str, uint64_t length, TTYStream stream) {
     if (m_backends[(uint64_t)stream] != nullptr) {
         m_backends[(uint64_t)stream]->ReadString(str, length);
     }
 }
 
-void TTY::SetCursor(uint64_t x, uint64_t y, TTYBackendStream stream) {
+void TTY::SetCursor(uint64_t x, uint64_t y, TTYStream stream) {
     if (m_backends[(uint64_t)stream] != nullptr) {
         m_backends[(uint64_t)stream]->SetCursor(x, y);
     }
 }
 
-void TTY::GetCursor(uint64_t& x, uint64_t& y, TTYBackendStream stream) {
+void TTY::GetCursor(uint64_t& x, uint64_t& y, TTYStream stream) {
     if (m_backends[(uint64_t)stream] != nullptr) {
         m_backends[(uint64_t)stream]->GetCursor(x, y);
     }
 }
 
-void TTY::SetBackend(TTYBackend* backend, TTYBackendStream stream) {
+void TTY::SetBackend(TTYBackend* backend, TTYStream stream) {
     m_backends[(uint64_t)stream] = backend;
 }
 
-TTYBackend* TTY::GetBackend(TTYBackendStream stream) const {
+TTYBackend* TTY::GetBackend(TTYStream stream) const {
     return m_backends[(uint64_t)stream];
 }
 
-void TTY::Seek(TTYBackendStream stream, uint64_t pos) {
+void TTY::Seek(TTYStream stream, uint64_t pos) {
     if (m_backends[(uint64_t)stream] != nullptr) {
         m_backends[(uint64_t)stream]->Seek(pos);
     }
 }
 
-void TTY::Lock(TTYBackendStream stream) const {
+void TTY::Lock(TTYStream stream) const {
     if (m_backends[(uint64_t)stream] != nullptr)
         m_backends[(uint64_t)stream]->Lock();
 }
 
-void TTY::Unlock(TTYBackendStream stream) const {
+void TTY::Unlock(TTYStream stream) const {
     if (m_backends[(uint64_t)stream] != nullptr)
         m_backends[(uint64_t)stream]->Unlock();
 }
@@ -99,4 +106,16 @@ void TTY::ForceUnlockAll() const {
         if (m_backends[i] != nullptr)
             m_backends[i]->ForceUnlock();
     }
+}
+
+void TTY::EnableDebugMirroring() {
+    m_debugMirroring = true;
+}
+
+void TTY::DisableDebugMirroring() {
+    m_debugMirroring = false;
+}
+
+bool TTY::IsDebugMirroring() const {
+    return m_debugMirroring;
 }

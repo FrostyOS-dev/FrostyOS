@@ -92,10 +92,10 @@ bool Process::Create(bool initAlloc) {
             Delete();
             return false;
         }
-        FileDescriptor* in = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYBackendStream::IN);
-        FileDescriptor* out = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYBackendStream::OUT);
-        FileDescriptor* err = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYBackendStream::ERR);
-        FileDescriptor* debug = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYBackendStream::DEBUG);
+        FileDescriptor* in = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYStream::IN);
+        FileDescriptor* out = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYStream::OUT);
+        FileDescriptor* err = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYStream::ERR);
+        FileDescriptor* debug = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYStream::DEBUG);
         if (in == nullptr || out == nullptr || err == nullptr || debug == nullptr) {
             delete in;
             delete out;
