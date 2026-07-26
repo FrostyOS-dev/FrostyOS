@@ -24,6 +24,19 @@ typedef long pid_t;
 typedef long uid_t;
 typedef long gid_t;
 
+struct UIDs {
+    uid_t ruid;
+    uid_t euid;
+    uid_t suid;
+};
+
+struct GIDs {
+    gid_t rgid;
+    gid_t egid;
+    gid_t sgid;
+};
+
+
 [[noreturn]] void sys_exit(uint64_t code);
 
 int sys_settcb(void* base);
@@ -32,11 +45,8 @@ pid_t sys_getpid();
 pid_t sys_getppid();
 pid_t sys_gettid();
 
-uid_t sys_getuid();
-uid_t sys_geteuid();
-
-gid_t sys_getgid();
-gid_t sys_getegid();
+int sys_getresuid(UIDs* uids);
+int sys_getresgid(GIDs* gid);
 
 pid_t sys_fork();
 

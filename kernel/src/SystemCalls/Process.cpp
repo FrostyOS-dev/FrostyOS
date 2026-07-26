@@ -79,28 +79,30 @@ pid_t sys_gettid() {
     return proc->GetPID(); // todo: unique TIDs between processes
 }
 
-uid_t sys_getuid() {
+int sys_getresuid(UIDs* uids) {
     Thread* current = Thread::GetCurrentThread();
     Process* proc = current->GetParent();
-    return proc->GetCred().uid;
+
+    const Credential& cred = proc->GetCred();
+    UIDs kUIDS = {cred.uid, cred.euid, cred.suid};
+
+    if (!UserWrite(uids, &kUIDS, sizeof(UIDs), proc))
+        return -EFAULT;
+
+    return ESUCCESS;
 }
 
-uid_t sys_geteuid() {
+int sys_getresgid(GIDs* gids) {
     Thread* current = Thread::GetCurrentThread();
     Process* proc = current->GetParent();
-    return proc->GetCred().euid;
-}
 
-gid_t sys_getgid() {
-    Thread* current = Thread::GetCurrentThread();
-    Process* proc = current->GetParent();
-    return proc->GetCred().gid;
-}
+    const Credential& cred = proc->GetCred();
+    GIDs kGIDS = {cred.gid, cred.egid, cred.sgid};
 
-gid_t sys_getegid() {
-    Thread* current = Thread::GetCurrentThread();
-    Process* proc = current->GetParent();
-    return proc->GetCred().egid;
+    if (!UserWrite(gids, &kGIDS, sizeof(GIDs), proc))
+        return -EFAULT;
+
+    return ESUCCESS;
 }
 
 pid_t sys_fork() {
