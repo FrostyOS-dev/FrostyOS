@@ -15,11 +15,6 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _HAL_FADT_HPP
-#define _HAL_FADT_HPP
+#include "PS2Controller.hpp"
+#include "PS2Keyboard.hpp"
 
-bool InitFADT();
-
-bool FADT_DoesPS2ControllerExist();
-
-#endif /* _HAL_FADT_HPP */

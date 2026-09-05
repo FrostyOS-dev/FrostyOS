@@ -15,11 +15,28 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _HAL_FADT_HPP
-#define _HAL_FADT_HPP
+#ifndef _X86_64_8042_PS2_CONTROLLER_HPP
+#define _X86_64_8042_PS2_CONTROLLER_HPP
 
-bool InitFADT();
+#include <stdint.h>
 
-bool FADT_DoesPS2ControllerExist();
+struct x86_64_8042_Status_Register {
+    bool OutputBufferFull : 1;
+    bool InputBufferFull : 1;
+    bool SystemFlag : 1;
+    bool CommandData : 1;
+    bool Unknown1 : 1;
+    bool Unknown2 : 1;
+    bool TimeoutError : 1;
+    bool ParityError : 1;
+};
 
-#endif /* _HAL_FADT_HPP */
+x86_64_8042_Status_Register x86_64_8042_ReadStatusRegister();
+uint8_t x86_64_8042_ReadStatusRegister_Raw();
+
+void x86_64_8042_WriteCommand(uint8_t command);
+
+uint8_t x86_64_8042_ReadData();
+void x86_64_8042_WriteData(uint8_t data);
+
+#endif /* _X86_64_8042_PS2_CONTROLLER_HPP */

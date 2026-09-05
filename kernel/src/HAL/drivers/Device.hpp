@@ -15,11 +15,16 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _HAL_FADT_HPP
-#define _HAL_FADT_HPP
+#ifndef _DRIVERS_DEVICE_HPP
+#define _DRIVERS_DEVICE_HPP
 
-bool InitFADT();
+class Device {
+public:
+    Device() {}
+    virtual ~Device() {};
 
-bool FADT_DoesPS2ControllerExist();
+    virtual int Init() = 0;
+    virtual int Destroy() = 0;
+};
 
-#endif /* _HAL_FADT_HPP */
+#endif /* _DRIVERS_DEVICE_HPP */

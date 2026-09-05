@@ -80,6 +80,7 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PAT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Scheduling/Task.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Scheduling/TaskUtil.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/8042PS2Controller.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/APTrampoline.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/ArchDefs.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/CMOS.cpp
@@ -131,6 +132,8 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/MCFG.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/uACPIAPI.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/HPET.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Input/PS2/PS2Controller.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Input/PS2/PS2Keyboard.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/HAL.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/Time.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/Heap.cpp
