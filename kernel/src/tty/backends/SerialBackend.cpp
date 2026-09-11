@@ -1,0 +1,59 @@
+/*
+Copyright (©) 2026  Frosty515
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+#include "SerialBackend.hpp"
+
+#include "../TTYBackend.hpp"
+
+#include <HAL/drivers/SerialDevice.hpp>
+
+TTYBackendSerial::TTYBackendSerial() : TTYBackend(TTYBackendType::Serial), m_device(nullptr) {
+
+}
+
+TTYBackendSerial::TTYBackendSerial(SerialDevice* dev) : m_device(dev) {
+
+}
+
+char TTYBackendSerial::ReadChar() {
+    uint8_t byte = 0;
+    m_device->ReadByte(byte);
+    return static_cast<char>(byte);
+}
+
+void TTYBackendSerial::ReadString(char* str, uint64_t length) {
+    for (uint64_t i = 0; i < length; i++)
+        m_device->ReadByte(reinterpret_cast<uint8_t*>(str)[i]);
+}
+
+void TTYBackendSerial::WriteChar(char c) {
+    m_device->WriteByte(static_cast<uint8_t>(c));
+}
+
+void TTYBackendSerial::WriteString(const char* str) {
+    for (uint64_t i = 0; str[i] != 0; i++)
+        WriteChar(str[i]);
+}
+
+void TTYBackendSerial::WriteString(const char* str, uint64_t length, bool flush) {
+    for (uint64_t i = 0; i < length; i++)
+        WriteChar(str[i]);
+}
+
+void TTYBackendSerial::SetSerialDevice(SerialDevice* dev) {
+    m_device = dev;
+}

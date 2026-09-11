@@ -105,6 +105,7 @@ public:
     [[noreturn]] void Init(uint64_t stackTop) override;
     void Init(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical) override;
     void InitBSPLate() override;
+    void InitStage2() override;
 
     void FillCPUInfo();
 

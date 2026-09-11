@@ -37,6 +37,8 @@ public:
     // must be called after any APs are online
     virtual void InitBSPLate() = 0;
 
+    virtual void InitStage2() = 0; // arch-specific device init
+
     virtual void InitTime() = 0;
 
     virtual void Halt(bool wait = true) = 0;

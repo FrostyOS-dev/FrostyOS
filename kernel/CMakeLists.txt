@@ -95,6 +95,7 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/PIT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Processor.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Processor.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Serial.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Stack.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/start.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Syscall.asm
@@ -131,6 +132,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/MCFG.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/uACPIAPI.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/HPET.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/SerialDevice.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/HAL.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/Time.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/Heap.cpp
@@ -153,6 +155,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/SystemCall.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Time.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/DebugBackend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/SerialBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/VGABackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTYBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTY.cpp

@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "GDT.hpp"
 #include "MSR.h"
 #include "PIT.hpp"
+#include "Serial.hpp"
 #include "Syscall.hpp"
 #include "TSC.hpp"
 
@@ -153,6 +154,10 @@ void x86_64_Processor::InitBSPLate() {
 
     x86_64_IDT_SetISTS();
     assert(x86_64_InitSyscall());
+}
+
+void x86_64_Processor::InitStage2() {
+    x86_64_InitSerial();
 }
 
 void x86_64_Processor::InitTSS(Scheduler::ProcessorState* state) {
