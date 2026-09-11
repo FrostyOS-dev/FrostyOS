@@ -24,6 +24,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <spinlock.h>
 
+#include <Function.hpp>
+
 #include <Scheduling/Mutex.hpp>
 
 namespace LinkedList {
@@ -339,7 +341,15 @@ namespace LinkedList {
             m_count--;
         }
 
-        void Enumerate(bool (*func)(T* obj, void* data), void* data = nullptr) const {
+        void Enumerate(FunctionRef<bool(T* obj)> func) const {
+            Node* temp = m_start;
+            for (uint64_t i = 0; i < m_count; i++) {
+                func((T*)(temp->data));
+                temp = temp->next;
+            }
+        }
+
+        void Enumerate(FunctionRef<bool(T* obj, void* data)> func, void* data = nullptr) const {
             Node* temp = m_start;
             for (uint64_t i = 0; i < m_count; i++) {
                 func((T*)(temp->data), data);
@@ -347,7 +357,7 @@ namespace LinkedList {
             }
         }
 
-        void Enumerate(bool (*func)(T* obj, uint64_t index), uint64_t start = 0) const {
+        void Enumerate(FunctionRef<bool(T* obj, uint64_t index)> func, uint64_t start = 0) const {
             if (start >= m_count)
                 return;
             Node* temp = m_start;
@@ -360,7 +370,7 @@ namespace LinkedList {
             }
         }
 
-        void Enumerate(bool (*func)(T* obj, uint64_t index, void* data), uint64_t start = 0, void* data = nullptr) const {
+        void Enumerate(FunctionRef<bool(T* obj, uint64_t index, void* data)> func, uint64_t start = 0, void* data = nullptr) const {
             if (start >= m_count)
                 return;
             Node* temp = m_start;
@@ -373,7 +383,7 @@ namespace LinkedList {
             }
         }
 
-        void EnumerateReverse(bool (*func)(T* obj)) const {
+        void EnumerateReverse(FunctionRef<bool(T* obj)> func) const {
             Node* temp = m_end;
             for (uint64_t i = 0; i < m_count; i++) {
                 // if (temp == nullptr)
@@ -383,7 +393,7 @@ namespace LinkedList {
             }
         }
 
-        void EnumerateReverse(bool (*func)(T* obj, uint64_t index), uint64_t start = 0) const {
+        void EnumerateReverse(FunctionRef<bool(T* obj, uint64_t index)> func, uint64_t start = 0) const {
             Node* temp = m_end;
             for (uint64_t i = 0; i < start; i++) {
                 // if (temp == nullptr)
