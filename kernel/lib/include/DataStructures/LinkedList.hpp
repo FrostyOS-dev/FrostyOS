@@ -344,7 +344,8 @@ namespace LinkedList {
         void Enumerate(FunctionRef<bool(T* obj)> func) const {
             Node* temp = m_start;
             for (uint64_t i = 0; i < m_count; i++) {
-                func((T*)(temp->data));
+                if (!func((T*)(temp->data)))
+                    return;
                 temp = temp->next;
             }
         }
@@ -352,7 +353,8 @@ namespace LinkedList {
         void Enumerate(FunctionRef<bool(T* obj, void* data)> func, void* data = nullptr) const {
             Node* temp = m_start;
             for (uint64_t i = 0; i < m_count; i++) {
-                func((T*)(temp->data), data);
+                if (!func((T*)(temp->data), data))
+                    return;
                 temp = temp->next;
             }
         }
