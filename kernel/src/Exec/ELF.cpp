@@ -60,6 +60,7 @@ int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv6
 
     rc = ReadExact(vnode, &header, sizeof(Elf64_Ehdr), 0, cred);
     if (rc < 0) {
+        vnode->Unlock();
         FS::VFS_Close(vnode, cred);
         return rc;
     }
@@ -67,6 +68,7 @@ int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv6
     if (header.e_ident[EI_MAG0] != ELFMAG0 || header.e_ident[EI_MAG1] != ELFMAG1 || header.e_ident[EI_MAG2] != ELFMAG2 || header.e_ident[EI_MAG3] != ELFMAG3
         || header.e_ident[EI_CLASS] != ELFCLASS64 || header.e_ident[EI_DATA] != ELFDATA2LSB || header.e_ident[EI_OSABI] != ELFOSABI_SYSV
         || (header.e_type != ET_EXEC && header.e_type != ET_DYN) || header.e_machine != EM_X86_64 || header.e_phoff == 0 || header.e_phnum == 0) {
+        vnode->Unlock();
         FS::VFS_Close(vnode, cred);
         return -ENOEXEC;
     }
@@ -98,6 +100,7 @@ int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv6
         Elf64_Phdr phdr;
         rc = ReadExact(vnode, &phdr, sizeof(Elf64_Phdr), header.e_phoff + i * header.e_phentsize, cred);
         if (rc < 0) {
+            vnode->Unlock();
             FS::VFS_Close(vnode, cred);
             return rc;
         }
