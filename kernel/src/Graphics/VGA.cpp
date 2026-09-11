@@ -125,11 +125,13 @@ void VGA::PrintChar(char c) {
         m_cursorY = 0;
         break;
     default:
-        WriteCharToFrameBuffer(m_backBuffer, m_cursorX, m_cursorY, m_foregroundColour, m_backgroundColour, c);
-        m_cursorX += CHAR_WIDTH;
+        if (c >= ' ' && c < 0x7F) {
+            WriteCharToFrameBuffer(m_backBuffer, m_cursorX, m_cursorY, m_foregroundColour, m_backgroundColour, c);
+            m_cursorX += CHAR_WIDTH;
 
-        if (m_cursorX >= (m_numberOfColumns * CHAR_WIDTH))
-            NewLine();
+            if (m_cursorX >= (m_numberOfColumns * CHAR_WIDTH))
+                NewLine();
+        }
         break;
     }
 }
