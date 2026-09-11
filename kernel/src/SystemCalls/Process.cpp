@@ -202,7 +202,7 @@ int CopyArgEnvFromUser(const char** argv, const char** envv, uint64_t* kArgc, ch
     uint64_t maxEnvc = 8;
     while (true) {
         char* env;
-        if (!UserRead(&envv[argc], &env, sizeof(char*), currentProc)) {
+        if (!UserRead(&envv[envc], &env, sizeof(char*), currentProc)) {
             kfree(currentArgv);
             kfree(currentEnv);
             return -EFAULT;
