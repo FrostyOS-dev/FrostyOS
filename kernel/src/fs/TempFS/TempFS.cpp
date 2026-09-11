@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "TempFS.hpp"
+#include "Scheduling/Process.hpp"
 #include "TempFSPager.hpp"
 
 #include <errno.h>
@@ -366,12 +367,20 @@ namespace FS {
         return -ENOSYS;
     }
 
-    int TempFSVNode::Symlink() {
-        return -ENOSYS;
+    int TempFSVNode::Symlink(const char* path, size_t pathLen, Credential cred) {
+        m_linkDest = new char[pathLen + 1];
+        strncpy(m_linkDest, path, pathLen);
+        m_linkDest[pathLen] = '\0';
+        m_linkLen = pathLen;
+        return ESUCCESS;
     }
 
-    int TempFSVNode::ReadLink() {
-        return -ENOSYS;
+    int TempFSVNode::ReadLink(char* buffer, size_t size, Credential cred) {
+        if (size <= m_linkLen)
+            return -ENAMETOOLONG;
+        strncpy(buffer, m_linkDest, m_linkLen);
+        buffer[m_linkLen] = '\0';
+        return ESUCCESS;
     }
 
     int TempFSVNode::Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, Credential cred) {

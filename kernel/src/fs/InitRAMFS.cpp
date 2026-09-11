@@ -114,6 +114,35 @@ int LoadInitRAMFS(void* data, size_t size) {
             vnode->Unlock();
             break;
         }
+        case '2': { // Symlink
+            rc = FS::VFS_CreateSymlink(parent, name, header->linkedName, cwd, cred);
+            if (rc < 0)
+                break;
+
+            FS::VNode* vnode = nullptr;
+            FS::VFS* vfs = nullptr;
+            rc = FS::VFS_LookupPath(header->fileName, &vnode, &vfs, cwd, cred);
+            if (rc < 0)
+                break;
+
+            vnode->Lock();
+            FS::VAttr attr{};
+            rc = vnode->GetAttr(&attr);
+            if (rc < 0) {
+                vnode->Unlock();
+                break;
+            }
+
+            attr.mode = mode;
+            attr.uid = uid;
+            attr.gid = gid;
+            attr.atime = mtime;
+            attr.mtime = mtime;
+            attr.ctime = mtime;
+            rc = vnode->SetAttr(attr);
+            vnode->Unlock();
+            break;
+        }
         case '5': { // Folder
             rc = FS::VFS_CreateDir(parent, name, cwd, cred);
             if (rc < 0)

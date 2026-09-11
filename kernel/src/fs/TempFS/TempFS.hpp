@@ -69,8 +69,8 @@ namespace FS {
         virtual int Access() override;
         virtual int Link() override;
         virtual int Unlink() override;
-        virtual int Symlink() override;
-        virtual int ReadLink() override;
+        virtual int Symlink(const char* path, size_t pathLen, Credential cred) override;
+        virtual int ReadLink(char* buffer, size_t size, Credential cred) override;
         virtual int Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, Credential cred) override;
         virtual int Munmap() override;
         virtual int Resize() override;
@@ -90,6 +90,9 @@ namespace FS {
 
         char* m_name;
         size_t m_nameLen;
+
+        char* m_linkDest;
+        size_t m_linkLen;
 
         VMM::MemoryObject* m_memObj;
         VMM::Protection m_defaultProt;

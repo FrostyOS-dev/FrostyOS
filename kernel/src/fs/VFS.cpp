@@ -28,6 +28,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <SystemCalls/Memory.hpp>
 
+#define LINK_MAX 64
+
 namespace FS {
 
     VFS* g_rootVFS = nullptr;
@@ -132,7 +134,11 @@ namespace FS {
 
         VFS* currentVFS = g_rootVFS;
         VNode* currentVNode = g_rootVFS->GetRoot();
-        char const* currentPath = path;
+        VNode* parentDir = nullptr;
+        char pathBuffer[PATH_MAX + 1];
+        strcpy(pathBuffer, path);
+
+        char const* currentPath = pathBuffer;
 
         if (currentPath[0] != '/' && currentPath[0] != '\0') {
             if (cwd == nullptr)
@@ -145,13 +151,15 @@ namespace FS {
                 currentVNode = cwd;
             }
         } else if (currentPath[0] == '/')
-            currentPath = &path[1];
+            currentPath = &pathBuffer[1];
 
         if (currentPath[0] == '\0') {
             *vfs = currentVFS;
             *vnode = currentVNode;
             return ESUCCESS;
         }
+
+        int symlinkDepth = 0;
 
         char const* next = strchr(currentPath, '/');
         while (true) {
@@ -165,6 +173,48 @@ namespace FS {
                 currentPath++;
             if (currentPath[0] == '\0')
                 break;
+
+            if (currentVNode->GetType() == VType::LNK) {
+                symlinkDepth++;
+                if (symlinkDepth > LINK_MAX)
+                    return -ELOOP;
+
+                char target[NAME_MAX + 1];
+                int rc = currentVNode->ReadLink(target, sizeof(target), cred);
+                if (rc < 0)
+                    return rc;
+
+                const char* remainder = currentPath; // Unparsed remainder
+                size_t targetLen = strlen(target);
+                size_t remainderLen = strlen(remainder);
+
+                bool addSlash = (remainderLen > 0 && targetLen > 0 && target[targetLen - 1] != '/');
+                size_t prefixLen = targetLen + (addSlash ? 1 : 0);
+
+                if (prefixLen + remainderLen > PATH_MAX)
+                    return -ENAMETOOLONG;
+
+                // Shift the unparsed remainder to its new position
+                memmove(pathBuffer + prefixLen, remainder, remainderLen + 1);
+
+                memcpy(pathBuffer, target, targetLen);
+                if (addSlash)
+                    pathBuffer[targetLen] = '/';
+                
+                currentPath = pathBuffer;
+
+                if (currentPath[0] == '/') {
+                    // Absolute symlink, revert to root
+                    currentVFS = g_rootVFS;
+                    currentVNode = g_rootVFS->GetRoot();
+                    currentPath++; // Skip leading slash
+                } else // Relative symlink
+                    currentVNode = parentDir;
+
+                // Recalculate 'next' for the newly injected path and restart loop
+                next = strchr(currentPath, '/');
+                continue;
+            }
             if (next == nullptr) {
                 // last segment
                 size_t len = strlen(currentPath);
@@ -176,6 +226,7 @@ namespace FS {
                 int rc = currentVNode->Lookup(currentPath, len, &next, cred);
                 if (rc < 0)
                     return rc;
+                parentDir = currentVNode;
                 currentVNode = next;
                 currentVFS = currentVNode->GetVFS();
                 break;
@@ -199,6 +250,7 @@ namespace FS {
                 int rc = currentVNode->Lookup(currentPath, len, &nextVNode, cred);
                 if (rc < 0)
                     return rc;
+                parentDir = currentVNode;
                 currentVNode = nextVNode;
             }
 
@@ -321,6 +373,47 @@ namespace FS {
         if (rc >= 0)
             UnrefVNode(vnode);
         return rc;
+    }
+
+    int VFS_CreateSymlink(const char* path, const char* name, const char* dest, VNode* cwd, Credential cred) {
+        if (path == nullptr || name == nullptr)
+            return -EINVAL;
+
+        VNode* parent = nullptr;
+        VFS* vfs = nullptr;
+        int rc = VFS_LookupPath(path, &parent, &vfs, cwd, cred);
+        if (rc < 0)
+            return rc;
+
+        VNode* vnode = nullptr;
+        switch (vfs->GetType()) {
+        case FSType::TempFS:
+            vnode = new TempFSVNode(vfs);
+            break;
+        default:
+            return -ENOSYS;
+        }
+
+        size_t nameLen = strlen(name);
+        if (nameLen > NAME_MAX) {
+            delete vnode;
+            return -ENAMETOOLONG;
+        }
+        
+        VAttr attr = {VType::LNK, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, 0, 0, 0, 0};
+        rc = vnode->Create(parent, name, nameLen, &attr, cred);
+        if (rc < 0) {
+            delete vnode;
+            return rc;
+        }
+
+        rc = vnode->Symlink(dest, strlen(dest), cred);
+        if (rc < 0) {
+            delete vnode; // TODO: maybe more cleanup is required??
+            return rc;
+        }
+
+        return ESUCCESS;
     }
 
     int VFS_MapFile(void* hint, size_t length, VMM::Protection prot, int flags, bool user, VNode* vnode, uint64_t offset, void** addr, VMM::VMM* vmm, const Credential& cred) {
