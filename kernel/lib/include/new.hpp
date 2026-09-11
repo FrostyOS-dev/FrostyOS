@@ -20,12 +20,26 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stddef.h>
 
+namespace std {
+    enum class align_val_t : size_t {};
+}
+
 void* operator new(size_t size);
+void* operator new(size_t size, std::align_val_t alignment);
+
 void* operator new[](size_t size);
+void* operator new[](size_t size, std::align_val_t alignment);
 
 void operator delete(void* p);
+void operator delete(void* ptr, std::align_val_t alignment) noexcept;
+
 void operator delete(void* p, size_t size);
+void operator delete(void* ptr, size_t size, std::align_val_t alignment) noexcept;
+
 void operator delete[](void* p);
+void operator delete[](void* ptr, std::align_val_t alignment) noexcept;
+
 void operator delete[](void* p, size_t size);
+void operator delete[](void* ptr, size_t size, std::align_val_t alignment) noexcept;
 
 #endif /* _NEW_HPP */
