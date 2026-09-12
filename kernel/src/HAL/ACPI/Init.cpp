@@ -31,8 +31,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #pragma GCC diagnostic ignored "-Wpedantic"
 
 #include <uacpi/context.h>
-#include <uacpi/uacpi.h>
+#include <uacpi/event.h>
 #include <uacpi/status.h>
+#include <uacpi/uacpi.h>
+#include <uacpi/utilities.h>
 
 #pragma GCC diagnostic pop
 
@@ -103,8 +105,24 @@ namespace ACPI {
             PANIC("ACPI: Failed to initialize ACPI namespace");
         }
 
+#ifdef __x86_64__
+
+        rc = uacpi_set_interrupt_model(UACPI_INTERRUPT_MODEL_IOAPIC);
+        if (uacpi_unlikely_error(rc)) {
+            printf("Failed to set ACPI interrupt model\n");
+            PANIC("ACPI: Failed to set ACPI interrupt model");
+        }
+
+#endif /* __x86_64__ */
+
+        rc = uacpi_finalize_gpe_initialization();
+        if (uacpi_unlikely_error(rc)) {
+            printf("Failed to finalise ACPI GPE Initialisation\n");
+            PANIC("ACPI: Failed to finialise GPE Initialisation");
+        }
+
         printf("ACPI: Stage 2 init complete\n");
-#endif
+#endif /* UACPI_BAREBONES_MODE */
     }
 
     void* GetRSDP() {
