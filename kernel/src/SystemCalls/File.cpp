@@ -335,3 +335,56 @@ int sys_getcwd(char* buf, size_t size) {
 
     return ret ? ESUCCESS : -EFAULT;
 }
+
+int sys_symlink(const char* target, size_t targetLen, const char* linkPath, size_t linkLen) {
+    if (target == nullptr || targetLen == 0 || linkPath == nullptr || linkLen == 0)
+        return -EINVAL;
+
+    if (targetLen > PATH_MAX || linkLen > NAME_MAX)
+        return -ENAMETOOLONG;
+
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+
+    char* kTarget = new char[targetLen + 1];
+    char* kLinkPath = new char[linkLen + 1];
+    if (kTarget == nullptr || kLinkPath == nullptr) {
+        if (kTarget != nullptr)
+            delete[] kTarget;
+        if (kLinkPath != nullptr)
+            delete[] kLinkPath;
+        return -ENOMEM;
+    }
+
+    if (!UserRead(target, kTarget, targetLen, proc) || !UserRead(linkPath, kLinkPath, linkLen, proc)) {
+        delete[] kTarget;
+        delete[] kLinkPath;
+        return -EFAULT;
+    }
+
+    kTarget[targetLen] = 0;
+    kLinkPath[linkLen] = 0;
+
+    // Need to split the path
+    if (kLinkPath[linkLen - 1] == '/') {
+        delete[] kTarget;
+        delete[] kLinkPath;
+        return -EISDIR;
+    }
+    char* parent = kLinkPath;
+    char* name = strrchr(kLinkPath, '/');
+    if (name == nullptr) {
+        name = kLinkPath;
+        parent = (char*)"";
+    } else {
+        name[0] = 0;
+        name++;
+    }
+
+    int rc = FS::VFS_CreateSymlink(parent, name, kTarget, proc->GetCWD(), proc->GetCred());
+
+    delete[] kTarget;
+    delete[] kLinkPath;
+
+    return rc;
+}
