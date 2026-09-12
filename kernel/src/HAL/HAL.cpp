@@ -51,8 +51,6 @@ void HAL_GSIHandlerWrapper(x86_64_ISR_Frame* frame, void* ctx) {
         handler->handler(ctx);
 }
 
-#endif
-
 void* HAL_RegisterIntHandler(uint32_t GSI, GSIHandler_t handler, void* ctx) {
     HAL_IntHandlerData* data = new HAL_IntHandlerData{GSI, handler, ctx};
     if (x86_64_RegisterGSIHandler(GSI, HAL_GSIHandlerWrapper, data))
@@ -71,3 +69,5 @@ bool HAL_RemoveIntHandler(void* data) {
     }
     return false;
 }
+
+#endif
