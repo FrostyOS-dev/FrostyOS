@@ -112,6 +112,7 @@ public:
     void InitTime() override;
 
     void Halt(bool wait = true) override;
+    void HaltAllExclSelf(bool wait = true) override;
     void Yield(bool forceSwitch = false) override;
 
     // Next group of functions must be called with interrupts disabled

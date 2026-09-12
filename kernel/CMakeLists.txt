@@ -130,10 +130,12 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/Init.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/MADT.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/MCFG.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/Sleep.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/uACPIAPI.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/HPET.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/SerialDevice.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/HAL.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/Power.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/Time.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/Heap.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/Pager.cpp

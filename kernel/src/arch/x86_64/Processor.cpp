@@ -192,6 +192,13 @@ void x86_64_Processor::Halt(bool wait) {
     x86_64_LocalNMI::Raise(proc, this, x86_64_NMIType::HALT, nullptr, wait);
 }
 
+void x86_64_Processor::HaltAllExclSelf(bool wait) {
+    if (m_LAPIC != nullptr) { // If its null, then we just have to assume any other potential CPUs aren't running.
+        x86_64_GlobalNMI::ForceAllowRaise();
+        x86_64_GlobalNMI::Raise(m_LAPIC, x86_64_NMIType::HALT, nullptr, 0, true);
+    }
+}
+
 void x86_64_Processor::Yield(bool forceSwitch) {
     x86_64_Processor* proc = static_cast<x86_64_Processor*>(GetCurrentProcessor());
     if (this == proc)

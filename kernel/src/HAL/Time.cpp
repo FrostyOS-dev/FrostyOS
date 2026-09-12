@@ -74,7 +74,7 @@ void HAL_Sleep(uint64_t ms) {
     if (Scheduler::isRunning())
         Scheduler::SleepCurrentThread(ms);
     else
-        HAL_SleepNS(ms * 1'000'00);
+        HAL_SleepNS(ms * 1'000'000);
 }
 
 void HAL_SleepNS(uint64_t ns) {
