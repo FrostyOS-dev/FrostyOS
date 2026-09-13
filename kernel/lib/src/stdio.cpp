@@ -35,9 +35,8 @@ TTYStream FDToTTYStream(fd_t file) {
         case stdin:
             return TTYStream::IN;
         case stdout:
-            return TTYStream::OUT;
         case stderr:
-            return TTYStream::ERR;
+            return TTYStream::OUT;
         case stddebug:
             return TTYStream::DEBUG;
         default:
@@ -47,26 +46,22 @@ TTYStream FDToTTYStream(fd_t file) {
 
 int64_t internal_read(fd_t file, void* data, size_t size) {
     if (g_CurrentTTY != nullptr) {
-        TTYStream stream = FDToTTYStream(file);
-        if (stream != TTYStream::INVALID) {
-            for (size_t i = 0; i < size; i++)
-                ((char*)data)[i] = g_CurrentTTY->ReadChar(stream);
-            return size;
-        }
-        return -EBADF;
+        int rc = g_CurrentTTY->Read(static_cast<char*>(data), size);
+        if (rc < 0)
+            return rc;
     }
     return -ENOSYS;
 }
 
 int64_t internal_write(fd_t file, const void* data, size_t size) {
     if (g_CurrentTTY != nullptr) {
-        TTYStream stream = FDToTTYStream(file);
-        if (stream != TTYStream::INVALID) {
-            for (size_t i = 0; i < size; i++)
-                g_CurrentTTY->WriteChar(((char*)data)[i], stream);
-            return size;
-        }
-        return -EBADF;
+        int rc = 0;
+        if (file == stddebug)
+            rc = g_CurrentTTY->WriteDebug(static_cast<const char*>(data), size);
+        else
+            rc = g_CurrentTTY->Write(static_cast<const char*>(data), size);
+        if (rc < 0)
+            return rc;
     }
     return -ENOSYS;
 }
@@ -81,12 +76,8 @@ int internal_close(fd_t file) {
 
 long internal_seek(fd_t file, long offset) {
     if (g_CurrentTTY != nullptr) {
-        TTYStream stream = FDToTTYStream(file);
-        if (stream != TTYStream::INVALID) {
-            g_CurrentTTY->Seek(stream, offset);
-            return offset;
-        }
-        return -EBADF;
+        g_CurrentTTY->Seek(offset);
+        return offset;
     }
     return -ENOSYS;
 }
@@ -103,15 +94,9 @@ extern "C" int fgetc(const fd_t file) {
     return rc == EOF ? EOF : c;
 }
 
-void internal_swap_buffers(const fd_t file) {
-    if (g_CurrentTTY != nullptr) {
-        TTYStream stream = FDToTTYStream(file);
-        if (stream != TTYStream::INVALID) {
-            TTYBackend* backend = g_CurrentTTY->GetBackend(stream);
-            if (backend->GetType() == TTYBackendType::VGA)
-                ((TTYBackendVGA*)backend)->SwapBuffers();
-        }
-    }
+void internal_flush_output(const fd_t file) {
+    if (g_CurrentTTY != nullptr)
+        g_CurrentTTY->FlushOutput();
 }
 
 void internal_lock(const fd_t file) {
@@ -135,22 +120,22 @@ void stdio_force_unlock() {
         g_CurrentTTY->ForceUnlockAll();
 }
 
-void internal_fputc(const fd_t file, const char c, bool swap, bool lock) {
+void internal_fputc(const fd_t file, const char c, bool flush, bool lock) {
     if (lock)
         internal_lock(file);
     internal_write(file, &c, 1);
-    if (swap)
-        internal_swap_buffers(file);
+    if (flush)
+        internal_flush_output(file);
     if (lock)
         internal_unlock(file);
 }
 
-void internal_fputs(const fd_t file, const char* str, bool swap, bool lock) {
+void internal_fputs(const fd_t file, const char* str, bool flush, bool lock) {
     if (lock)
         internal_lock(file);
     internal_write(file, str, strlen(str));
-    if (swap)
-        internal_swap_buffers(file);
+    if (flush)
+        internal_flush_output(file);
     if (lock)
         internal_unlock(file);
 }
@@ -1369,7 +1354,7 @@ extern "C" int fprintf(const fd_t file, const char* format, ...) {
     va_start(args, format);
     int rc = vfprintf(file, format, args);
     va_end(args);
-    internal_swap_buffers(file);
+    internal_flush_output(file);
     return rc;
 }
 
@@ -1378,13 +1363,13 @@ extern "C" int printf(const char* format, ...) {
     va_start(args, format);
     int rc = vfprintf(stdout, format, args);
     va_end(args);
-    internal_swap_buffers(stdout);
+    internal_flush_output(stdout);
     return rc;
 }
 
 extern "C" int vprintf(const char* format, va_list args) {
     int rc = vfprintf(stdout, format, args);
-    internal_swap_buffers(stdout);
+    internal_flush_output(stdout);
     return rc;
 }
 
@@ -1431,7 +1416,7 @@ extern "C" size_t fwrite(const void* ptr, const size_t size, const size_t count,
             break;
     }
     if (blocks_written > 0)
-        internal_swap_buffers(file);
+        internal_flush_output(file);
 
     return blocks_written;
 }

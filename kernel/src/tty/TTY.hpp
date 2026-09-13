@@ -18,44 +18,106 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _TTY_HPP
 #define _TTY_HPP
 
+#include <stddef.h>
 #include <stdint.h>
+
+#include <HAL/drivers/Video/VideoDevice.hpp>
 
 #include "TTYBackend.hpp"
 
 #define DEBUG_MIRRORING_DEFAULT_ENABLED true
 
+#define ANSI_BUFFER_SIZE 64
+
+enum class TTYStream {
+    IN,
+    OUT,
+    DEBUG,
+    INVALID
+};
+
+enum class TTYType {
+    Graphical,
+    Serial,
+    Invalid
+};
+
 class TTY {
 public:
     TTY();
+    TTY(TTYType type);
+    virtual ~TTY();
 
-    void Init();
+    virtual void Init();
 
-    void WriteChar(char c, TTYStream stream = TTYStream::OUT);
-    void WriteString(const char* str, TTYStream stream = TTYStream::OUT);
-    void WriteString(const char* str, uint64_t length, TTYStream stream = TTYStream::OUT, bool flush = false);
+    int Read(char* buf, size_t size);
+    virtual int Write(const char* buf, size_t size, bool flush = false);
+    int WriteDebug(const char* buf, size_t size);
 
-    char ReadChar(TTYStream stream = TTYStream::IN);
-    void ReadString(char* str, uint64_t length, TTYStream stream = TTYStream::IN);
+    void SetCursor(uint64_t x, uint64_t y);
+    void GetCursor(uint64_t& x, uint64_t& y);
 
-    void SetCursor(uint64_t x, uint64_t y, TTYStream stream = TTYStream::OUT);
-    void GetCursor(uint64_t& x, uint64_t& y, TTYStream stream = TTYStream::OUT);
+    void SetInputBackend(TTYBackend* backend);
+    void SetOutputBackend(TTYBackend* backend);
+    void SetDebugBackend(TTYBackend* backend);
 
-    void SetBackend(TTYBackend* backend, TTYStream stream);
-    TTYBackend* GetBackend(TTYStream stream) const;
+    TTYBackend* GetInputBackend() const;
+    TTYBackend* GetOutputBackend() const;
+    TTYBackend* GetDebugBackend() const;
 
-    void Seek(TTYStream stream, uint64_t pos);
+    void Seek(uint64_t pos);
+    virtual uint64_t GetMaxSeek() const; // returns UINT64_MAX if unknown
+    virtual uint64_t GetCurrentSeek() const; // returns UINT64_MAX if unknown
+
+    void FlushOutput();
 
     void Lock(TTYStream stream) const;
     void Unlock(TTYStream stream) const;
     void ForceUnlockAll() const;
 
+    // Debug mirroring is for mirroring any writes to the debug backend. Reads are not mirrored.
     void EnableDebugMirroring();
     void DisableDebugMirroring();
     bool IsDebugMirroring() const;
 
-private:
-    TTYBackend* m_backends[4];
+    TTYType GetType() const;
+    void SetType(TTYType type);
+
+    static bool CanRead(TTYStream stream);
+    static bool CanWrite(TTYStream stream);
+
+protected:
+    TTYBackend* m_inputBackend;
+    TTYBackend* m_outputBackend;
+    TTYBackend* m_debugBackend;
     bool m_debugMirroring;
+
+private:
+    TTYType m_type;
+};
+
+class GraphicalTTY : public TTY {
+public:
+    GraphicalTTY();
+    GraphicalTTY(VideoDevice* video);
+    ~GraphicalTTY() override;
+
+    void Init() override;
+
+    int Write(const char* buf, size_t size, bool flush = false) override;
+
+    uint64_t GetMaxSeek() const override;
+    uint64_t GetCurrentSeek() const override;
+
+    void SetVideoDevice(VideoDevice* video);
+    VideoDevice* GetVideoDevice() const;
+
+private:
+    struct EscapeState {
+        bool inEscape;
+        char currentEscape[ANSI_BUFFER_SIZE];
+    } m_escapeState;
+    VideoDevice* m_video;
 };
 
 extern TTY* g_CurrentTTY;

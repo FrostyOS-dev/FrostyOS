@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,43 +20,51 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
-#include "Colour.hpp"
-#include "Framebuffer.hpp"
+#include <Graphics/Colour.hpp>
+#include <Graphics/Framebuffer.hpp>
 
-class VGA {
+#include "VideoDevice.hpp"
+
+class FBVideoDevice : public VideoDevice {
 public:
-    VGA();
-    VGA(FrameBuffer* framebuffer, Colour backgroundColour, Colour foregroundColour);
+    FBVideoDevice();
+    FBVideoDevice(FrameBuffer* framebuffer, Colour backgroundColour, Colour foregroundColour);
+    virtual ~FBVideoDevice() override;
 
-    void Init(FrameBuffer* framebuffer, Colour backgroundColour, Colour foregroundColour);
+    virtual int Init() override;
+    int Init(FrameBuffer* framebuffer, Colour backgroundColour, Colour foregroundColour);
+
+    virtual void ClearScreen() override;
+    virtual void ClearScreen(Colour colour) override;
 
     void PlotPixel(uint64_t x, uint64_t y, Colour colour);
-    void ClearScreen(Colour colour);
     void DrawRectangle(uint64_t x, uint64_t y, uint64_t width, uint64_t height, Colour colour);
     void DrawFilledRectangle(uint64_t x, uint64_t y, uint64_t width, uint64_t height, Colour colour);
 
     void SetFrameBuffer(FrameBuffer* framebuffer);
-    void SetBackgroundColour(Colour& colour);
-    void SetForegroundColour(Colour& colour);
+
+    virtual void SetBackgroundColour(Colour& colour) override;
+    virtual void SetForegroundColour(Colour& colour) override;
 
     FrameBuffer* GetFrameBuffer() const;
-    Colour GetBackgroundColour() const;
-    Colour GetForegroundColour() const;
 
-    void PrintChar(char c);
-    void PrintString(const char* str);
-    void PrintString(const char* str, uint64_t length);
+    virtual Colour GetBackgroundColour() const override;
+    virtual Colour GetForegroundColour() const override;
 
-    void Backspace();
-    void NewLine();
+    virtual void PrintChar(char c) override;
+    virtual void PrintString(const char* str) override;
+    virtual void PrintString(const char* str, uint64_t length) override;
 
-    void Scroll(uint64_t n);
+    virtual void Backspace() override;
+    virtual void NewLine() override;
+
+    virtual void Scroll(uint64_t n) override;
     
-    void SetCursor(uint64_t x, uint64_t y);
-    void GetCursor(uint64_t& x, uint64_t& y);
+    virtual void SetCursor(uint64_t x, uint64_t y) override;
+    virtual void GetCursor(uint64_t& x, uint64_t& y) override;
 
-    uint64_t GetNumberOfRows();
-    uint64_t GetNumberOfColumns();
+    virtual uint64_t GetNumberOfRows() override;
+    virtual uint64_t GetNumberOfColumns() override;
 
     void EnableDoubleBuffering(FrameBuffer* buffer);
     void DisableDoubleBuffering();

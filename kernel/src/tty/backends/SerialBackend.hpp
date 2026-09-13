@@ -28,11 +28,8 @@ public:
     TTYBackendSerial(SerialDevice* dev);
 
     char ReadChar() override;
-    void ReadString(char* str, uint64_t length) override;
 
     void WriteChar(char c) override;
-    void WriteString(const char* str) override;
-    void WriteString(const char* str, uint64_t length, bool flush) override;
 
     void SetSerialDevice(SerialDevice* dev);
 

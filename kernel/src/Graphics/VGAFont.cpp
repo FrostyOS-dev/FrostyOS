@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2022-2024  Frosty515
+Copyright (©) 2022-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -136,5 +136,7 @@ void WriteCharToFrameBuffer(FrameBuffer* fb, uint64_t x, uint64_t y, Colour& fg,
             else
                 WriteToFrameBuffer(fb, x + cx, y + cy, bg);
         }
+        for (int cx = 8; cx < CHAR_WIDTH; cx++) // character spacing
+            WriteToFrameBuffer(fb, x + cx, y + cy, bg);
     }
 }

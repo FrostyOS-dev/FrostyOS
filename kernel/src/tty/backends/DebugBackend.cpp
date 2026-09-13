@@ -26,12 +26,3 @@ TTYBackendDebug::TTYBackendDebug() : TTYBackend(TTYBackendType::Debug) {
 void TTYBackendDebug::WriteChar(char c) {
     debug_putc(c);
 }
-
-void TTYBackendDebug::WriteString(const char* str) {
-    debug_puts(str);
-}
-
-void TTYBackendDebug::WriteString(const char* str, uint64_t length, bool flush) {
-    for (uint64_t i = 0; i < length; i++)
-        debug_putc(str[i]);
-}

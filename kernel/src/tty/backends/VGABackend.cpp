@@ -16,9 +16,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "VGABackend.hpp"
-#include "Graphics/VGAFont.hpp"
 
-#include <Graphics/VGA.hpp>
+#include <Graphics/VGAFont.hpp>
+
+#include <HAL/drivers/Video/FBVideoDevice.hpp>
 
 #include <math.h>
 
@@ -26,30 +27,17 @@ TTYBackendVGA::TTYBackendVGA() : TTYBackend(TTYBackendType::VGA), m_vga(nullptr)
     
 }
 
-TTYBackendVGA::TTYBackendVGA(VGA* vga) : TTYBackend(TTYBackendType::VGA), m_vga(vga) {
+TTYBackendVGA::TTYBackendVGA(FBVideoDevice* vga) : TTYBackend(TTYBackendType::VGA), m_vga(vga) {
     
 }
 
-void TTYBackendVGA::Init(VGA* vga) {
+void TTYBackendVGA::Init(FBVideoDevice* vga) {
     m_vga = vga;
 }
 
 void TTYBackendVGA::WriteChar(char c) {
     if (m_vga != nullptr)
         m_vga->PrintChar(c);
-}
-
-void TTYBackendVGA::WriteString(const char* str) {
-    if (m_vga != nullptr)
-        m_vga->PrintString(str);
-}
-
-void TTYBackendVGA::WriteString(const char* str, uint64_t length, bool flush) {
-    if (m_vga != nullptr) {
-        m_vga->PrintString(str, length);
-        if (flush)
-            m_vga->SwapBuffers();
-    }
 }
 
 void TTYBackendVGA::SetCursor(uint64_t x, uint64_t y) {
@@ -71,6 +59,10 @@ void TTYBackendVGA::Seek(uint64_t pos) {
         uldiv_t div = uldiv(pos, m_vga->GetNumberOfColumns());
         m_vga->SetCursor(div.rem * CHAR_WIDTH, div.quot * CHAR_HEIGHT);
     }
+}
+
+void TTYBackendVGA::Flush() {
+    SwapBuffers();
 }
 
 void TTYBackendVGA::SwapBuffers() {

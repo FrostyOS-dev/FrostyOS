@@ -15,29 +15,29 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "Colour.hpp"
-#include "Framebuffer.hpp"
-#include "VGA.hpp"
-#include "VGAFont.hpp"
+#include "FBVideoDevice.hpp"
 
 #include <string.h>
 #include <util.h>
 
-VGA::VGA() : m_frontBuffer(nullptr), m_backBuffer(nullptr), m_backgroundColour(0, 0, 0), m_foregroundColour(255, 255, 255), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_doubleBufferingEnabled(false) {
+#include <Graphics/Colour.hpp>
+#include <Graphics/Framebuffer.hpp>
+#include <Graphics/VGAFont.hpp>
+
+FBVideoDevice::FBVideoDevice() : VideoDevice(), m_frontBuffer(nullptr), m_backBuffer(nullptr), m_backgroundColour(0, 0, 0), m_foregroundColour(255, 255, 255), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_doubleBufferingEnabled(false) {
 
 }
 
-VGA::VGA(FrameBuffer* framebuffer, Colour backgroundColour, Colour foregroundColour) : m_frontBuffer(framebuffer), m_backBuffer(framebuffer), m_backgroundColour(backgroundColour), m_foregroundColour(foregroundColour), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_doubleBufferingEnabled(false) {
+FBVideoDevice::FBVideoDevice(FrameBuffer* framebuffer, Colour backgroundColour, Colour foregroundColour) : VideoDevice(), m_frontBuffer(framebuffer), m_backBuffer(framebuffer), m_backgroundColour(backgroundColour), m_foregroundColour(foregroundColour), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_doubleBufferingEnabled(false) {
     m_numberOfRows = m_backBuffer->height / CHAR_HEIGHT;
     m_numberOfColumns = m_backBuffer->width / CHAR_WIDTH;
 }
 
-void VGA::Init(FrameBuffer* framebuffer, Colour backgroundColour, Colour foregroundColour) {
-    m_backBuffer = framebuffer;
-    m_frontBuffer = framebuffer;
-    m_backgroundColour = backgroundColour;
-    m_foregroundColour = foregroundColour;
+FBVideoDevice::~FBVideoDevice() {
 
+}
+
+int FBVideoDevice::Init() {
     m_numberOfRows = m_backBuffer->height / CHAR_HEIGHT;
     m_numberOfColumns = m_backBuffer->width / CHAR_WIDTH;
 
@@ -45,17 +45,31 @@ void VGA::Init(FrameBuffer* framebuffer, Colour backgroundColour, Colour foregro
     m_cursorY = 0;
 
     ClearScreen(m_backgroundColour);
+    return 0;
 }
 
-void VGA::PlotPixel(uint64_t x, uint64_t y, Colour colour) {
-    WriteToFrameBuffer(m_backBuffer, x, y, colour);
+int FBVideoDevice::Init(FrameBuffer* framebuffer, Colour backgroundColour, Colour foregroundColour) {
+    m_backBuffer = framebuffer;
+    m_frontBuffer = framebuffer;
+    m_backgroundColour = backgroundColour;
+    m_foregroundColour = foregroundColour;
+
+    return Init();
 }
 
-void VGA::ClearScreen(Colour colour) {
+void FBVideoDevice::ClearScreen() {
+    ClearFrameBuffer(m_backBuffer, m_backgroundColour);
+}
+
+void FBVideoDevice::ClearScreen(Colour colour) {
     ClearFrameBuffer(m_backBuffer, colour);
 }
 
-void VGA::DrawRectangle(uint64_t x, uint64_t y, uint64_t width, uint64_t height, Colour colour) {
+void FBVideoDevice::PlotPixel(uint64_t x, uint64_t y, Colour colour) {
+    WriteToFrameBuffer(m_backBuffer, x, y, colour);
+}
+
+void FBVideoDevice::DrawRectangle(uint64_t x, uint64_t y, uint64_t width, uint64_t height, Colour colour) {
     // Draw the top and bottom lines
     for (uint64_t i = x; i < x + width; i++) {
         PlotPixel(i, y, colour);
@@ -69,7 +83,7 @@ void VGA::DrawRectangle(uint64_t x, uint64_t y, uint64_t width, uint64_t height,
     }
 }
 
-void VGA::DrawFilledRectangle(uint64_t x, uint64_t y, uint64_t width, uint64_t height, Colour colour) {
+void FBVideoDevice::DrawFilledRectangle(uint64_t x, uint64_t y, uint64_t width, uint64_t height, Colour colour) {
     for (uint64_t i = x; i < x + width; i++) {
         for (uint64_t j = y; j < y + height; j++) {
             PlotPixel(i, j, colour);
@@ -77,31 +91,31 @@ void VGA::DrawFilledRectangle(uint64_t x, uint64_t y, uint64_t width, uint64_t h
     }
 }
 
-void VGA::SetFrameBuffer(FrameBuffer* framebuffer) {
+void FBVideoDevice::SetFrameBuffer(FrameBuffer* framebuffer) {
     m_backBuffer = framebuffer;
 }
 
-void VGA::SetBackgroundColour(Colour& colour) {
+void FBVideoDevice::SetBackgroundColour(Colour& colour) {
     m_backgroundColour = colour;
 }
 
-void VGA::SetForegroundColour(Colour& colour) {
+void FBVideoDevice::SetForegroundColour(Colour& colour) {
     m_foregroundColour = colour;
 }
 
-FrameBuffer* VGA::GetFrameBuffer() const {
+FrameBuffer* FBVideoDevice::GetFrameBuffer() const {
     return m_backBuffer;
 }
 
-Colour VGA::GetBackgroundColour() const {
+Colour FBVideoDevice::GetBackgroundColour() const {
     return m_backgroundColour;
 }
 
-Colour VGA::GetForegroundColour() const {
+Colour FBVideoDevice::GetForegroundColour() const {
     return m_foregroundColour;
 }
 
-void VGA::PrintChar(char c) {
+void FBVideoDevice::PrintChar(char c) {
     switch (c) {
     case '\n':
     case '\v':
@@ -136,19 +150,19 @@ void VGA::PrintChar(char c) {
     }
 }
 
-void VGA::PrintString(const char* str) {
+void FBVideoDevice::PrintString(const char* str) {
     for (uint64_t i = 0; str[i] != '\0'; i++) {
         PrintChar(str[i]);
     }
 }
 
-void VGA::PrintString(const char* str, uint64_t length) {
+void FBVideoDevice::PrintString(const char* str, uint64_t length) {
     for (uint64_t i = 0; i < length; i++) {
         PrintChar(str[i]);
     }
 }
 
-void VGA::Backspace() {
+void FBVideoDevice::Backspace() {
     if (m_cursorX == 0) {
         if (m_cursorY > 0) {
             m_cursorY -= CHAR_HEIGHT;
@@ -161,7 +175,7 @@ void VGA::Backspace() {
     DrawFilledRectangle(m_cursorX, m_cursorY, CHAR_WIDTH, CHAR_HEIGHT, m_backgroundColour);
 }
 
-void VGA::NewLine() {
+void FBVideoDevice::NewLine() {
     m_cursorX = 0;
     m_cursorY += CHAR_HEIGHT;
 
@@ -169,46 +183,46 @@ void VGA::NewLine() {
         Scroll(1);
 }
 
-void VGA::Scroll(uint64_t n) {
+void FBVideoDevice::Scroll(uint64_t n) {
     memcpy(m_backBuffer->BaseAddress, (void*)((uint64_t)m_backBuffer->BaseAddress + n * m_backBuffer->pitch * CHAR_HEIGHT), m_backBuffer->pitch * (m_backBuffer->height - n * CHAR_HEIGHT));
     DrawFilledRectangle(0, m_backBuffer->height - n * CHAR_HEIGHT, m_backBuffer->width, n * CHAR_HEIGHT, m_backgroundColour);
     m_cursorY -= n * CHAR_HEIGHT;
 }
 
-void VGA::SetCursor(uint64_t x, uint64_t y) {
+void FBVideoDevice::SetCursor(uint64_t x, uint64_t y) {
     m_cursorX = x;
     m_cursorY = y;
 }
 
-void VGA::GetCursor(uint64_t& x, uint64_t& y) {
+void FBVideoDevice::GetCursor(uint64_t& x, uint64_t& y) {
     x = m_cursorX;
     y = m_cursorY;
 }
 
-uint64_t VGA::GetNumberOfRows() {
+uint64_t FBVideoDevice::GetNumberOfRows() {
     return m_numberOfRows;
 }
 
-uint64_t VGA::GetNumberOfColumns() {
+uint64_t FBVideoDevice::GetNumberOfColumns() {
     return m_numberOfColumns;
 }
 
-void VGA::EnableDoubleBuffering(FrameBuffer* buffer) {
+void FBVideoDevice::EnableDoubleBuffering(FrameBuffer* buffer) {
     m_backBuffer = buffer;
     memcpy(m_backBuffer->BaseAddress, m_frontBuffer->BaseAddress, m_frontBuffer->pitch * m_frontBuffer->height);
     m_doubleBufferingEnabled = true;
 }
 
-void VGA::DisableDoubleBuffering() {
+void FBVideoDevice::DisableDoubleBuffering() {
     m_doubleBufferingEnabled = false;
     m_backBuffer = m_frontBuffer;
 }
 
-bool VGA::IsDoubleBufferingEnabled() {
+bool FBVideoDevice::IsDoubleBufferingEnabled() {
     return m_doubleBufferingEnabled;
 }
 
-void VGA::SwapBuffers() {
+void FBVideoDevice::SwapBuffers() {
     if (m_doubleBufferingEnabled)
         memcpy(m_frontBuffer->BaseAddress, m_backBuffer->BaseAddress, m_frontBuffer->pitch * m_frontBuffer->height);
 }

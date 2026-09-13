@@ -31,9 +31,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <fs/InitRAMFS.hpp>
 #include <fs/VFS.hpp>
 
-#include <Graphics/VGA.hpp>
-
 #include <HAL/HAL.hpp>
+
+#include <HAL/drivers/Video/FBVideoDevice.hpp>
 
 #include <Memory/VMM.hpp>
 
@@ -52,14 +52,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 KernelParams g_kernelParams;
 
-VGA g_KVGA;
+FBVideoDevice g_FBVideoDevice;
 Colour g_KBackgroundColour;
 Colour g_KForegroundColour;
 
 TTYBackendDebug g_KDebugBackend;
 TTYBackendVGA g_KVGABackend;
 
-TTY g_KTTY;
+GraphicalTTY g_KTTY;
 
 Credential KCred = {0, 0, 0, 0, 0, 0};
 
@@ -80,14 +80,14 @@ void StartKernel() {
     g_KBackgroundColour = Colour(0, 0, 0);
     g_KForegroundColour = Colour(255, 255, 255);
 
-    g_KVGA.Init(&g_kernelParams.framebuffer, g_KBackgroundColour, g_KForegroundColour);
+    g_FBVideoDevice.Init(&g_kernelParams.framebuffer, g_KBackgroundColour, g_KForegroundColour);
 
-    g_KVGABackend.Init(&g_KVGA);
+    g_KVGABackend.Init(&g_FBVideoDevice);
 
     g_KTTY.Init();
-    g_KTTY.SetBackend(&g_KVGABackend, TTYStream::OUT);
-    g_KTTY.SetBackend(&g_KVGABackend, TTYStream::ERR);
-    g_KTTY.SetBackend(&g_KDebugBackend, TTYStream::DEBUG);
+    g_KTTY.SetOutputBackend(&g_KVGABackend);
+    g_KTTY.SetDebugBackend(&g_KDebugBackend);
+    g_KTTY.SetVideoDevice(&g_FBVideoDevice);
 
     g_CurrentTTY = &g_KTTY;
 
@@ -98,7 +98,7 @@ void StartKernel() {
 
     memcpy(&g_KFramebuffer, &g_kernelParams.framebuffer, sizeof(FrameBuffer));
     g_KFramebuffer.BaseAddress = VMM::g_KVMM->AllocateAnonPages(DIV_ROUNDUP(g_KFramebuffer.pitch * g_KFramebuffer.height, PAGE_SIZE), {VMM::Protection::READ_WRITE, VMM::CacheType::DEFAULT, false, true, false, true, true, false});
-    g_KVGA.EnableDoubleBuffering(&g_KFramebuffer);
+    g_FBVideoDevice.EnableDoubleBuffering(&g_KFramebuffer);
 
     if (g_kernelParams.symbolTable != nullptr && g_kernelParams.symbolTableSize > 0) {
         SymbolTable* table = new SymbolTable();

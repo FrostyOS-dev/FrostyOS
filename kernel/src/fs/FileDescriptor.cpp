@@ -133,13 +133,13 @@ int FileDescriptor::Read(void* buf, size_t count, size_t* realCount) {
         break;
     }
     case FDType::TTY: {
-        if (m_tty == nullptr || m_ttyStream == TTYStream::INVALID) {
+        if (m_tty == nullptr || m_ttyStream == TTYStream::INVALID || !m_tty->CanRead(m_ttyStream)) {
             m_mutex.Unlock();
             return -EBADF;
         }
         // Ignore offset
         m_tty->Lock(m_ttyStream);
-        m_tty->ReadString(static_cast<char*>(buf), count, m_ttyStream);
+        m_tty->Read(static_cast<char*>(buf), count);
         m_tty->Unlock(m_ttyStream);
         *realCount = count;
         rc = ESUCCESS;
@@ -194,13 +194,16 @@ int FileDescriptor::Write(const void* buf, size_t count, size_t* realCount) {
         break;
     }
     case FDType::TTY: {
-        if (m_tty == nullptr || m_ttyStream == TTYStream::INVALID) {
+        if (m_tty == nullptr || m_ttyStream == TTYStream::INVALID || !m_tty->CanWrite(m_ttyStream)) {
             m_mutex.Unlock();
             return -EBADF;
         }
         // Ignore offset
         m_tty->Lock(m_ttyStream);
-        m_tty->WriteString(static_cast<const char*>(buf), count, m_ttyStream, true);
+        if (m_ttyStream == TTYStream::DEBUG)
+            m_tty->WriteDebug(static_cast<const char*>(buf), count);
+        else
+            m_tty->Write(static_cast<const char*>(buf), count, true);
         m_tty->Unlock(m_ttyStream);
         *realCount = count;
         rc = ESUCCESS;
@@ -229,6 +232,9 @@ int FileDescriptor::Seek(int64_t offset, FDOffsetStart whence, int64_t* realOffs
 
     int rc = -ENOSYS;
 
+    size_t endOffset = 0;
+    size_t currentOffset = 0;
+
     switch (m_type) {
     case FDType::File: {
         if (m_vnode == nullptr) {
@@ -241,47 +247,95 @@ int FileDescriptor::Seek(int64_t offset, FDOffsetStart whence, int64_t* realOffs
         m_vnode->Unlock();
         if (rc < 0)
             break;
-        size_t fileSize = attr.size;
-
-        switch (whence) {
-        case FDOffsetStart::START:
-            if (offset < 0 || (uint64_t)offset > fileSize) {
-                rc = -EINVAL;
-                break;
-            }
-            m_offset = offset;
-            *realOffset = offset;
-            rc = ESUCCESS;
-            break;
-        case FDOffsetStart::END:
-            if (offset > 0 || (uint64_t)(-offset) > fileSize) {
-                rc = -EINVAL;
-                break;
-            }
-            m_offset = fileSize + offset;
-            *realOffset = m_offset;
-            rc = ESUCCESS;
-            break;
-        case FDOffsetStart::CURRENT: {
-            if ((offset < 0 && (uint64_t)(-offset) > m_offset) || (offset > 0 && (m_offset + offset) > fileSize)) {
-                rc = -EINVAL;
-                break;
-            }
-            m_offset += offset;
-            *realOffset = m_offset;
-            rc = ESUCCESS;
-            break;
-        }
-        }
+        endOffset = attr.size;
+        currentOffset = m_offset;
         break;
     }
-    case FDType::TTY:
-        rc = ESUCCESS; // ignore seek on TTYs
+    case FDType::TTY: {
+        if (m_tty == nullptr) {
+            rc = -EBADF;
+            break;
+        }
+        endOffset = m_tty->GetMaxSeek();
+        currentOffset = m_tty->GetCurrentSeek();
+        rc = 0;
         break;
+    }
     case FDType::Directory: {
         rc = -EBADF;
         break;
     }
+    }
+
+    if (rc < 0) {
+        m_mutex.Unlock();
+        return rc;
+    }
+
+    uint64_t newOffset = 0;
+
+    switch (whence) {
+    case FDOffsetStart::START:
+        if (offset < 0 || (uint64_t)offset > endOffset) {
+            rc = -EINVAL;
+            break;
+        }
+        newOffset = offset;
+        break;
+    case FDOffsetStart::END:
+        if (endOffset == UINT64_MAX)
+            break; // just ignore it
+        if (offset > 0 || (uint64_t)(-offset) > endOffset) {
+            rc = -EINVAL;
+            break;
+        }
+        newOffset = endOffset - offset;
+        break;
+    case FDOffsetStart::CURRENT:
+        if (currentOffset == UINT64_MAX)
+            break; // ignore it
+        if ((offset < 0 && (uint64_t)(-offset) > currentOffset) || (offset > 0 && (currentOffset + offset) > endOffset)) {
+            rc = -EINVAL;
+            break;
+        }
+        newOffset = currentOffset + offset;
+        break;
+    default:
+        rc = -EINVAL;
+        break;
+    }
+
+    if (rc < 0) {
+        m_mutex.Unlock();
+        return rc;
+    }
+
+    if (currentOffset != newOffset) {
+        switch (m_type) {
+        case FDType::File: {
+            if (m_vnode == nullptr) {
+                rc = -EBADF;
+                break;
+            }
+            m_offset = newOffset;
+            *realOffset = m_offset;
+            rc = ESUCCESS;
+            break;
+        }
+        case FDType::TTY:
+            if (m_tty == nullptr) {
+                m_mutex.Unlock();
+                return -EBADF;
+            }
+            m_tty->Seek(newOffset);
+            *realOffset = newOffset;
+            rc = ESUCCESS;
+            break;
+        case FDType::Directory: {
+            rc = -EBADF;
+            break;
+        }
+        }
     }
 
     m_mutex.Unlock();

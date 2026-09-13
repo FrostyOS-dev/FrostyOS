@@ -277,7 +277,7 @@ int x86_64_InitSerial() {
 
      if (g_defaultSerialDevice != nullptr) {
         TTYBackendSerial* serialBackend = new TTYBackendSerial(g_defaultSerialDevice);
-        g_CurrentTTY->SetBackend(serialBackend, TTYStream::IN);
+        g_CurrentTTY->SetInputBackend(serialBackend);
     }
 
     return ESUCCESS;

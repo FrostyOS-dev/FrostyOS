@@ -20,27 +20,27 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "../TTYBackend.hpp"
 
-#include <Graphics/VGA.hpp>
+#include <HAL/drivers/Video/FBVideoDevice.hpp>
 
 class TTYBackendVGA : public TTYBackend {
 public:
     TTYBackendVGA();
-    TTYBackendVGA(VGA* vga);
+    TTYBackendVGA(FBVideoDevice* vga);
 
-    void Init(VGA* vga);
+    void Init(FBVideoDevice* vga);
 
     void WriteChar(char c) override;
-    void WriteString(const char* str) override;
-    void WriteString(const char* str, uint64_t length, bool flush) override;
 
     void SetCursor(uint64_t x, uint64_t y) override;
     void GetCursor(uint64_t& x, uint64_t& y) override;
 
     void Seek(uint64_t pos) override;
 
+    void Flush() override;
+
     void SwapBuffers();
 private:
-    VGA* m_vga;
+    FBVideoDevice* m_vga;
 };
 
 #endif /* _TTY_BACKEND_VGA_HPP */

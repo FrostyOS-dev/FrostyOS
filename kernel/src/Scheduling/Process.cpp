@@ -94,7 +94,7 @@ bool Process::Create(bool initAlloc) {
         }
         FileDescriptor* in = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYStream::IN);
         FileDescriptor* out = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYStream::OUT);
-        FileDescriptor* err = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYStream::ERR);
+        FileDescriptor* err = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYStream::OUT);
         FileDescriptor* debug = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYStream::DEBUG);
         if (in == nullptr || out == nullptr || err == nullptr || debug == nullptr) {
             delete in;

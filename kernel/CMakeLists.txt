@@ -123,7 +123,6 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/fs/VFS.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Colour.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Framebuffer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGA.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/VGAFont.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/FADT.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/HPET.cpp
@@ -132,6 +131,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/MCFG.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/Sleep.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/uACPIAPI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/FBVideoDevice.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/HPET.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/SerialDevice.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/HAL.cpp

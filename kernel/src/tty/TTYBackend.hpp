@@ -28,30 +28,20 @@ enum class TTYBackendType {
     INVALID
 };
 
-enum class TTYStream {
-    IN,
-    OUT,
-    ERR,
-    DEBUG,
-    INVALID
-};
-
 class TTYBackend {
 public:
     TTYBackend();
     TTYBackend(TTYBackendType type);
 
-    virtual void WriteChar(char c);
-    virtual void WriteString(const char* str);
-    virtual void WriteString(const char* str, uint64_t length, bool flush);
-
     virtual char ReadChar();
-    virtual void ReadString(char* str, uint64_t length);
+    virtual void WriteChar(char c);
 
     virtual void SetCursor(uint64_t x, uint64_t y);
     virtual void GetCursor(uint64_t& x, uint64_t& y);
 
     virtual void Seek(uint64_t pos);
+
+    virtual void Flush();
 
     TTYBackendType GetType() const;
 

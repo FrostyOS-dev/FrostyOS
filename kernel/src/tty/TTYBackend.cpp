@@ -30,23 +30,11 @@ TTYBackend::TTYBackend(TTYBackendType type) : m_type(type) {
 }
 
 void TTYBackend::WriteChar(char c) {
-    
-}
-
-void TTYBackend::WriteString(const char* str) {
-    
-}
-
-void TTYBackend::WriteString(const char* str, uint64_t length, bool flush) {
-    
+    (void)c;
 }
 
 char TTYBackend::ReadChar() {
     return '\0';
-}
-
-void TTYBackend::ReadString(char* str, uint64_t length) {
-    
 }
 
 void TTYBackend::SetCursor(uint64_t x, uint64_t y) {
@@ -58,6 +46,10 @@ void TTYBackend::GetCursor(uint64_t& x, uint64_t& y) {
 }
 
 void TTYBackend::Seek(uint64_t pos) {
+    
+}
+
+void TTYBackend::Flush() {
     
 }
 

@@ -35,23 +35,8 @@ char TTYBackendSerial::ReadChar() {
     return static_cast<char>(byte);
 }
 
-void TTYBackendSerial::ReadString(char* str, uint64_t length) {
-    for (uint64_t i = 0; i < length; i++)
-        m_device->ReadByte(reinterpret_cast<uint8_t*>(str)[i]);
-}
-
 void TTYBackendSerial::WriteChar(char c) {
     m_device->WriteByte(static_cast<uint8_t>(c));
-}
-
-void TTYBackendSerial::WriteString(const char* str) {
-    for (uint64_t i = 0; str[i] != 0; i++)
-        WriteChar(str[i]);
-}
-
-void TTYBackendSerial::WriteString(const char* str, uint64_t length, bool flush) {
-    for (uint64_t i = 0; i < length; i++)
-        WriteChar(str[i]);
 }
 
 void TTYBackendSerial::SetSerialDevice(SerialDevice* dev) {
