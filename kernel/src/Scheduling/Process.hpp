@@ -18,12 +18,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _PROCESS_HPP
 #define _PROCESS_HPP
 
+#include <spinlock.h>
 #include <stdint.h>
 
 #include <DataStructures/AVLTree.hpp>
 #include <DataStructures/LinkedList.hpp>
 
 #include <Memory/VMM.hpp>
+
+#include <SystemCalls/Signal.hpp>
 
 #include "Thread.hpp"
 #include "ThreadList.hpp"
@@ -94,6 +97,17 @@ public:
 
     AVLTree::wAVLTree<uint64_t, FutexWaitQueue*>& GetFutextList();
 
+    int SetSignalAction(int signal, sigaction_t* newAct, sigaction_t* oldAct);
+    int RaiseSignal(int signal);
+
+    // Following functions are intended for use by the Thread signal methods
+
+    sigset_t& GetPendingSignals();
+    sigaction_t* GetSignalAction(int signal);
+
+    void AcquireSignalLock(); // uses a spinlock, but does NOT disable interrupts
+    void ReleaseSignalLock();
+
 private:
     ProcessMode m_Mode;
     VMM::VMM* m_VMM;
@@ -107,6 +121,10 @@ private:
     FileDescriptorManager* m_FDManager;
     FS::VNode* m_cwd;
     AVLTree::wAVLTree<uint64_t, FutexWaitQueue*> m_futexList;
+    
+    sigaction_t m_sigActions[NSIG];
+    sigset_t m_pendingSignals;
+    spinlock_t m_signalLock;
 };
 
 extern Process* g_KProcess;

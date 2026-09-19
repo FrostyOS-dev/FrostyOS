@@ -110,6 +110,12 @@ Thread* ThreadList::getTail() const {
     return m_Tail;
 }
 
+Thread* ThreadList::getNext(Thread* current) {
+    if (current == nullptr)
+        return nullptr;
+    return GetDataFromThread(current).next;
+}
+
 uint64_t ThreadList::getCount() const {
     return m_Count;
 }

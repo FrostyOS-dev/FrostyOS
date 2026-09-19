@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Futex.hpp"
 #include "Memory.hpp"
 #include "Process.hpp"
+#include "Signal.hpp"
 #include "SystemCall.hpp"
 #include "Time.hpp"
 

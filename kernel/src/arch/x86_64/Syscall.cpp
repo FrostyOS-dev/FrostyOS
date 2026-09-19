@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "MSR.h"
 #include "Syscall.hpp"
 
+#include <assert.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -36,7 +37,17 @@ extern "C" uint64_t x86_64_SyscallHandler(uint64_t num, uint64_t a, uint64_t b, 
 
     // Processor::EnableInterrupts();
 
-    return HandleSystemCall(num, a, b, c, d, e);
+    uint64_t rc = HandleSystemCall(num, a, b, c, d, e);
+    Processor::DisableInterrupts();
+    x86_64_Registers* regs = &currentThread->GetMutableRegisters();
+    regs->RAX = rc;
+
+    int ret = currentThread->DispatchSignals(regs, currentThread->GetExtraContext());
+    assert(ret >= 0);
+    if (ret > 0) // signal ready to be handled
+        Scheduler::RunThread(currentThread, false, true); // syscall return clobbers registers, so need to properly context switch
+
+    return rc;
 }
 
 bool x86_64_InitSyscall() {

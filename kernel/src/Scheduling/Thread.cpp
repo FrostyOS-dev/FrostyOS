@@ -18,8 +18,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Process.hpp"
 #include "Scheduler.hpp"
 #include "Thread.hpp"
+#include "SystemCalls/Signal.hpp"
 #include "ThreadList.hpp"
+#include "arch/x86_64/Scheduling/TaskUtil.hpp"
 
+#include <errno.h>
 #include <spinlock.h>
 #include <string.h>
 #include <util.h>
@@ -32,7 +35,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <SystemCalls/Futex.hpp>
 
-Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true, -1) {
+Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true, false, -1) {
     sleepRemainingTime = 0;
     yieldCallback = {nullptr, nullptr};
     m_InSchedList = false;
@@ -40,7 +43,7 @@ Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UI
 
 }
 
-Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true, -1) {
+Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true, false, -1) {
     sleepRemainingTime = 0;
     yieldCallback = {nullptr, nullptr};
 
@@ -96,7 +99,7 @@ bool Thread::ExitCurrentThread(bool deleteThis, bool deleteParent, bool removePr
         return false;
     // Clear any pending yield callback to prevent use-after-free when thread is deleted
     thread->yieldCallback = {};
-    thread->m_deleteProp = {deleteThis, deleteParent, removeProc, exitIntState};
+    thread->m_deleteProp = {deleteThis, deleteParent, removeProc, true, exitIntState};
     Scheduler::ProcessorState* state = GetCurrentProcessorState();
     Processor::SwapStack(Thread_ExitHelper, thread, state->kernelStack);
     return false;
@@ -251,6 +254,10 @@ bool Thread::ShouldRemoveProc() const {
     return m_deleteProp.removeProc;
 }
 
+bool Thread::PendingDelete() const {
+    return m_deleteProp.pendingDelete;
+}
+
 int64_t Thread::GetIntState() const {
     return m_deleteProp.intState;
 }
@@ -288,6 +295,251 @@ bool Thread::Fork(Thread* other, uint64_t newReturnValue) {
     Processor::ForkRegisters(&m_Registers, &other->m_Registers, 0, pageMapper->GetPageTable());
 
     return true;
+}
+
+int Thread::RaiseSignal(int signal) {
+    if (signal == 0 || signal >= NSIG)
+        return -EINVAL;
+
+    assert(m_Parent != nullptr);
+    int state = Processor::DisableInterrupts();
+    m_Parent->AcquireSignalLock();
+    spinlock_acquire(&m_signalLock);
+
+    sigset_t* set = &m_pendingSignals;
+    SIGNAL_SET(set, signal);
+
+    sigaction_t* act = m_Parent->GetSignalAction(signal);
+    void* addr = act->address;
+    bool notIgnored = addr != SIG_IGN && ((addr == SIG_DFL && g_signalDefaultActions[signal] != SIGACTION_IGN) || addr != SIG_DFL);
+
+    if (signal == SIGKILL || signal == SIGSTOP || (SIGNAL_GET(&m_blockedSignals, signal) == 0 && notIgnored)) {
+        // signal must be issued immediately
+        if (m_IsSleeping) {
+            m_IsSleeping = false;
+            sleepRemainingTime = 0;
+            Scheduler::AddExistingThread(this);
+        } else if (blockedFutex != nullptr)
+            blockedFutex->Remove(this, FutexWakeReason::Interrupted);
+    } else if (!notIgnored) {
+        // ignored, doesn't need to be pending anymore
+        SIGNAL_CLEAR(set, signal);
+    }
+
+    spinlock_release(&m_signalLock);
+    m_Parent->ReleaseSignalLock();
+    Processor::EnableInterrupts(state);
+    return 0;
+}
+
+int Thread::CheckSignals() {
+    if (m_inSignalHandler)
+        return 0; // Prevent signal nesting
+
+    int state = Processor::DisableInterrupts();
+
+    int signum = 0;
+    sigset_t pending;
+    GetPendingSignals(&pending); // Uses locks internally
+
+    for (int i = 1; i < NSIG; i++) {
+        if (SIGNAL_GET(&m_blockedSignals, i) == 0 && SIGNAL_GET(&pending, i) > 0) {
+            signum = i;
+
+            // Clear from thread or process pending mask
+            AcquireSignalLock();
+            if (SIGNAL_GET(&m_pendingSignals, i) > 0)
+                SIGNAL_CLEAR(&m_pendingSignals, i);
+            else {
+                m_Parent->AcquireSignalLock();
+                SIGNAL_CLEAR(&m_Parent->GetPendingSignals(), i);
+                m_Parent->ReleaseSignalLock();
+            }
+            ReleaseSignalLock();
+            break;
+        }
+    }
+
+    Processor::EnableInterrupts(state);
+
+    if (signum == 0)
+        return 0;
+
+    sigaction_t act = *m_Parent->GetSignalAction(signum);
+    void* handler = act.address;
+
+    if (handler == SIG_IGN)
+        return 0;
+
+    if (handler == SIG_DFL) {
+        int defAct = g_signalDefaultActions[signum];
+        if (defAct == SIGACTION_TERM || defAct == SIGACTION_CORE)
+            ExitCurrentThread(true, m_Parent->GetMainThread() == this, true);
+        return 0;
+    }
+
+    return signum; // returns postitive integer to indicate a signal frame needs to be built
+}
+
+int Thread::DispatchSignals(CPU_Registers* regs, CPU_ExtraContext* extra) {
+    if (regs == nullptr || extra == nullptr || m_Parent == nullptr)
+        return -EINVAL;
+
+    // CheckSignals returns the signal number if a user handler needs to be invoked
+    int signum = CheckSignals();
+    if (signum <= 0)
+        return 0; // no userspace frame needs to be built
+
+    sigaction_t* act = m_Parent->GetSignalAction(signum);
+    if (act == nullptr)
+        return -EINVAL;
+
+    sigset_t oldBlocked = m_blockedSignals;
+    sigset_t newBlocked = m_blockedSignals;
+
+    // Apply action's specific mask to the thread while running the handler
+    for (int i = 1; i < NSIG; i++) {
+        if (SIGNAL_GET(&act->mask, i) > 0)
+            SIGNAL_SET(&newBlocked, i);
+    }
+
+    // Block the current signal during execution unless SA_NODEFER is specified
+    if ((act->flags & SA_NODEFER) == 0)
+        SIGNAL_SET(&newBlocked, signum);
+
+    int rc = -ENOSYS;
+
+#ifdef __x86_64__
+    rc = x86_64_SetupSignalFrame(m_Parent, regs, extra, act, &oldBlocked, signum);
+#endif /* __x86_64__ */
+
+    if (rc == 0) {
+        // Safely apply new mask
+        ChangeSignalMask(SIG_SETMASK, &newBlocked, nullptr);
+
+        m_inSignalHandler = true; // no nesting of signals
+
+        // Reset signal action to default if requested
+        if ((act->flags & SA_RESETHAND) > 0) {
+            sigaction_t defAct;
+            memset(&defAct, 0, sizeof(sigaction_t));
+            defAct.address = SIG_DFL;
+
+            m_Parent->SetSignalAction(signum, &defAct, nullptr);
+        }
+    } else {
+        // Frame setup failed, force SIGSEGV
+        sigaction_t defAct;
+        memset(&defAct, 0, sizeof(sigaction_t));
+        defAct.address = SIG_DFL;
+        m_Parent->SetSignalAction(SIGSEGV, &defAct, nullptr);
+        RaiseSignal(SIGSEGV);
+    }
+
+    return signum;
+}
+
+int Thread::RestoreSignalContext(CPU_Registers* regs, CPU_ExtraContext* extra) {
+    if (regs == nullptr || extra == nullptr)
+        return -EINVAL;
+
+    if (!m_inSignalHandler) // ensure we are actually returning from a handler
+        return -EPERM;
+
+    sigset_t restoredMask;
+    int rc = -ENOSYS;
+
+#ifdef __x86_64__
+    rc = x86_64_RestoreSignalFrame(m_Parent, regs, extra, &restoredMask, regs->RSP);
+#endif /* __x86_64__ */
+
+    if (rc == 0) {
+        ChangeSignalMask(SIG_SETMASK, &restoredMask, nullptr); // restore mask
+
+        m_inSignalHandler = false; // allow new signals
+    } else { // Failed to restore, force terminate the process with SIGSEGV
+        sigaction_t defAct;
+        memset(&defAct, 0, sizeof(sigaction_t));
+        defAct.address = SIG_DFL;
+        m_Parent->SetSignalAction(SIGSEGV, &defAct, nullptr);
+        RaiseSignal(SIGSEGV);
+    }
+
+    dbgprintf("Returning from signal\n");
+
+    return rc;
+}
+
+void Thread::ChangeSignalMask(int how, sigset_t* newSet, sigset_t* oldSet) {
+    int state = Processor::DisableInterrupts();
+    spinlock_acquire(&m_signalLock);
+
+    if (oldSet != nullptr)
+        *oldSet = m_blockedSignals;
+
+    if (newSet != nullptr) {
+        switch (how) {
+        case SIG_BLOCK:
+        case SIG_UNBLOCK: {
+            for (int i = 1; i < NSIG; i++) {
+                if (SIGNAL_GET(newSet, i) == 0)
+                    continue;
+
+                if (how == SIG_BLOCK && SIGNAL_GET(&m_blockedSignals, i) == 0)
+                    SIGNAL_SET(&m_blockedSignals, i);
+                else if (how == SIG_UNBLOCK && SIGNAL_GET(&m_blockedSignals, i) > 0)
+                    SIGNAL_CLEAR(&m_blockedSignals, i);
+            }
+            break;
+        }
+        case SIG_SETMASK: {
+            m_blockedSignals = *newSet;
+            break;
+        }
+        }
+    }
+
+    spinlock_release(&m_signalLock);
+    Processor::EnableInterrupts(state);
+}
+
+void Thread::GetPendingSignals(sigset_t* set) {
+    assert(m_Parent != nullptr);
+    int state = Processor::DisableInterrupts();
+    m_Parent->AcquireSignalLock();
+    spinlock_acquire(&m_signalLock);
+
+    sigset_t& parentPending = m_Parent->GetPendingSignals();
+
+    memset(set, 0, sizeof(sigset_t));
+
+    for (int i = 1; i < NSIG; i++) {
+        if (SIGNAL_GET(&parentPending, i) > 0)
+            SIGNAL_SET(set, i);
+
+        if (SIGNAL_GET(&m_pendingSignals, i) > 0)
+            SIGNAL_SET(set, i);
+    }
+
+    spinlock_release(&m_signalLock);
+    m_Parent->ReleaseSignalLock();
+    Processor::EnableInterrupts(state);
+}
+
+sigset_t& Thread::GetBlockedSignals() {
+    return m_blockedSignals;
+}
+
+sigset_t& Thread::GetPendingSignals() {
+    return m_pendingSignals;
+}
+
+void Thread::AcquireSignalLock() {
+    spinlock_acquire(&m_signalLock);
+}
+
+void Thread::ReleaseSignalLock() {
+    spinlock_release(&m_signalLock);
 }
 
 [[noreturn]] void Thread_ExitHelper(void* data) {

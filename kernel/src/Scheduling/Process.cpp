@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Thread.hpp"
 #include "ThreadList.hpp"
 
+#include <errno.h>
 #include <stdint.h>
 #include <spinlock.h>
 
@@ -32,6 +33,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Memory/PageMapper.hpp>
 #include <Memory/VMM.hpp>
 #include <Memory/VMRegionAllocator.hpp>
+
+#include <SystemCalls/Signal.hpp>
 
 #include <tty/TTYBackend.hpp>
 #include <tty/TTY.hpp>
@@ -294,6 +297,117 @@ bool Process::Fork(Process* other, uint64_t newMainReturn) {
 
 AVLTree::wAVLTree<uint64_t, FutexWaitQueue*>& Process::GetFutextList() {
     return m_futexList;
+}
+
+int Process::SetSignalAction(int signal, sigaction_t* newAct, sigaction_t* oldAct) {
+    if (signal <= 0 || signal >= NSIG)
+        return -EINVAL;
+
+    int state = Processor::DisableInterrupts();
+    AcquireSignalLock();
+
+    if (oldAct != nullptr)
+        *oldAct = m_sigActions[signal];
+
+    if (newAct != nullptr)
+        m_sigActions[signal] = *newAct;
+
+    ReleaseSignalLock();
+    Processor::EnableInterrupts(state);
+
+    return ESUCCESS;
+}
+
+int Process::RaiseSignal(int signal) {
+    if (signal <= 0 || signal >= NSIG)
+        return -EINVAL;
+
+    int state = Processor::DisableInterrupts();
+    AcquireSignalLock();
+
+    void* addr = m_sigActions[signal].address;
+    bool notIgnored = addr != SIG_IGN && ((addr == SIG_DFL && g_signalDefaultActions[signal] != SIGACTION_IGN) || addr != SIG_DFL);
+    bool notIgnorable = signal == SIGKILL || signal == SIGSTOP || signal == SIGCONT;
+    bool continued = false;
+    bool isDefaultAct = addr == SIG_DFL;
+    bool shouldStop = (isDefaultAct && g_signalDefaultActions[signal] == SIGACTION_STOP) || signal == SIGSTOP;
+
+    m_Threads.lock();
+    Thread* thread = m_MainThread;
+
+    while (thread != nullptr) {
+        if (thread->PendingDelete()) {
+            if (thread == m_MainThread)
+                thread = m_Threads.getHead();
+            else
+                thread = m_Threads.getNext(thread);
+            continue;
+        }
+
+        thread->AcquireSignalLock();
+
+        sigset_t& blocked = thread->GetBlockedSignals();
+        sigset_t& pending = thread->GetPendingSignals();
+
+        if (SIGNAL_GET(&blocked, signal) == 0 || notIgnorable) {
+            SIGNAL_SET(&pending, signal);
+            if (notIgnored || notIgnorable) {
+                // wake-up, including stopped check for SIGCONT
+            }
+
+            if (!(shouldStop || signal == SIGCONT)) { // stopping or continuing, possible race prevention
+                m_Threads.unlock();
+                thread->ReleaseSignalLock();
+                spinlock_release(&m_signalLock);
+                Processor::EnableInterrupts(state);
+                return 0;
+            }
+        }
+
+        thread->ReleaseSignalLock();
+
+        if (thread == m_MainThread)
+            thread = m_Threads.getHead();
+        else
+            thread = m_Threads.getNext(thread);
+    }
+
+    // TODO: no threads have it unmasked, check for threads waiting for the signal
+
+    m_Threads.unlock();
+
+    if (!notIgnorable && !(continued || shouldStop)) // no thread has it unmasked, so set it as pending for the whole process
+        SIGNAL_SET(&m_pendingSignals, signal);
+
+    spinlock_release(&m_signalLock);
+    Processor::EnableInterrupts(state);
+
+    // tell the parent when a child stopped
+    if ((notIgnorable || notIgnored) && g_signalDefaultActions[signal] == SIGACTION_STOP) {
+        // TODO: proc status
+
+        Process* parent = Scheduler::GetProcess(m_PPID);
+        if (parent != nullptr && (parent->m_sigActions[SIGCHLD].flags & SA_NOCLDSTOP) == 0)
+            parent->RaiseSignal(SIGCHLD);
+    }
+
+    return 0;
+}
+
+sigset_t& Process::GetPendingSignals() {
+    return m_pendingSignals;
+}
+
+sigaction_t* Process::GetSignalAction(int signal) {
+    return &m_sigActions[signal];
+}
+
+void Process::AcquireSignalLock() {
+    spinlock_acquire(&m_signalLock);
+}
+
+void Process::ReleaseSignalLock() {
+    spinlock_release(&m_signalLock);
 }
 
 

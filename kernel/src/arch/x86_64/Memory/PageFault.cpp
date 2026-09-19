@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Scheduling/Process.hpp>
 #include <Scheduling/Scheduler.hpp>
 
+#include "../GDT.hpp"
 #include "../Panic.hpp"
 
 bool inPageFault = false;
@@ -39,10 +40,10 @@ void x86_64_PageFaultHandler(x86_64_ISR_Frame* frame) {
 
     if (!code.reservedWrite) {
         Process* process = nullptr;
+        Thread* thread = nullptr;
         if (Scheduler::isRunning()) {
-            Scheduler::ProcessorState* currentState = GetCurrentProcessorState();
-            if (currentState != nullptr && currentState->currentThread != nullptr)
-                process = currentState->currentThread->GetParent();
+            thread = Thread::GetCurrentThread();
+            process = thread != nullptr ? thread->GetParent() : nullptr;
         }
         else
             process = g_KProcess;
@@ -54,6 +55,8 @@ void x86_64_PageFaultHandler(x86_64_ISR_Frame* frame) {
             else
                 vmm = process->GetVMM();
             if (vmm != nullptr && vmm->HandlePageFault({code.present, code.write, code.user, code.execute}, frame->CR2))
+                return;
+            if (frame->CS != x86_64_GDT_KERNEL_CODE_SEGMENT && process->GetMode() == ProcessMode::USER && 0 == thread->RaiseSignal(SIGSEGV))
                 return;
         }
     }

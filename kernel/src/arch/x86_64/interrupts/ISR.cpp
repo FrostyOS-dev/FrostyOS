@@ -19,9 +19,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "IDT.hpp"
 #include "NMI.hpp"
 
+#include "../GDT.hpp"
 #include "../Panic.hpp"
 
 #include "../Memory/PageFault.hpp"
+
+#include <Scheduling/Scheduler.hpp>
+
+#include <SystemCalls/SystemCall.hpp>
 
 const char* g_Exceptions[32] = {
     "Divide by zero",
@@ -57,6 +62,8 @@ const char* g_Exceptions[32] = {
     "Security Exception",
     "Reserved"
 };
+
+#define IS_USER_EXCEPT(i) ((i) == 0 || (i) == 1 || ((i) >= 3 && (i) <= 6) || ((i) >= 13 && (i) <= 14) || (i) == 16 || (i) == 19)
 
 void x86_64_ISR_SetIDTHandlers();
 
@@ -103,12 +110,58 @@ void x86_64_ISR_RegisterHandler(uint8_t vector, x86_64_ISRHandler_t handler) {
 bool in_exception = false;
 
 extern "C" void x86_64_ISR_Handler(x86_64_ISR_Frame* frame) {
-    if (g_ISR_Handlers[frame->INT] != nullptr)
-        return g_ISR_Handlers[frame->INT](frame);
+    bool success = false;
 
-    if (frame->INT == 0xE)
-        return x86_64_PageFaultHandler(frame);
-    else if (frame->INT == 2 && x86_64_HandleNMI(frame))
+    if (g_ISR_Handlers[frame->INT] != nullptr) {
+        g_ISR_Handlers[frame->INT](frame);
+        success = true;
+    }
+
+    if (frame->INT == 0xE) {
+        x86_64_PageFaultHandler(frame);
+        success = true;
+    } else if (frame->INT == 2 && x86_64_HandleNMI(frame))
+        success = true;
+
+    if (frame->CS != x86_64_GDT_KERNEL_CODE_SEGMENT) {
+        Thread* thread = Thread::GetCurrentThread();
+        Process* proc = thread != nullptr ? thread->GetParent() : nullptr;
+        if (proc != nullptr && proc->GetMode() == ProcessMode::USER) {
+            if (!success && IS_USER_EXCEPT(frame->INT)) {
+                int signal = -1;
+                switch (frame->INT) {
+                case 0:
+                case 4:
+                case 5:
+                case 16:
+                case 19:
+                    signal = SIGFPE;
+                    break;
+                case 1:
+                case 3:
+                    signal = SIGTRAP;
+                    break;
+                case 6:
+                    signal = SIGILL;
+                    break;
+                case 13:
+                    signal = SIGSEGV;
+                    break;
+                }
+                if (signal > 0 && 0 == thread->RaiseSignal(signal))
+                    success = true;
+            }
+            if (success) {
+                Scheduler::SaveThreadFromINT(thread, frame);
+                int rc = thread->DispatchSignals(&thread->GetMutableRegisters(), thread->GetExtraContext());
+                assert(rc >= 0);
+                if (rc > 0)
+                    Scheduler::RunThread(thread, true, true);
+            }
+        }
+    }
+
+    if (success)
         return;
 
     if (in_exception) {

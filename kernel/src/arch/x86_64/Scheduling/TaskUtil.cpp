@@ -18,18 +18,27 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Task.hpp"
 #include "TaskUtil.hpp"
 
+#include "../ArchDefs.h"
 #include "../GDT.hpp"
 #include "../MSR.h"
+#include "../Processor.hpp"
 
 #include "../Memory/PageMapper.hpp"
 #include "../Memory/PagingInit.hpp"
 
+#include <errno.h>
 #include <string.h>
+#include <util.h>
+
+#include <HAL/Processor.hpp>
 
 #include <Memory/PageMapper.hpp>
 #include <Memory/PagingUtil.hpp>
 
 #include <Scheduling/Scheduler.hpp>
+
+#include <SystemCalls/Signal.hpp>
+#include <SystemCalls/SystemCall.hpp>
 
 void x86_64_CopyToISRFrame(const x86_64_Registers* regs, x86_64_ISR_Frame* frame) {
     frame->RAX = regs->RAX;
@@ -133,6 +142,75 @@ uint64_t x86_64_GetGSBase() {
 
 uint64_t x86_64_GetKernelGSBase() {
     return x86_64_ReadMSR(MSR_KERNEL_GS_BASE);
+}
+
+int x86_64_SetupSignalFrame(Process* proc, x86_64_Registers* regs, x86_64_ExtraContext* extra, const sigaction_t* act, const sigset_t* blocked, int signum) {
+    if (regs == nullptr || proc == nullptr)
+        return -ENOSYS;
+
+    x86_64_Processor* processor = static_cast<x86_64_Processor*>(GetCurrentProcessor());
+    size_t SIMDSize = processor->GetCPUInfo()->SIMDInfo.XSAVESize;
+
+    // Subtract 128-byte red zone
+    uint64_t rsp = regs->RSP - 128;
+
+    rsp -= sizeof(x86_64_SignalFrame);
+    rsp -= SIMDSize;
+    rsp = ALIGN_DOWN_BASE2(rsp, 8);
+    if ((rsp & 8) == 0)
+        rsp -= 8;
+
+    // Validate writing to the user stack
+    VMM::VMM* vmm = proc->GetVMM();
+    if (vmm == nullptr)
+        return -ENOSYS;
+
+    if (!vmm->ValidateWrite(reinterpret_cast<void*>(rsp), sizeof(x86_64_SignalFrame) + SIMDSize))
+        return -EFAULT;
+
+    x86_64_SignalFrame* frame = static_cast<x86_64_SignalFrame*>(__builtin_alloca(sizeof(x86_64_SignalFrame) + SIMDSize)); // build in kernel memory, copy to user later
+
+    frame->restorer = reinterpret_cast<uint64_t>(act->restorer);
+    memcpy(&frame->blockedSignals, blocked, sizeof(sigset_t));
+    memcpy(&frame->regs, regs, sizeof(x86_64_Registers));
+
+    regs->RIP = reinterpret_cast<uint64_t>(act->address);
+    regs->RSP = rsp;
+    regs->RDI = signum; // 1st argument: signal number
+
+    regs->RFLAGS &= ~(1UL << 10); // clear direction flag
+
+    regs->CS = x86_64_GDT_USER_CODE_SEGMENT | 3;
+    regs->SS = x86_64_GDT_USER_DATA_SEGMENT | 3;
+
+    memcpy(reinterpret_cast<void*>((reinterpret_cast<uint64_t>(frame) + sizeof(x86_64_SignalFrame))), extra->SIMDSaveRegion, SIMDSize);
+
+    if (!UserWrite(reinterpret_cast<void*>(rsp), frame, sizeof(x86_64_SignalFrame) + SIMDSize, proc, false))
+        return -EFAULT;
+
+    return ESUCCESS;
+}
+
+int x86_64_RestoreSignalFrame(Process* proc, x86_64_Registers* regs, x86_64_ExtraContext* extra, sigset_t* blocked, uint64_t userFrameAddr) {
+    if (regs == nullptr || userFrameAddr == 0)
+        return -EINVAL;
+
+    x86_64_Processor* processor = static_cast<x86_64_Processor*>(GetCurrentProcessor());
+    size_t SIMDSize = processor->GetCPUInfo()->SIMDInfo.XSAVESize;
+
+    x86_64_SignalFrame* frame = static_cast<x86_64_SignalFrame*>(__builtin_alloca(sizeof(x86_64_SignalFrame) + SIMDSize));
+
+    if (!UserRead(reinterpret_cast<void*>(userFrameAddr), frame, sizeof(x86_64_SignalFrame) + SIMDSize, proc))
+        return -EFAULT;
+
+    memcpy(regs, &frame->regs, sizeof(x86_64_Registers));
+    memcpy(extra->SIMDSaveRegion, reinterpret_cast<void*>((reinterpret_cast<uint64_t>(frame) + sizeof(x86_64_SignalFrame))), SIMDSize);
+    memcpy(blocked, &frame->blockedSignals, sizeof(sigset_t));
+
+    regs->CS = x86_64_GDT_USER_CODE_SEGMENT | 3;
+    regs->SS = x86_64_GDT_USER_DATA_SEGMENT | 3;
+
+    return ESUCCESS;
 }
 
 // from Scheduling/Scheduler.hpp

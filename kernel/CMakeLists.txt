@@ -154,6 +154,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Futex.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Memory.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Process.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Signal.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/SystemCall.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Time.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/DebugBackend.cpp

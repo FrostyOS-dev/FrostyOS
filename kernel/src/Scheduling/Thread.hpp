@@ -18,9 +18,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _THREAD_HPP
 #define _THREAD_HPP
 
+#include <spinlock.h>
 #include <stdint.h>
 
 #include <HAL/HAL.hpp>
+
+#include <SystemCalls/Signal.hpp>
 
 #include "ThreadList.hpp"
 
@@ -112,9 +115,23 @@ public:
     bool ShouldDelete() const;
     bool ShouldDeleteParent() const;
     bool ShouldRemoveProc() const;
+    bool PendingDelete() const;
     int64_t GetIntState() const;
 
     bool Fork(Thread* other, uint64_t newReturnValue);
+
+    int RaiseSignal(int signal);
+    int CheckSignals();
+    int DispatchSignals(CPU_Registers* regs, CPU_ExtraContext* extra); // returns 0 when no signal is to be dispatched, signum when there is.
+    int RestoreSignalContext(CPU_Registers* regs, CPU_ExtraContext* extra);
+    void ChangeSignalMask(int how, sigset_t* newSet, sigset_t* oldSet);
+    void GetPendingSignals(sigset_t* set);
+
+    sigset_t& GetBlockedSignals();
+    sigset_t& GetPendingSignals();
+
+    void AcquireSignalLock(); // uses a spinlock, but does NOT disable interrupts
+    void ReleaseSignalLock();
 
     uint64_t sleepRemainingTime;
     YieldCallback yieldCallback;
@@ -143,8 +160,14 @@ private:
         bool deleteThis;
         bool deleteParent;
         bool removeProc;
+        bool pendingDelete;
         int64_t intState;
     } m_deleteProp;
+
+    sigset_t m_blockedSignals;
+    sigset_t m_pendingSignals;
+    bool m_inSignalHandler;
+    spinlock_t m_signalLock;
 };
 
 [[noreturn]] void Thread_ExitHelper(void* data);

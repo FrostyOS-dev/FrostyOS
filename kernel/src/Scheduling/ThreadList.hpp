@@ -48,6 +48,7 @@ public:
 
     Thread* getHead() const;
     Thread* getTail() const;
+    Thread* getNext(Thread* current);
 
     uint64_t getCount() const;
 

@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Thread.hpp"
 #include "ThreadList.hpp"
 
+#include <assert.h>
 #include <spinlock.h>
 #include <string.h>
 
@@ -58,15 +59,18 @@ namespace Scheduler {
     ThreadList g_deadThreads;
     Semaphore g_deadThreadsSemaphore(0, 1);
 
-    // private functions
-
-    [[noreturn]] void RunThread(Thread* thread, bool interrupt) {
+    [[noreturn]] void RunThread(Thread* thread, bool interrupt, bool noSignals) {
         ProcessorState* state = GetCurrentProcessorState();
         Process* parent = thread->GetParent();
-#ifdef __x86_64__
         if (parent != nullptr && parent->GetMode() == ProcessMode::USER) {
+            if (!noSignals) {
+                int rc = thread->DispatchSignals(&thread->GetMutableRegisters(), thread->GetExtraContext());
+                assert(rc >= 0);
+            }
+            
             state->processor->SwitchKernelStack(thread->GetKernelStack());
             state->processor->RestoreExtraContext(thread->GetExtraContext());
+#ifdef __x86_64__
             x86_64_SwitchTask(&thread->GetRegisters());
         } else if (interrupt)
             x86_64_SwitchTask(&thread->GetRegisters());
@@ -78,14 +82,12 @@ namespace Scheduler {
     void SaveThreadFromINT(Thread* thread, void* data) {
         ProcessorState* state = GetCurrentProcessorState();
         Process* parent = thread->GetParent();
-#ifdef __x86_64__
         if (parent != nullptr && parent->GetMode() == ProcessMode::USER)
             state->processor->SaveExtraContext(thread->GetExtraContext());
+#ifdef __x86_64__
         x86_64_CopyFromISRFrame((x86_64_ISR_Frame*)data, &(thread->GetMutableRegisters()));
 #endif
     }
-
-    // public functions
 
 
     void AddProcessor(ProcessorState* processor) {

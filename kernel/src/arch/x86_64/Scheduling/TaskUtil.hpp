@@ -44,4 +44,13 @@ uint64_t x86_64_GetFSBase();
 uint64_t x86_64_GetGSBase();
 uint64_t x86_64_GetKernelGSBase();
 
+struct alignas(16) x86_64_SignalFrame {
+    uint64_t restorer;
+    x86_64_Registers regs;
+    sigset_t blockedSignals;
+};
+
+int x86_64_SetupSignalFrame(Process* proc, x86_64_Registers* regs, x86_64_ExtraContext* extra, const sigaction_t* act, const sigset_t* blocked, int signum);
+int x86_64_RestoreSignalFrame(Process* proc, x86_64_Registers* regs, x86_64_ExtraContext* extra, sigset_t* blocked, uint64_t userFrameAddr);
+
 #endif /* _x86_64_TASK_UTIL_HPP */

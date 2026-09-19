@@ -56,6 +56,10 @@ namespace Scheduler {
     };
 
     extern ProcessorState g_BSPState;
+
+    
+    [[noreturn]] void RunThread(Thread* thread, bool interrupt, bool noSignals = false); // Interrupts must be disabled when this function is called
+    void SaveThreadFromINT(Thread* thread, void* data);
     
     
     void AddProcessor(ProcessorState* processor);
