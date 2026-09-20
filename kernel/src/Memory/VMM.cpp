@@ -884,7 +884,7 @@ namespace VMM {
 
             MapEntry* entry = reinterpret_cast<MapEntry*>(node->value);
             Protection prot = entry->flags.protection;
-            if (virtAddr < entry->startVirt || (user && !entry->flags.user) || (static_cast<uint8_t>(prot) & static_cast<uint8_t>(Protection::READ)) == 0) {
+            if (virtAddr < entry->startVirt || virtAddr > entry->endVirt || (user && !entry->flags.user) || (static_cast<uint8_t>(prot) & static_cast<uint8_t>(Protection::READ)) == 0) {
                 m_mapEntries.unlock();
                 return false;
             }
@@ -913,7 +913,7 @@ namespace VMM {
 
             MapEntry* entry = reinterpret_cast<MapEntry*>(node->value);
             Protection prot = entry->flags.protection;
-            if (virtAddr < entry->startVirt || (user && !entry->flags.user) || (static_cast<uint8_t>(prot) & static_cast<uint8_t>(Protection::WRITE)) == 0) {
+            if (virtAddr < entry->startVirt || virtAddr > entry->endVirt || (user && !entry->flags.user) || (static_cast<uint8_t>(prot) & static_cast<uint8_t>(Protection::WRITE)) == 0) {
                 m_mapEntries.unlock();
                 return false;
             }
