@@ -465,8 +465,6 @@ int Thread::RestoreSignalContext(CPU_Registers* regs, CPU_ExtraContext* extra) {
         RaiseSignal(SIGSEGV);
     }
 
-    dbgprintf("Returning from signal\n");
-
     return rc;
 }
 
