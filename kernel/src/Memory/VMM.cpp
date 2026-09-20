@@ -617,6 +617,8 @@ namespace VMM {
                 anon = (Anon*)kcalloc_vmm(1, sizeof(Anon));
                 anon->refCount = 1;
                 anon->physAddr = (uint64_t)g_PMM->AllocatePage();
+                if (entry->flags.zero)
+                    memset((void*)to_HHDM(anon->physAddr), 0, PAGE_SIZE);
                 m_pageMapper->MapPage(entry->startVirt + i * PAGE_SIZE, anon->physAddr, entry->flags.protection, entry->flags.user, entry->flags.cacheType);
                 map->slots[i] = anon;
             }
