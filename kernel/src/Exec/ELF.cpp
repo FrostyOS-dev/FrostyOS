@@ -167,13 +167,10 @@ int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv6
                 phdr.p_filesz -= firstPageCount;
                 phdr.p_offset += firstPageCount;
 
-                size_t remaining = PAGE_SIZE - (phdr.p_vaddr % PAGE_SIZE);
+                size_t pageOffset = phdr.p_vaddr % PAGE_SIZE;
+                size_t remaining = pageOffset == 0 ? 0 : PAGE_SIZE - pageOffset;
                 if (remaining > 0 && phdr.p_memsz > 0) {
                     size_t remMSize = MIN(phdr.p_memsz, remaining);
-                    size_t pageDiff = ALIGN_UP(phdr.p_vaddr, PAGE_SIZE) - phdr.p_memsz;
-                    if (remMSize > pageDiff)
-                        remMSize = pageDiff;
-
                     phdr.p_memsz -= remMSize;
                     phdr.p_vaddr += remMSize;
                 }
@@ -221,6 +218,8 @@ int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv6
                     FS::VFS_Close(vnode, cred);
                     return rc;
                 }
+
+                memset((void*)(phdr.p_vaddr + lastPageCount), 0, PAGE_SIZE - lastPageCount);
 
                 if (!vmm->RemapPages((void*)phdr.p_vaddr, 0, prot, true, VMM::CacheType::DEFAULT)) {
                     vnode->Unlock();
@@ -295,7 +294,7 @@ void* PrepareELFStack(void* stackTop, auxv64list_t* auxv64, char** argv, char** 
     // Ensure the stack is aligned
     uint8_t align = (argc + envc + 3) & 1 ? 8 : 0;
 
-    size_t size = argDataSize + envDataSize + pathSize + (argc + envc) * sizeof(char*) + sizeof(size_t) + sizeof(auxv64list_t) + align + STACK_TOP_BUFFER;
+    size_t size = argDataSize + envDataSize + pathSize + (argc + envc + 2) * sizeof(char*) + sizeof(size_t) + sizeof(auxv64list_t) + align + STACK_TOP_BUFFER;
     void* base = (void*)((uint64_t)stackTop - size);
     if (!vmm->MapPages(ALIGN_DOWN_ADDRESS(base, PAGE_SIZE), DIV_ROUNDUP(size, PAGE_SIZE)))
         return nullptr;
