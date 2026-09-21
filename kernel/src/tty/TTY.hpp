@@ -50,7 +50,8 @@ public:
 
     virtual void Init();
 
-    int Read(char* buf, size_t size);
+    int Read(char* buf, size_t size, size_t* realCount = 0); // Only blocks for the first character, and reads any waiting to be read
+    int ReadBlock(char* buf, size_t size);
     virtual int Write(const char* buf, size_t size, bool flush = false);
     int WriteDebug(const char* buf, size_t size);
 

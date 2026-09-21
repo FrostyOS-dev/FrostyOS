@@ -55,7 +55,23 @@ void TTY::Init() {
     
 }
 
-int TTY::Read(char* buf, size_t size) {
+int TTY::Read(char* buf, size_t size, size_t* realCount) {
+    if (m_inputBackend == nullptr)
+        return -ENODEV;
+    size_t i = 0;
+    buf[i] = m_inputBackend->ReadChar();
+    for (i = 1; i < size; i++) {
+        char c = 0;
+        bool rc = m_inputBackend->ReadCharNoBlock(&c);
+        if (!rc)
+            break;
+        buf[i] = c;
+    }
+    *realCount = i;
+    return 0;
+}
+
+int TTY::ReadBlock(char* buf, size_t size) {
     if (m_inputBackend == nullptr)
         return -ENODEV;
     for (size_t i = 0; i < size; i++)

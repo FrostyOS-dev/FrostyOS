@@ -37,6 +37,10 @@ char TTYBackend::ReadChar() {
     return '\0';
 }
 
+bool TTYBackend::ReadCharNoBlock(char* out) {
+    return false;
+}
+
 void TTYBackend::SetCursor(uint64_t x, uint64_t y) {
     
 }

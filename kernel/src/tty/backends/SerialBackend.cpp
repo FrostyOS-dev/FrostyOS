@@ -35,6 +35,14 @@ char TTYBackendSerial::ReadChar() {
     return static_cast<char>(byte);
 }
 
+bool TTYBackendSerial::ReadCharNoBlock(char* out) {
+    uint8_t byte = 0;
+    if (!m_device->ReadByte(byte, false))
+        return false;
+    *out = byte;
+    return true;
+}
+
 void TTYBackendSerial::WriteChar(char c) {
     m_device->WriteByte(static_cast<uint8_t>(c));
 }

@@ -137,11 +137,11 @@ int FileDescriptor::Read(void* buf, size_t count, size_t* realCount) {
             m_mutex.Unlock();
             return -EBADF;
         }
-        // Ignore offset
+        size_t bytesRead = 0;
         m_tty->Lock(m_ttyStream);
-        m_tty->Read(static_cast<char*>(buf), count);
+        m_tty->Read(static_cast<char*>(buf), count, &bytesRead);
         m_tty->Unlock(m_ttyStream);
-        *realCount = count;
+        *realCount = bytesRead;
         rc = ESUCCESS;
         break;
     }

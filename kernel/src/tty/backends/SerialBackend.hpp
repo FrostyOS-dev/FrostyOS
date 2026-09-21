@@ -28,6 +28,7 @@ public:
     TTYBackendSerial(SerialDevice* dev);
 
     char ReadChar() override;
+    bool ReadCharNoBlock(char* out) override;
 
     void WriteChar(char c) override;
 

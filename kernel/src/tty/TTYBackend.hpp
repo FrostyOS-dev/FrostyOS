@@ -34,6 +34,7 @@ public:
     TTYBackend(TTYBackendType type);
 
     virtual char ReadChar();
+    virtual bool ReadCharNoBlock(char* out); // returns false if a character is not available
     virtual void WriteChar(char c);
 
     virtual void SetCursor(uint64_t x, uint64_t y);
