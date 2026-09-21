@@ -26,6 +26,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <fs/FileDescriptor.hpp>
 #include <fs/VFS.hpp>
 
+#include <Memory/VMM.hpp>
+
 #include <Scheduling/Process.hpp>
 
 int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
@@ -159,8 +161,6 @@ ssize_t sys_read(int fd, void* buf, size_t count) {
     if (count == 0)
         return -EINVAL;
 
-    dbgprintf("sys_read(%d, %lp, %lu)\n", fd, buf, count);
-
     Thread* current = Thread::GetCurrentThread();
     Process* proc = current->GetParent();
     FileDescriptorManager* manager = proc->GetFDManager();
@@ -182,8 +182,6 @@ ssize_t sys_read(int fd, void* buf, size_t count) {
     ssize_t result = rc < 0 ? rc : realCount;
 
     UserWrite(buf, kBuf, realCount, proc, false);
-
-    dbgprintf("sys_read: read %lu bytes from fd %d\n", realCount, fd);
     
     delete[] kBuf;
     return result;
