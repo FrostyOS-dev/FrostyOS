@@ -52,6 +52,9 @@ public:
 
     virtual uint64_t GetNumberOfRows() = 0;
     virtual uint64_t GetNumberOfColumns() = 0;
+
+    virtual uint64_t GetWidth() = 0;
+    virtual uint64_t GetHeight() = 0;
 };
 
 #endif /* _VIDEO_DEVICE_HPP */

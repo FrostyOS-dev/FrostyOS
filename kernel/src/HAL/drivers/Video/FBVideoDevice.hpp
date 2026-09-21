@@ -66,6 +66,9 @@ public:
     virtual uint64_t GetNumberOfRows() override;
     virtual uint64_t GetNumberOfColumns() override;
 
+    virtual uint64_t GetWidth() override;
+    virtual uint64_t GetHeight() override;
+
     void EnableDoubleBuffering(FrameBuffer* buffer);
     void DisableDoubleBuffering();
     bool IsDoubleBufferingEnabled();

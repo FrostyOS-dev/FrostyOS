@@ -207,6 +207,14 @@ uint64_t FBVideoDevice::GetNumberOfColumns() {
     return m_numberOfColumns;
 }
 
+uint64_t FBVideoDevice::GetWidth() {
+    return m_backBuffer->width;
+}
+
+uint64_t FBVideoDevice::GetHeight() {
+    return m_backBuffer->height;
+}
+
 void FBVideoDevice::EnableDoubleBuffering(FrameBuffer* buffer) {
     m_backBuffer = buffer;
     memcpy(m_backBuffer->BaseAddress, m_frontBuffer->BaseAddress, m_frontBuffer->pitch * m_frontBuffer->height);
