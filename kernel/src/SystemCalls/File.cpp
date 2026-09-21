@@ -159,6 +159,8 @@ ssize_t sys_read(int fd, void* buf, size_t count) {
     if (count == 0)
         return -EINVAL;
 
+    dbgprintf("sys_read(%d, %lp, %lu)\n", fd, buf, count);
+
     Thread* current = Thread::GetCurrentThread();
     Process* proc = current->GetParent();
     FileDescriptorManager* manager = proc->GetFDManager();
@@ -180,6 +182,8 @@ ssize_t sys_read(int fd, void* buf, size_t count) {
     ssize_t result = rc < 0 ? rc : realCount;
 
     UserWrite(buf, kBuf, realCount, proc, false);
+
+    dbgprintf("sys_read: read %lu bytes from fd %d\n", realCount, fd);
     
     delete[] kBuf;
     return result;
@@ -387,4 +391,55 @@ int sys_symlink(const char* target, size_t targetLen, const char* linkPath, size
     delete[] kLinkPath;
 
     return rc;
+}
+
+int sys_chdir(const char* path, size_t pathLen) {
+    if (pathLen == 0)
+        return -EINVAL;
+
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+
+    char* kPath = new char[pathLen + 1];
+    if (kPath == nullptr)
+        return -ENOMEM;
+
+    if (!UserRead(path, kPath, pathLen, proc))
+        return -EFAULT;
+
+    kPath[pathLen] = 0;
+
+    FS::VNode* vnode = nullptr;
+    FS::VFS* vfs = nullptr;
+    int rc = FS::VFS_LookupPath(kPath, &vnode, &vfs, proc->GetCWD(), proc->GetCred());
+    
+    if (rc == 0)
+        proc->SetCWD(vnode);
+
+    delete[] kPath;
+
+    return rc;
+}
+
+int sys_fchdir(int fd) {
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+    FileDescriptorManager* manager = proc->GetFDManager();
+    if (manager == nullptr)
+        return -ENOSYS;
+
+    FileDescriptor* desc = manager->Get(fd);
+    if (desc == nullptr || !desc->isOpen())
+        return -EBADF;
+
+    if (desc->GetType() != FDType::Directory)
+        return -ENOTDIR;
+
+    FS::VNode* vnode = desc->GetVNode();
+    if (vnode == nullptr)
+        return -EBADF;
+
+    proc->SetCWD(vnode);
+
+    return 0;
 }
