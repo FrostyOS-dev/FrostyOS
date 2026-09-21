@@ -215,26 +215,12 @@ namespace FS {
                 next = strchr(currentPath, '/');
                 continue;
             }
-            if (next == nullptr) {
-                // last segment
-                size_t len = strlen(currentPath);
-                if (currentPath[len - 1] == '/')
-                    break;
-                if (currentVNode->GetType() != VType::DIR)
-                    return -ENOTDIR;
-                VNode* next = nullptr;
-                int rc = currentVNode->Lookup(currentPath, len, &next, cred);
-                if (rc < 0)
-                    return rc;
-                parentDir = currentVNode;
-                currentVNode = next;
-                currentVFS = currentVNode->GetVFS();
-                break;
-            }
-            size_t len = (size_t)(next - currentPath);
+
+            size_t len = next == nullptr ? strlen(currentPath) : (size_t)(next - currentPath);
             if (len == 2 && strncmp(currentPath, "..", 2) == 0) {
                 if (currentVNode->GetType() != VType::DIR)
                     return -ENOTDIR;
+
                 VNode* parent = currentVNode->GetParent();
                 if (parent == nullptr) { // must be the root of a VFS
                     parent = currentVFS->GetCoveredVNode();
@@ -242,16 +228,25 @@ namespace FS {
                         return -ENOENT; // must be at the root, can't go up any higher
                     currentVFS = parent->GetVFS();
                 }
+
+                parentDir = parent->GetParent();
                 currentVNode = parent;
             } else if (!(len == 1 && currentPath[0] == '.')) {
                 if (currentVNode->GetType() != VType::DIR)
                     return -ENOTDIR;
+
                 VNode* nextVNode = nullptr;
                 int rc = currentVNode->Lookup(currentPath, len, &nextVNode, cred);
                 if (rc < 0)
                     return rc;
+
                 parentDir = currentVNode;
                 currentVNode = nextVNode;
+            }
+
+            if (next == nullptr) {
+                currentVFS = currentVNode->GetVFS();
+                break;
             }
 
             currentPath = next;
