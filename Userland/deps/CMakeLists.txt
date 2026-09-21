@@ -31,7 +31,10 @@ if (NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/mlibc_headers_build)
         USES_TERMINAL
     )
 
+    add_dependencies(mlibc_headers_configure install_kernel_headers)
     add_dependencies(mlibc_headers mlibc_headers_configure)
+else ()
+    add_dependencies(mlibc_headers install_kernel_headers)
 endif ()
 
 if (NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/mlibc_build)
@@ -44,3 +47,7 @@ if (NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/mlibc_build)
 else ()
     add_dependencies(mlibc mlibc_headers)
 endif ()
+
+set_property(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+    APPEND PROPERTY ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/mlibc_build" "${CMAKE_CURRENT_BINARY_DIR}/mlibc_headers_build"
+)

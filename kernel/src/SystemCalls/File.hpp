@@ -88,4 +88,7 @@ int sys_symlink(const char* target, size_t targetLen, const char* linkPath, size
 int sys_chdir(const char* path, size_t pathLen);
 int sys_fchdir(int fd);
 
+// Return value != 0 indicates error, actual result is stored in result
+int sys_ioctl(int fd, size_t op, void* arg, int* result);
+
 #endif /* _SYSCALL_FILE_HPP */

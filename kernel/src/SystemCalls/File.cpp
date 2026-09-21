@@ -441,3 +441,31 @@ int sys_fchdir(int fd) {
 
     return 0;
 }
+
+int sys_ioctl(int fd, size_t op, void* arg, int* result) {
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+    VMM::VMM* vmm = proc->GetVMM();
+    FileDescriptorManager* manager = proc->GetFDManager();
+    if (manager == nullptr || vmm == nullptr)
+        return ENOSYS;
+
+    FileDescriptor* desc = manager->Get(fd);
+    if (desc == nullptr || !desc->isOpen())
+        return EBADF;
+
+    if (desc->GetType() != FDType::TTY)
+        return ENOTTY;
+
+    if (!vmm->ValidateWrite(result, sizeof(int)))
+        return EFAULT;
+
+    TTY* tty = desc->GetTTY();
+    int res = 0;
+    int rc = tty->Ioctl(op, arg, &res, proc);
+
+    if (!UserWrite(result, &res, sizeof(int), proc, false))
+        return EFAULT; // unlikely to fail
+
+    return rc;
+}

@@ -15,13 +15,18 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "Termios.hpp"
 #include "TTY.hpp"
 #include "TTYBackend.hpp"
 
 #include <cstdint>
 #include <errno.h>
 
+#include <frostyos/asm/ioctls.h>
+
 #include <Graphics/VGAFont.hpp>
+
+#include <SystemCalls/SystemCall.hpp>
 
 #define ANSI_MAX_PARAMS 16
 
@@ -144,6 +149,48 @@ uint64_t TTY::GetMaxSeek() const {
 
 uint64_t TTY::GetCurrentSeek() const {
     return UINT64_MAX; // unknown
+}
+
+int TTY::Ioctl(uint64_t op, void* arg, int* result, Process* currentProc) {
+    switch (op) {
+    case TIOCGWINSZ: {
+        winsize_t size = {0, 0, 0, 0};
+        int rc = GetSize(&size);
+        if (rc < 0)
+            return -rc;
+        if (!UserWrite(arg, &size, sizeof(winsize_t), currentProc))
+            return EFAULT;
+        *result = 0;
+        return 0;
+    }
+    case TIOCSWINSZ: {
+        winsize_t size;
+        if (!UserRead(arg, &size, sizeof(winsize_t), currentProc))
+            return EFAULT;
+        int rc = SetSize(&size);
+        if (rc < 0)
+            return -rc;
+        *result = 0;
+        return 0;
+    }
+    case TCGETS:
+    case TCSETS:
+    case TIOCSCTTY:
+    case TIOCGPGRP:
+    case TIOCSPGRP:
+    case FIONREAD:
+        return ENOSYS;
+    }
+
+    return EINVAL;
+}
+
+int TTY::SetSize(const winsize_t* size) {
+    return -ENOSYS;
+}
+
+int TTY::GetSize(winsize_t* size) {
+    return -ENOSYS;
 }
 
 void TTY::FlushOutput() {
@@ -498,6 +545,23 @@ uint64_t GraphicalTTY::GetCurrentSeek() const {
     uint64_t x, y;
     m_video->GetCursor(x, y);
     return m_video->GetNumberOfColumns() * y + x;
+}
+
+int GraphicalTTY::SetSize(const winsize_t* size) {
+    // Say it was successful if the requested dimensions are <= to the current, but don't actually set them.
+    if (size->ws_col > m_video->GetNumberOfColumns() || size->ws_row > m_video->GetNumberOfRows())
+        return -EINVAL;
+    if (size->ws_xpixel > m_video->GetWidth() || size->ws_ypixel > m_video->GetHeight())
+        return -EINVAL;
+    return ESUCCESS;
+}
+
+int GraphicalTTY::GetSize(winsize_t* size) {
+    size->ws_col = m_video->GetNumberOfColumns();
+    size->ws_row = m_video->GetNumberOfRows();
+    size->ws_xpixel = m_video->GetWidth();
+    size->ws_ypixel = m_video->GetHeight();
+    return ESUCCESS;
 }
 
 void GraphicalTTY::SetVideoDevice(VideoDevice* video) {

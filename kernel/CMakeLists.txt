@@ -160,6 +160,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/DebugBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/SerialBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/VGABackend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/Termios.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTYBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTY.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/debug.cpp
@@ -198,6 +199,7 @@ set_target_properties(kernel PROPERTIES C_STANDARD_REQUIRED ON)
 target_include_directories(kernel PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_include_directories(kernel PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lib/include)
 target_include_directories(kernel PRIVATE ${UACPI_INCLUDES})
+target_include_directories(kernel PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/headers)
 
 set(LINKER_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/kernel.ld)
 
@@ -266,3 +268,9 @@ if (FROSTYOS_BUILD_TARGET STREQUAL "kernel")
     )
 
 endif()
+
+add_custom_target(install_kernel_headers
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_newer ${CMAKE_CURRENT_SOURCE_DIR}/headers/frostyos ${SYSROOT}/data/include/
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${SYSROOT}/data/include/asm ${CMAKE_SOURCE_DIR}/Userland/deps/mlibc/sysdeps/frostyos/include/asm
+    BYPRODUCTS ${CMAKE_SOURCE_DIR}/Userland/deps/mlibc/sysdeps/frostyos/include/asm
+)

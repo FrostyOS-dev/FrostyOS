@@ -23,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <HAL/drivers/Video/VideoDevice.hpp>
 
+#include "Termios.hpp"
 #include "TTYBackend.hpp"
 
 #define DEBUG_MIRRORING_DEFAULT_ENABLED true
@@ -41,6 +42,8 @@ enum class TTYType {
     Serial,
     Invalid
 };
+
+class Process;
 
 class TTY {
 public:
@@ -69,6 +72,12 @@ public:
     void Seek(uint64_t pos);
     virtual uint64_t GetMaxSeek() const; // returns UINT64_MAX if unknown
     virtual uint64_t GetCurrentSeek() const; // returns UINT64_MAX if unknown
+
+    // reads/writes from/to arg are assumed to be from/to a usermode region
+    int Ioctl(uint64_t op, void* arg, int* result, Process* currentProc);
+
+    virtual int SetSize(const winsize_t* size);
+    virtual int GetSize(winsize_t* size);
 
     void FlushOutput();
 
@@ -109,6 +118,9 @@ public:
 
     uint64_t GetMaxSeek() const override;
     uint64_t GetCurrentSeek() const override;
+
+    int SetSize(const winsize_t* size) override;
+    int GetSize(winsize_t* size) override;
 
     void SetVideoDevice(VideoDevice* video);
     VideoDevice* GetVideoDevice() const;
