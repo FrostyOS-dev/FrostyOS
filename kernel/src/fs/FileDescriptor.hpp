@@ -71,6 +71,7 @@ public:
 
     FDType GetType() const;
     FS::VNode* GetVNode();
+    TTY* GetTTY(TTYStream* stream = nullptr);
 
 private:
     Process* m_proc;

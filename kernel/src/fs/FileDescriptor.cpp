@@ -400,3 +400,9 @@ FS::VNode* FileDescriptor::GetVNode() {
     return m_vnode;
 }
 
+TTY* FileDescriptor::GetTTY(TTYStream* stream) {
+    if (stream != nullptr)
+        *stream = m_ttyStream;
+    return m_tty;
+}
+
