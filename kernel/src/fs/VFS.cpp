@@ -55,7 +55,7 @@ namespace FS {
     }
 
 
-    VNode::VNode(VFS* vfs) : m_attr{VType::BAD, 0, 0, 0, FSType::Invalid, -1, 0, 0, 0, 0, 0, 0, 0}, m_lock(), m_refCount(0), m_vfs(vfs), m_vfsMounted(nullptr), m_parent(nullptr) {
+    VNode::VNode(VFS* vfs) : m_attr{VType::BAD, 0, 0, 0, FSType::Invalid, -1, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0}, m_lock(), m_refCount(0), m_vfs(vfs), m_vfsMounted(nullptr), m_parent(nullptr) {
 
     }
 
@@ -291,7 +291,7 @@ namespace FS {
             return -ENAMETOOLONG;
         }
 
-        VAttr attr = {VType::DIR, DEFAULT_DIR_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, 0, 0, 0, 0};
+        VAttr attr = {VType::DIR, DEFAULT_DIR_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0};
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
         if (rc < 0) {
             delete vnode;
@@ -326,7 +326,7 @@ namespace FS {
             return -ENAMETOOLONG;
         }
         
-        VAttr attr = {VType::REG, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, 0, 0, 0, 0};
+        VAttr attr = {VType::REG, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0};
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
         if (rc < 0) {
             delete vnode;
@@ -395,7 +395,7 @@ namespace FS {
             return -ENAMETOOLONG;
         }
         
-        VAttr attr = {VType::LNK, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, 0, 0, 0, 0};
+        VAttr attr = {VType::LNK, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0};
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
         if (rc < 0) {
             delete vnode;

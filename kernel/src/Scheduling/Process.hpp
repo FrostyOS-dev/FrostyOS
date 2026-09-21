@@ -37,12 +37,12 @@ enum class ProcessMode {
 };
 
 struct Credential {
-    uint32_t uid;
-    uint32_t euid;
-    uint32_t suid;
-    uint32_t gid;
-    uint32_t egid;
-    uint32_t sgid;
+    uid_t uid;
+    uid_t euid;
+    uid_t suid;
+    gid_t gid;
+    gid_t egid;
+    gid_t sgid;
 };
 
 class FileDescriptorManager;

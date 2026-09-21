@@ -100,9 +100,9 @@ int LoadInitRAMFS(void* data, size_t size) {
             attr.mode = mode;
             attr.uid = uid;
             attr.gid = gid;
-            attr.atime = mtime;
-            attr.mtime = mtime;
-            attr.ctime = mtime;
+            attr.atime.tv_sec = mtime;
+            attr.mtime.tv_sec = mtime;
+            attr.ctime.tv_sec = mtime;
             rc = vnode->SetAttr(attr);
             if (rc < 0) {
                 vnode->Unlock();
@@ -136,9 +136,9 @@ int LoadInitRAMFS(void* data, size_t size) {
             attr.mode = mode;
             attr.uid = uid;
             attr.gid = gid;
-            attr.atime = mtime;
-            attr.mtime = mtime;
-            attr.ctime = mtime;
+            attr.atime.tv_sec = mtime;
+            attr.mtime.tv_sec = mtime;
+            attr.ctime.tv_sec = mtime;
             rc = vnode->SetAttr(attr);
             vnode->Unlock();
             break;
@@ -165,9 +165,9 @@ int LoadInitRAMFS(void* data, size_t size) {
             attr.mode = mode;
             attr.uid = uid;
             attr.gid = gid;
-            attr.atime = mtime;
-            attr.mtime = mtime;
-            attr.ctime = mtime;
+            attr.atime.tv_sec = mtime;
+            attr.mtime.tv_sec = mtime;
+            attr.ctime.tv_sec = mtime;
             rc = vnode->SetAttr(attr);
             vnode->Unlock();
             break;

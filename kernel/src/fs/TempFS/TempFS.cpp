@@ -48,7 +48,7 @@ namespace FS {
     }
 
     int TempFS::Mount(int flags, void* backing, Credential cred) {
-        VAttr attr = {VType::DIR, ROOT_DIR_MODE, cred.euid, cred.egid, FSType::TempFS, -1, 0, 0, PAGE_SIZE, 0, 0, 0, 0};
+        VAttr attr = {VType::DIR, ROOT_DIR_MODE, cred.euid, cred.egid, FSType::TempFS, -1, 0, 0, PAGE_SIZE, {0, 0}, {0, 0}, {0, 0}, 0};
 
         TempFSVNode* root = new TempFSVNode(this);
         int rc = root->Create(nullptr, nullptr, 0, &attr, cred);

@@ -21,8 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdint.h>
 
 typedef long pid_t;
-typedef long uid_t;
-typedef long gid_t;
+typedef int uid_t;
+typedef int gid_t;
 
 struct UIDs {
     uid_t ruid;

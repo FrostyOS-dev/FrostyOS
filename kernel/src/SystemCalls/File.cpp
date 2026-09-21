@@ -469,3 +469,95 @@ int sys_ioctl(int fd, size_t op, void* arg, int* result) {
 
     return rc;
 }
+
+int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags) {
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+    FileDescriptorManager* manager = proc->GetFDManager();
+    if (manager == nullptr)
+        return -ENOSYS;
+
+    FS::VNode* vnode = nullptr;
+
+    if ((flags & AT_SYMLINK_NOFOLLOW) > 0)
+        return -ENOSYS;
+
+    if ((flags & AT_EMPTY_PATH) == 0 && (path == nullptr || pathLen == 0))
+        return -ENOENT;
+
+    if ((flags & AT_EMPTY_PATH) == 0) {
+        char* kPath = new char[pathLen];
+        if (!UserRead(path, kPath, pathLen, proc)) {
+            delete[] kPath;
+            return -EFAULT;
+        }
+
+        kPath[pathLen] = 0;
+
+        if (kPath[0] == '/')
+            vnode = FS::g_rootVFS->GetRoot();
+        else if (fd == AT_FDCWD)
+            vnode = proc->GetCWD();
+        else {
+            FileDescriptor* desc = manager->Get(fd);
+            if (desc == nullptr || !desc->isOpen()) {
+                delete[] kPath;
+                return -EBADF;
+            }
+
+            if (desc->GetType() != FDType::Directory) {
+                delete[] kPath;
+                return -ENOTDIR;
+            }
+
+            vnode = desc->GetVNode();
+            if (vnode == nullptr || vnode->GetType() != FS::VType::DIR) {
+                delete[] kPath;
+                return vnode == nullptr ? -EBADF : -ENOTDIR;
+            }
+        }
+
+        FS::VFS* fs;
+        int rc = FS::VFS_LookupPath(kPath, &vnode, &fs, vnode, proc->GetCred());
+
+        delete[] kPath;
+
+        if (rc < 0)
+            return rc;
+    } else {
+        FileDescriptor* desc = manager->Get(fd);
+        if (desc == nullptr || !desc->isOpen() || desc->GetType() != FDType::Directory || desc->GetType() != FDType::File)
+            return -EBADF;
+
+        vnode = desc->GetVNode();
+        if (vnode == nullptr)
+            return -EBADF;
+    }
+
+    Stat buf;
+    memset(&buf, 0, sizeof(Stat));
+
+    FS::VAttr attr;
+    int rc = vnode->GetAttr(&attr);
+    if (rc < 0)
+        return rc;
+
+    buf.dev = 0;
+    buf.rdev = 0;
+    buf.ino = attr.inode;
+    buf.nlink = attr.nlinks;
+    buf.mode = attr.mode | ((FS::VFS_GetPosixType(attr.type) & 0xF) << 12);
+    buf.uid = attr.uid;
+    buf.gid = attr.gid;
+    buf.size = attr.size;
+    buf.blksize = attr.fsBlockSize;
+    buf.blocks = attr.blocks;
+    buf.atime = attr.atime;
+    buf.mtime = attr.mtime;
+    buf.ctime = attr.ctime;
+
+    if (!UserWrite(stat, &buf, sizeof(Stat), proc))
+        return -EFAULT;
+
+    return ESUCCESS;
+}

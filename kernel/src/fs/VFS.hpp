@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define _VFS_HPP
 
 #include <stdint.h>
+#include <time.h>
 
 #include <Scheduling/Mutex.hpp>
 #include <Scheduling/Process.hpp>
@@ -38,6 +39,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define DT_LNK 10
 #define DT_SOCK 12
 #define DT_WHT 14
+
+typedef int gid_t;
+typedef int uid_t;
+typedef unsigned int mode_t;
+typedef int64_t ino_t;
+typedef long off_t;
+typedef uint64_t dev_t;
+typedef unsigned long nlink_t;
+typedef long blksize_t;
+typedef uint64_t blkcnt_t;
 
 /* Based on the Sun VFS Design */
 
@@ -65,22 +76,22 @@ namespace FS {
     struct VAttr {
         VType type;           // vnode type
         uint16_t mode;        // access mode
-        uint32_t uid;         // owner uid
-        uint32_t gid;         // owner gid
+        uid_t uid;         // owner uid
+        gid_t gid;         // owner gid
         FSType fsid;             // fs id
-        int64_t inode;        // inode number
+        ino_t inode;        // inode number
         int nlinks;           // number of links
         uint64_t size;        // file size
         uint64_t fsBlockSize; // block size
-        uint64_t atime;       // last access time
-        uint64_t mtime;       // last modification time
-        uint64_t ctime;       // last change time
+        timespec atime;       // last access time
+        timespec mtime;       // last modification time
+        timespec ctime;       // last change time
         uint64_t blocks;      // space used
     };
 
     struct Dentry {
-        int64_t inode;
-        int64_t offset;
+        ino_t inode;
+        off_t offset;
         uint16_t recordLen;
         uint8_t type;
         char name[NAME_MAX + 1];

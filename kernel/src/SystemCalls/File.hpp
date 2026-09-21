@@ -19,10 +19,37 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define _SYSCALL_FILE_HPP
 
 #include <stddef.h>
+#include <stdint.h>
+#include <time.h>
 
-typedef unsigned int mode_t;
 typedef long ssize_t;
+typedef int gid_t;
+typedef int uid_t;
+typedef unsigned int mode_t;
+typedef int64_t ino_t;
 typedef long off_t;
+typedef uint64_t dev_t;
+typedef unsigned long nlink_t;
+typedef long blksize_t;
+typedef uint64_t blkcnt_t;
+
+struct Stat {
+    dev_t dev;
+    ino_t ino;
+    nlink_t nlink;
+    mode_t mode;
+    uid_t uid;
+    gid_t gid;
+    unsigned int _pad0;
+    dev_t rdev;
+    off_t size;
+    blksize_t blksize;
+    blkcnt_t blocks;
+    timespec atime;
+    timespec mtime;
+    timespec ctime;
+    long _unused[3];
+};
 
 #define O_PATH 010000000
 
@@ -68,6 +95,10 @@ typedef long off_t;
 #define SEEK_CUR 1
 #define SEEK_END 2
 
+#define AT_SYMLINK_NOFOLLOW 0x100
+#define AT_EMPTY_PATH 0x1000
+#define AT_FDCWD -100
+
 // pathLen does NOT include null-termination
 int sys_open(const char* path, size_t pathLen, int flags, mode_t mode);
 int sys_close(int fd);
@@ -90,5 +121,7 @@ int sys_fchdir(int fd);
 
 // Return value != 0 indicates error, actual result is stored in result
 int sys_ioctl(int fd, size_t op, void* arg, int* result);
+
+int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags);
 
 #endif /* _SYSCALL_FILE_HPP */
