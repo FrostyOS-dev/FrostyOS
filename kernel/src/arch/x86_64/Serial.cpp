@@ -208,6 +208,7 @@ void x86_64_SerialPort::ProcessData() {
             m_rxSemaphore.Signal();
         if (m_loopback) {
             WriteByte(c);
+            g_CurrentTTY->Write((char*)&c, 1, true);
             if (c == 0x08) { // backspace
                 WriteByte(' ');
                 WriteByte(c);
