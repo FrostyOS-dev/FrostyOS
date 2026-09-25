@@ -213,7 +213,7 @@ namespace LinkedList {
             fprintf(file, "\n");
         }
 
-        void Enumerate(bool (*func)(T* obj, void* data), void* data) const {
+        void Enumerate(FunctionRef<bool(T* obj, void* data)> func, void* data) const {
             Node* temp = m_start;
             for (uint64_t i = 0; i < m_count; i++) {
                 // if (temp == nullptr)
@@ -527,7 +527,7 @@ namespace LinkedList {
             return m_list.getCount();
         }
 
-        void Enumerate(bool (*func)(T* obj, void* data), void* data) const {
+        void Enumerate(FunctionRef<bool(T* obj, void* data)> func, void* data) const {
             return m_list.Enumerate(func, data);
         }
 
