@@ -763,6 +763,7 @@ namespace VMM {
                 bool rc = obj->pager->GetPage(obj, offset + pageIndex * PAGE_SIZE, &page, code.write);
                 if (!rc) {
                     spinlock_release(&obj->lock);
+                    spinlock_release(&map->lock);
                     return false;
                 }
 
@@ -771,6 +772,7 @@ namespace VMM {
                         map = (AnonMap*)kcalloc_vmm(1, sizeof(AnonMap));
                         if (map == nullptr) {
                             spinlock_release(&obj->lock);
+                            spinlock_release(&map->lock);
                             return false;
                         }
 
@@ -780,6 +782,7 @@ namespace VMM {
                         if (map->slots == nullptr) {
                             kfree_vmm(map);
                             spinlock_release(&obj->lock);
+                            spinlock_release(&map->lock);
                             return false;
                         }
 
@@ -789,6 +792,7 @@ namespace VMM {
                     Anon* newAnon = (Anon*)kcalloc_vmm(1, sizeof(Anon));
                     if (newAnon == nullptr) {
                         spinlock_release(&obj->lock);
+                        spinlock_release(&map->lock);
                         return false;
                     }
 
@@ -797,6 +801,7 @@ namespace VMM {
                     if (newAnon->physAddr == 0) {
                         kfree_vmm(newAnon);
                         spinlock_release(&obj->lock);
+                        spinlock_release(&map->lock);
                         return false;
                     }
 
@@ -810,6 +815,7 @@ namespace VMM {
                     }
 
                     spinlock_release(&obj->lock);
+                    spinlock_release(&map->lock);
                     return result;
                 }
 
