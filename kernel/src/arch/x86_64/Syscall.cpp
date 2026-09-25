@@ -37,7 +37,7 @@ extern "C" uint64_t x86_64_SyscallHandler(x86_64_Registers* regs) {
     memcpy(&currentThread->GetMutableRegisters(), regs, sizeof(CPU_Registers));
     currentThread->SetStack(regs->RSP);
 
-    // Processor::EnableInterrupts();
+    Processor::EnableInterrupts();
 
     uint64_t rc = HandleSystemCall(regs->RAX, regs->RDI, regs->RSI, regs->RDX, regs->R8, regs->R9, regs);
     Processor::DisableInterrupts();
