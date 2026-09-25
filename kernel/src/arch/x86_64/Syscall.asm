@@ -25,40 +25,32 @@ x86_64_SyscallEntry:
     mov QWORD [gs:80], rsp ; save user RSP
     mov rsp, QWORD [gs:24] ; get kernel RSP
 
-    mov QWORD [gs:32], rax
-    mov QWORD [gs:40], rbx
-    mov QWORD [gs:48], rcx
-    mov QWORD [gs:56], rdx
-    mov QWORD [gs:64], rsi
-    mov QWORD [gs:72], rdi
-    ; skip rsp
-    mov QWORD [gs:88], rbp
-    mov QWORD [gs:96], r8
-    mov QWORD [gs:104], r9
-    mov QWORD [gs:112], r10
-    mov QWORD [gs:120], r11
-    mov QWORD [gs:128], r12
-    mov QWORD [gs:136], r13
-    mov QWORD [gs:144], r14
-    mov QWORD [gs:152], r15
-    mov QWORD [gs:160], rcx ; RIP
-    mov QWORD [gs:168], r11 ; RFLAGS
+    push QWORD 0x1b0023 ; CS, SS, _align
+    push 0 ; fill later with cr3
 
-    ; shift argument registers before using ax
-    mov rcx, rdx ; c
-    mov rdx, rsi ; b
-    mov rsi, rdi ; a
-    mov rdi, rax ; num
+    push r11 ; RFLAGS
+    push rcx ; RIP
+    push r15
+    push r14
+    push r13
+    push r12
+    push r11
+    push r10
+    push r9
+    push r8
+    push rbp
+    push QWORD [gs:80] ; rsp
+    push rdi
+    push rsi
+    push rdx
+    push rcx
+    push rbx
+    push rax
 
     mov rax, cr3
-    mov QWORD [gs:176], rax
+    mov QWORD [rsp + 144], rax
 
-    mov ax, cs
-    mov WORD [gs:184], ax
-
-    mov ax, ss
-    mov WORD [gs:186], ax
-
+    mov rdi, rsp ; register frame
     xor rbp, rbp ; clear rbp
     cld
 
@@ -66,22 +58,30 @@ x86_64_SyscallEntry:
 
     cli ; need to disable them again
 
-    ; skip rax
-    mov rbx, QWORD [gs:40]
-    mov rcx, QWORD [gs:48]
-    mov rdx, QWORD [gs:56]
-    mov rsi, QWORD [gs:64]
-    mov rdi, QWORD [gs:72]
-    ; skip rsp
-    mov rbp, QWORD [gs:88]
-    mov r8, QWORD [gs:96]
-    mov r9, QWORD [gs:104]
-    mov r10, QWORD [gs:112]
-    mov r11, QWORD [gs:120]
-    mov r12, QWORD [gs:128]
-    mov r13, QWORD [gs:136]
-    mov r14, QWORD [gs:144]
-    mov r15, QWORD [gs:152]
+    mov rcx, QWORD [rsp + 144] ; cr3 while we still have available GPRs
+    mov cr3, rcx
+
+    add rsp, 8 ; ignore rax
+    pop rbx
+    pop rcx
+    pop rdx
+    pop rsi
+    pop rdi
+    pop QWORD [gs:80] ; rsp for later
+    pop rbp
+    pop r8
+    pop r9
+    pop r10
+    pop r11
+    pop r12
+    pop r13
+    pop r14
+    pop r15
+
+    pop rcx ; RIP
+    pop r11 ; RFLAGS
+
+    add rsp, 16 ; ignore segments, alignment and cr3
 
     mov QWORD [gs:24], rsp ; save kernel RSP
     mov rsp, QWORD [gs:80] ; get user RSP

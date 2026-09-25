@@ -56,6 +56,7 @@ namespace Scheduler {
     };
 
     extern ProcessorState g_BSPState;
+    extern LinkedList::LockableLinkedList<Process> g_Processes;
 
     
     [[noreturn]] void RunThread(Thread* thread, bool interrupt, bool noSignals = false); // Interrupts must be disabled when this function is called
@@ -68,8 +69,8 @@ namespace Scheduler {
     uint64_t GetProcessorCount();
     
     void AddProcess(Process* process);
-    Process* GetProcess(uint64_t pid);
-    void RemoveProcess(uint64_t pid);
+    Process* GetProcess(int64_t pid);
+    void RemoveProcess(int64_t pid);
     
     void ScheduleThread(Thread* thread, ProcessorState* state = nullptr);
     bool AddExistingThread(Thread* thread);

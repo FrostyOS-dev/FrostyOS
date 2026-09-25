@@ -15,12 +15,11 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "Event.hpp"
 #include "Process.hpp"
 #include "Scheduler.hpp"
 #include "Thread.hpp"
-#include "SystemCalls/Signal.hpp"
 #include "ThreadList.hpp"
-#include "arch/x86_64/Scheduling/TaskUtil.hpp"
 
 #include <errno.h>
 #include <spinlock.h>
@@ -34,8 +33,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Memory/VMM.hpp>
 
 #include <SystemCalls/Futex.hpp>
+#include <SystemCalls/Signal.hpp>
 
-Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true, false, -1) {
+#ifdef __x86_64__
+#include <arch/x86_64/Scheduling/TaskUtil.hpp>
+#endif
+
+Thread::Thread() : eventLock(SPINLOCK_DEFAULT_VALUE), eventWaitActive(false), activeEventNodes(nullptr), m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_OriginalStack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true, false, -1, 0) {
     sleepRemainingTime = 0;
     yieldCallback = {nullptr, nullptr};
     m_InSchedList = false;
@@ -43,7 +47,7 @@ Thread::Thread() : m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UI
 
 }
 
-Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true, false, -1) {
+Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : eventLock(SPINLOCK_DEFAULT_VALUE), eventWaitActive(false), activeEventNodes(nullptr), m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_OriginalStack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true, false, -1, 0) {
     sleepRemainingTime = 0;
     yieldCallback = {nullptr, nullptr};
 
@@ -81,25 +85,26 @@ bool Thread::Delete() {
     if (!vmm->FreePages(reinterpret_cast<void*>(m_KernelStack - KERNEL_STACK_SIZE)))
         return false;
 
-    if (m_Parent->GetMode() == ProcessMode::USER && !vmm->FreePages(reinterpret_cast<void*>(m_Stack - DEFAULT_USER_STACK_SIZE)))
+    if (m_Parent->GetMode() == ProcessMode::USER && !vmm->FreePages(reinterpret_cast<void*>(m_OriginalStack - DEFAULT_USER_STACK_SIZE)))
         return false;
 
     if (blockedFutex != nullptr)
         blockedFutex->Remove(this, FutexWakeReason::Interrupted);
 
     m_Stack = 0;
+    m_OriginalStack = 0;
     m_KernelStack = 0;
     return true;
 }
 
-bool Thread::ExitCurrentThread(bool deleteThis, bool deleteParent, bool removeProc) {
+bool Thread::ExitCurrentThread(uint64_t code, bool deleteThis, bool deleteParent, bool removeProc) {
     int exitIntState = Processor::DisableInterrupts();
     Thread* thread = Scheduler::RemoveCurrentThread(true);
     if (thread == nullptr)
         return false;
     // Clear any pending yield callback to prevent use-after-free when thread is deleted
     thread->yieldCallback = {};
-    thread->m_deleteProp = {deleteThis, deleteParent, removeProc, true, exitIntState};
+    thread->m_deleteProp = {deleteThis, deleteParent, removeProc, true, exitIntState, code};
     Scheduler::ProcessorState* state = GetCurrentProcessorState();
     Processor::SwapStack(Thread_ExitHelper, thread, state->kernelStack);
     return false;
@@ -174,6 +179,8 @@ bool Thread::CreateStacks() {
     } else
         m_Stack = m_KernelStack;
 
+    m_OriginalStack = m_Stack;
+
     return true;
 }
 
@@ -191,6 +198,10 @@ void Thread::SetKernelStack(uint64_t stack) {
 
 uint64_t Thread::GetKernelStack() const {
     return m_KernelStack;
+}
+
+uint64_t Thread::GetOriginalStack() const {
+    return m_OriginalStack;
 }
 
 void Thread::SetThreadListData(ThreadListItemInternalData& data) {
@@ -262,7 +273,7 @@ int64_t Thread::GetIntState() const {
     return m_deleteProp.intState;
 }
 
-bool Thread::Fork(Thread* other, uint64_t newReturnValue) {
+bool Thread::Fork(Thread* other, uint64_t newReturnValue, CPU_Registers* regs) {
     // start with the stacks, then copy everything else
     if (m_Parent == nullptr)
         return false;
@@ -292,7 +303,7 @@ bool Thread::Fork(Thread* other, uint64_t newReturnValue) {
     Processor::EnableInterrupts(state);
     
     PageMapper* pageMapper = vmm->GetPageMapper();
-    Processor::ForkRegisters(&m_Registers, &other->m_Registers, 0, pageMapper->GetPageTable());
+    Processor::ForkRegisters(&m_Registers, regs, 0, pageMapper->GetPageTable());
 
     return true;
 }
@@ -319,8 +330,35 @@ int Thread::RaiseSignal(int signal) {
             m_IsSleeping = false;
             sleepRemainingTime = 0;
             Scheduler::AddExistingThread(this);
-        } else if (blockedFutex != nullptr)
-            blockedFutex->Remove(this, FutexWakeReason::Interrupted);
+        } else {
+            if (blockedFutex != nullptr)
+                blockedFutex->Remove(this, FutexWakeReason::Interrupted);
+
+            spinlock_acquire(&eventLock);
+            if (eventWaitActive) {
+                eventWaitActive = false;
+
+                EventWaitNode* node = activeEventNodes;
+                while (node != nullptr) {
+                    node->queue->RemoveListener(node);
+                    node = node->threadNext;
+                }
+
+                // Remove from sleepingThreads if waiting on a timeout
+                Scheduler::ProcessorState* procState = GetCPUInfo()->state;
+                if (procState != nullptr && sleepRemainingTime > 0 && sleepRemainingTime != UINT64_MAX) {
+                    procState->sleepingThreads.lock();
+                    procState->sleepingThreads.remove(this);
+                    procState->sleepingThreads.unlock();
+                }
+
+                spinlock_release(&eventLock);
+
+                sleepRemainingTime = 0;
+                Scheduler::AddExistingThread(this);
+            } else
+                spinlock_release(&eventLock);
+        }
     } else if (!notIgnored) {
         // ignored, doesn't need to be pending anymore
         SIGNAL_CLEAR(set, signal);
@@ -374,7 +412,7 @@ int Thread::CheckSignals() {
     if (handler == SIG_DFL) {
         int defAct = g_signalDefaultActions[signum];
         if (defAct == SIGACTION_TERM || defAct == SIGACTION_CORE)
-            ExitCurrentThread(true, m_Parent->GetMainThread() == this, true);
+            ExitCurrentThread(0x7F | (signum << 8), true, m_Parent->GetMainThread() == this, true);
         return 0;
     }
 
@@ -538,6 +576,42 @@ void Thread::AcquireSignalLock() {
 
 void Thread::ReleaseSignalLock() {
     spinlock_release(&m_signalLock);
+}
+
+bool Thread::HasPendingUnblockedSignals() {
+    if (m_Parent == nullptr)
+        return false;
+
+    int state = Processor::DisableInterrupts();
+    m_Parent->AcquireSignalLock();
+    spinlock_acquire(&m_signalLock);
+
+    sigset_t pending;
+    sigset_t& parentPending = m_Parent->GetPendingSignals();
+
+    memset(&pending, 0, sizeof(sigset_t));
+
+    for (int i = 1; i < NSIG; i++) {
+        if (SIGNAL_GET(&parentPending, i) > 0)
+            SIGNAL_SET(&pending, i);
+
+        if (SIGNAL_GET(&m_pendingSignals, i) > 0)
+            SIGNAL_SET(&pending, i);
+    }
+
+    bool hasPending = false;
+    for (int i = 1; i < NSIG; i++) {
+        if (SIGNAL_GET(&m_blockedSignals, i) == 0 && SIGNAL_GET(&pending, i) > 0) {
+            hasPending = true;
+            break;
+        }
+    }
+
+    spinlock_release(&m_signalLock);
+    m_Parent->ReleaseSignalLock();
+    Processor::EnableInterrupts(state);
+
+    return hasPending;
 }
 
 [[noreturn]] void Thread_ExitHelper(void* data) {

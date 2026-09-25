@@ -145,6 +145,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/VMRegionAllocator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sanitisers/sanitisers.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sanitisers/ubsan.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Event.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Process.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Scheduler.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Semaphore.cpp

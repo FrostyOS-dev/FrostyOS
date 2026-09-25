@@ -21,9 +21,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stddef.h>
 #include <stdint.h>
 
+#include <HAL/HAL.hpp>
+
 class Process;
 
-uint64_t HandleSystemCall(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5);
+uint64_t HandleSystemCall(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, CPU_Registers* state);
 
 bool UserRead(const void* userBuf, void* kBuf, size_t size, Process* currentProc);
 bool UserWrite(void* userBuf, const void* kBuf, size_t size, Process* currentProc, bool validate = true);
@@ -62,7 +64,8 @@ bool UserReadAtomic32(const uint32_t* userBuf, uint32_t* kBuf, Process* currentP
     SC(CHDIR, chdir) \
     SC(FCHDIR, fchdir) \
     SC(IOCTL, ioctl) \
-    SC(FSTATAT, fstatat)
+    SC(FSTATAT, fstatat) \
+    SC(WAITPID, waitpid)
 
 enum SystemCalls : uint64_t {
 #define ENUMERATE_CALL(u, l) SYS_##u,
@@ -70,6 +73,6 @@ enum SystemCalls : uint64_t {
 #undef ENUMERATE_CALL
 };
 
-#define SYSTEM_CALL_COUNT 32
+#define SYSTEM_CALL_COUNT 33
 
 #endif /* _SYSTEM_CALL_HPP */

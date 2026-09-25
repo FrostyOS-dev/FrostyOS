@@ -28,12 +28,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <SystemCalls/Signal.hpp>
 
+#include "Event.hpp"
 #include "Thread.hpp"
 #include "ThreadList.hpp"
 
 enum class ProcessMode {
     KERNEL,
     USER
+};
+
+enum class ProcessState {
+    ACTIVE,
+    ZOMBIE,
+    STOPPED
 };
 
 struct Credential {
@@ -57,7 +64,7 @@ public:
     Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice);
     ~Process();
 
-    bool Start();
+    bool Start(bool insert = true);
     bool Create(bool initAlloc = true);
     void Delete();
 
@@ -75,11 +82,11 @@ public:
     ProcessMode GetMode() const;
     uint8_t GetNice() const;
 
-    void SetPID(uint64_t pid);
-    uint64_t GetPID() const;
+    void SetPID(int64_t pid);
+    int64_t GetPID() const;
 
-    void SetPPID(uint64_t ppid);
-    uint64_t GetPPID() const;
+    void SetPPID(int64_t ppid);
+    int64_t GetPPID() const;
 
     void SetVMM(VMM::VMM* vmm);
     VMM::VMM* GetVMM() const;
@@ -93,9 +100,17 @@ public:
     FS::VNode* GetCWD();
     void SetCWD(FS::VNode* cwd);
 
-    bool Fork(Process* other, uint64_t newMainReturn);
+    bool Fork(Process* other, uint64_t newMainReturn, CPU_Registers* regs);
 
     AVLTree::wAVLTree<uint64_t, FutexWaitQueue*>& GetFutextList();
+
+    ProcessState GetState() const;
+    void SetState(ProcessState state);
+
+    int GetExitStatus() const;
+    void SetExitStatus(int status);
+
+    EventWaitQueue& GetChildWaitQueue();
 
     int SetSignalAction(int signal, sigaction_t* newAct, sigaction_t* oldAct);
     int RaiseSignal(int signal);
@@ -112,8 +127,8 @@ private:
     ProcessMode m_Mode;
     VMM::VMM* m_VMM;
     uint8_t m_Nice;
-    uint64_t m_PID;
-    uint64_t m_PPID;
+    int64_t m_PID;
+    int64_t m_PPID;
     uint64_t m_nextTID;
     Thread* m_MainThread;
     ProcThreadList m_Threads;
@@ -121,6 +136,10 @@ private:
     FileDescriptorManager* m_FDManager;
     FS::VNode* m_cwd;
     AVLTree::wAVLTree<uint64_t, FutexWaitQueue*> m_futexList;
+
+    ProcessState m_state;
+    int m_exitStatus;
+    EventWaitQueue m_childWaitQueue;
     
     sigaction_t m_sigActions[NSIG];
     sigset_t m_pendingSignals;

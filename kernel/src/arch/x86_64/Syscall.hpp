@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
+#include "ArchDefs.h"
+
 /*
 On x86_64, system calls are issued with the following arguments:
 rax: system call number
@@ -33,7 +35,7 @@ r9:  e
 extern "C" {
     void x86_64_SyscallEntry();
     
-    uint64_t x86_64_SyscallHandler(uint64_t num, uint64_t a, uint64_t b, uint64_t c, uint64_t d, uint64_t e);
+    uint64_t x86_64_SyscallHandler(x86_64_Registers* regs);
 }
 
 bool x86_64_InitSyscall();

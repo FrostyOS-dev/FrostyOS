@@ -15,6 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "ArchDefs.h"
 #include "CPUID.h"
 #include "GDT.hpp"
 #include "MSR.h"
@@ -30,22 +31,24 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <SystemCalls/SystemCall.hpp>
 
-extern "C" uint64_t x86_64_SyscallHandler(uint64_t num, uint64_t a, uint64_t b, uint64_t c, uint64_t d, uint64_t e) {
+extern "C" uint64_t x86_64_SyscallHandler(x86_64_Registers* regs) {
     Scheduler::ProcessorState* state = GetCurrentProcessorState();
     Thread* currentThread = state->currentThread;
-    memcpy(&currentThread->GetMutableRegisters(), &state->registers, sizeof(CPU_Registers));
+    memcpy(&currentThread->GetMutableRegisters(), regs, sizeof(CPU_Registers));
+    currentThread->SetStack(regs->RSP);
 
     // Processor::EnableInterrupts();
 
-    uint64_t rc = HandleSystemCall(num, a, b, c, d, e);
+    uint64_t rc = HandleSystemCall(regs->RAX, regs->RDI, regs->RSI, regs->RDX, regs->R8, regs->R9, regs);
     Processor::DisableInterrupts();
-    x86_64_Registers* regs = &currentThread->GetMutableRegisters();
     regs->RAX = rc;
 
     int ret = currentThread->DispatchSignals(regs, currentThread->GetExtraContext());
     assert(ret >= 0);
-    if (ret > 0) // signal ready to be handled
+    if (ret > 0) {// signal ready to be handled
+        memcpy(&currentThread->GetMutableRegisters(), regs, sizeof(x86_64_Registers));
         Scheduler::RunThread(currentThread, false, true); // syscall return clobbers registers, so need to properly context switch
+    }
 
     return rc;
 }

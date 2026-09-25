@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
+#include <HAL/HAL.hpp>
+
 typedef long pid_t;
 typedef int uid_t;
 typedef int gid_t;
@@ -48,8 +50,10 @@ pid_t sys_gettid();
 int sys_getresuid(UIDs* uids);
 int sys_getresgid(GIDs* gid);
 
-pid_t sys_fork();
+pid_t sys_fork(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, CPU_Registers* state);
 
 int sys_exec(const char* path, char* const argv[], char* const env[]);
+
+long sys_waitpid(pid_t pid, int* wstatus, int options);
 
 #endif /* _SYSCALL_PROCESS_HPP */

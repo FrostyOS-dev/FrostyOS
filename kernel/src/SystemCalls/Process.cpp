@@ -29,6 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Memory/VMM.hpp>
 #include <Memory/VMRegionAllocator.hpp>
 
+#include <Scheduling/Event.hpp>
 #include <Scheduling/Process.hpp>
 #include <Scheduling/Scheduler.hpp>
 #include <Scheduling/Thread.hpp>
@@ -37,8 +38,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <arch/x86_64/Scheduling/TaskUtil.hpp>
 #endif
 
+#define WNOHANG 1
+
 [[noreturn]] void sys_exit(uint64_t code) {
-    Thread::ExitCurrentThread(true, true, true);
+    Thread::ExitCurrentThread(code, true, true, true);
 
     PANIC("sys_exit failed!");
 }
@@ -105,7 +108,7 @@ int sys_getresgid(GIDs* gids) {
     return ESUCCESS;
 }
 
-pid_t sys_fork() {
+pid_t sys_fork(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, CPU_Registers* state) {
     Thread* current = Thread::GetCurrentThread();
     Process* currentProc = current->GetParent();
     VMM::VMM* currentVMM = currentProc->GetVMM();
@@ -148,7 +151,7 @@ pid_t sys_fork() {
 
     VMRegionAllocator* allocator = vmm->GetAllocator();
 
-    if (!vmm->Fork(currentVMM) || !allocator->Fork(currentVMM->GetAllocator()) || !proc->Fork(currentProc, 0)) {
+    if (!vmm->Fork(currentVMM) || !allocator->Fork(currentVMM->GetAllocator()) || !proc->Fork(currentProc, 0, state)) {
         proc->Delete();
         delete proc;
         return -ENOMEM;
@@ -301,15 +304,86 @@ int sys_exec(const char* path, char* const argv[], char* const env[]) {
     FDManager->Delete();
     FDManager->Fork(currentProc->GetFDManager(), newProc);
 
-    Scheduler::RemoveProcess(currentProc->GetPID());
+    Scheduler::g_Processes.lock();
+    Scheduler::g_Processes.remove(currentProc);
+    Scheduler::g_Processes.unlock();
 
     if (!newProc->Start()) {
         newProc->Delete();
         delete newProc;
     }
 
-    Thread::ExitCurrentThread(true, true, false);
+    Thread::ExitCurrentThread(0, true, true, false);
 
     PANIC("sys_exec: Thread::ExitCurrentThread returned!");
+}
+
+long sys_waitpid(pid_t pid, int* wstatus, int options) {
+    Thread* currentThread = Thread::GetCurrentThread();
+    Process* currentProcess = currentThread->GetParent();
+    
+    while (true) {
+        EventWaitNode node = {};
+        node.queue = &currentProcess->GetChildWaitQueue();
+        node.requestedEvents = PROCESS_EXIT_EVENT;
+        EventWaitNode* nodePtr = &node;
+        Event::RegisterWaitNodes(&nodePtr, 1);
+
+        bool hasChildren = false;
+        Process* zombieChild = nullptr;
+        
+        Scheduler::g_Processes.lock();
+        Scheduler::g_Processes.Enumerate([&](Process* p, void* data) -> bool {
+            if (p->GetPPID() == currentProcess->GetPID() && (pid == -1 || p->GetPID() == pid)) {
+                hasChildren = true;
+                if (p->GetState() == ProcessState::ZOMBIE) {
+                    zombieChild = p;
+                    return false; // Break enumeration
+                }
+            }
+            return true;
+        }, nullptr);
+        
+        if (zombieChild != nullptr) {
+            Event::UnregisterWaitNodes(&nodePtr, 1);
+
+            if (wstatus != nullptr) {
+                int status = zombieChild->GetExitStatus();
+                if (!UserWrite(wstatus,  &status, sizeof(int), currentProcess, true)) {
+                    Scheduler::g_Processes.unlock();
+                    return -EFAULT;
+                }
+            }
+            
+            uint64_t reapedPid = zombieChild->GetPID();
+            Scheduler::g_Processes.remove(zombieChild);
+            Scheduler::g_Processes.unlock();
+            
+            delete zombieChild; // Final cleanup
+            return reapedPid;
+        }
+        
+        Scheduler::g_Processes.unlock();
+        
+        if (!hasChildren) {
+            Event::UnregisterWaitNodes(&nodePtr,1);
+            return -ECHILD;
+        }
+            
+        if (options & WNOHANG) {
+            Event::UnregisterWaitNodes(&nodePtr,1);
+            return 0;
+        }
+            
+        // Block until awoken
+        int rc = Event::BlockOnWaitNodes(&nodePtr, 1, UINT64_MAX);
+
+        Event::UnregisterWaitNodes(&nodePtr, 1);
+        
+        if (rc == -EINTR)
+            return -EINTR;
+            
+        // If awoken (rc > 0), the loop repeats to find the new zombie
+    }
 }
 

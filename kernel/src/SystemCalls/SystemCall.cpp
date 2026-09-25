@@ -31,7 +31,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Scheduling/Process.hpp>
 
-typedef uint64_t (*systemCall_t)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t);
+typedef uint64_t (*systemCall_t)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, CPU_Registers*);
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-function-type"
@@ -44,11 +44,11 @@ systemCall_t g_syscallTable[SYSTEM_CALL_COUNT] = {
 
 #pragma GCC diagnostic pop
 
-uint64_t HandleSystemCall(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5) {
+uint64_t HandleSystemCall(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, CPU_Registers* state) {
     if (num >= SYSTEM_CALL_COUNT)
         return -ENOSYS;
 
-    uint64_t rc = g_syscallTable[num](arg1, arg2, arg3, arg4, arg5);
+    uint64_t rc = g_syscallTable[num](arg1, arg2, arg3, arg4, arg5, state);
     return rc;
 }
 

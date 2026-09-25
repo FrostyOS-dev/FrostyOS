@@ -63,10 +63,10 @@ namespace Scheduler {
         ProcessorState* state = GetCurrentProcessorState();
         Process* parent = thread->GetParent();
         if (parent != nullptr && parent->GetMode() == ProcessMode::USER) {
-            if (!noSignals) {
-                int rc = thread->DispatchSignals(&thread->GetMutableRegisters(), thread->GetExtraContext());
-                assert(rc >= 0);
-            }
+            // if (!noSignals) {
+            //     int rc = thread->DispatchSignals(&thread->GetMutableRegisters(), thread->GetExtraContext());
+            //     assert(rc >= 0);
+            // }
             
             state->processor->SwitchKernelStack(thread->GetKernelStack());
             state->processor->RestoreExtraContext(thread->GetExtraContext());
@@ -152,19 +152,21 @@ namespace Scheduler {
     }
 
     void AddProcess(Process* process) {
-        spinlock_acquire(&g_PIDLock);
-        process->SetPID(g_LastPID++);
-        spinlock_release(&g_PIDLock);
+        if (process->GetPID() < 0) {
+            spinlock_acquire(&g_PIDLock);
+            process->SetPID(g_LastPID++);
+            spinlock_release(&g_PIDLock);
+        }
 
         g_Processes.lock();
         g_Processes.insert(process);
         g_Processes.unlock();
     }
 
-    Process* GetProcess(uint64_t pid) {
+    Process* GetProcess(int64_t pid) {
         struct Data {
             Process* process;
-            uint64_t pid;
+            int64_t pid;
         } data = {nullptr, pid};
         g_Processes.lock();
         g_Processes.Enumerate([](Process* process, void* data) -> bool {
@@ -179,7 +181,7 @@ namespace Scheduler {
         return data.process;
     }
 
-    void RemoveProcess(uint64_t pid) {
+    void RemoveProcess(int64_t pid) {
         Process* process = GetProcess(pid);
         if (process == nullptr)
             return;
@@ -419,7 +421,7 @@ namespace Scheduler {
         spinlock_acquire(&state->lock);
 
         if (oldThread != nullptr) {
-            if (oldThread->sleepRemainingTime > 0) {
+            if (oldThread->sleepRemainingTime > 0 && oldThread->sleepRemainingTime != UINT64_MAX) {
                 state->sleepingThreads.lock();
                 state->sleepingThreads.pushBack(oldThread);
                 state->sleepingThreads.unlock();
@@ -640,16 +642,28 @@ namespace Scheduler {
                 if (proc->GetMode() == ProcessMode::USER)
                     GetCurrentProcessor()->DestroyExtraContext(thread->GetExtraContext());
                 thread->Delete();
+
+                bool shouldDeleteParent = thread->ShouldDeleteParent();
+                bool shouldRemoveProc = thread->ShouldRemoveProc();
+
                 if (thread->ShouldDelete())
                     delete thread;
-                if (thread->ShouldDeleteParent()) {
-                    if (thread->ShouldRemoveProc()) {
-                        g_Processes.lock();
-                        g_Processes.remove(proc);
-                        g_Processes.unlock();
-                    }
-                    proc->Delete();
-                    delete proc;
+                if (shouldDeleteParent) {
+                    proc->Delete(); // clear the VMM and FDs
+
+                    if (shouldRemoveProc) {
+                        proc->SetState(ProcessState::ZOMBIE);
+                        // status should already be set
+
+                        Process* parent = Scheduler::GetProcess(proc->GetPPID());
+                        if (parent != nullptr) {
+                            parent->GetChildWaitQueue().Trigger(PROCESS_EXIT_EVENT);
+                            parent->RaiseSignal(SIGCHLD);
+                        }
+
+                        // do not need to remove process or delete it here
+                    } else // for execve, where the process is being replaced
+                        delete proc;
                 }
             }
             g_deadThreadsSemaphore.Wait(); // nothing to delete, wait until next is ready

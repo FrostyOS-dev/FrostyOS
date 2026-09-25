@@ -49,6 +49,8 @@ enum class FutexWakeReason : uint8_t {
 
 class FutexWaitQueue;
 
+struct EventWaitNode;
+
 class Thread {
 public:
     struct CPUInfo {
@@ -70,7 +72,7 @@ public:
 
     bool Delete(); // Assumed to be removed from scheduler, and not running
 
-    static bool ExitCurrentThread(bool deleteThis, bool deleteParent, bool removeProc);
+    static bool ExitCurrentThread(uint64_t code, bool deleteThis, bool deleteParent, bool removeProc);
     static Thread* GetCurrentThread();
 
     void SetEntryPoint(ThreadEntryPoint entryPoint);
@@ -93,6 +95,7 @@ public:
     uint64_t GetStack() const;
     void SetKernelStack(uint64_t stack);
     uint64_t GetKernelStack() const;
+    uint64_t GetOriginalStack() const;
 
     void SetThreadListData(ThreadListItemInternalData& data);
     ThreadListItemInternalData& GetThreadListData();
@@ -118,7 +121,7 @@ public:
     bool PendingDelete() const;
     int64_t GetIntState() const;
 
-    bool Fork(Thread* other, uint64_t newReturnValue);
+    bool Fork(Thread* other, uint64_t newReturnValue, CPU_Registers* regs);
 
     int RaiseSignal(int signal);
     int CheckSignals();
@@ -133,11 +136,17 @@ public:
     void AcquireSignalLock(); // uses a spinlock, but does NOT disable interrupts
     void ReleaseSignalLock();
 
+    bool HasPendingUnblockedSignals();
+
     uint64_t sleepRemainingTime;
     YieldCallback yieldCallback;
 
     FutexWaitQueue* blockedFutex = nullptr;
     FutexWakeReason wakeReason = FutexWakeReason::None;
+
+    spinlock_t eventLock;
+    bool eventWaitActive;
+    EventWaitNode* activeEventNodes;
 
 private:
     ThreadEntryPoint m_EntryPoint;
@@ -146,6 +155,7 @@ private:
     CPU_Registers m_Registers;
     CPU_ExtraContext m_extraContext;
     uint64_t m_Stack;
+    uint64_t m_OriginalStack;
     uint64_t m_KernelStack;
     ThreadListItemInternalData m_ThreadListData;
     ThreadListItemInternalData m_ProcThreadListData;
@@ -162,6 +172,7 @@ private:
         bool removeProc;
         bool pendingDelete;
         int64_t intState;
+        uint64_t exitCode;
     } m_deleteProp;
 
     sigset_t m_blockedSignals;

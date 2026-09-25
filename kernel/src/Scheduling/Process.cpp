@@ -15,6 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "Event.hpp"
 #include "Process.hpp"
 #include "Scheduler.hpp"
 #include "Thread.hpp"
@@ -40,7 +41,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <tty/TTY.hpp>
 
 
-Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), m_VMM(vmm), m_Nice(nice), m_PID(UINT64_MAX), m_PPID(UINT64_MAX), m_nextTID(0), m_MainThread(nullptr), m_Threads(), m_cred({0, 0, 0, 0, 0, 0}), m_FDManager(nullptr), m_cwd(nullptr) {
+Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), m_VMM(vmm), m_Nice(nice), m_PID(-1), m_PPID(-1), m_nextTID(0), m_MainThread(nullptr), m_Threads(), m_cred({0, 0, 0, 0, 0, 0}), m_FDManager(nullptr), m_cwd(nullptr), m_state(ProcessState::ACTIVE), m_exitStatus(0) {
 
 }
 
@@ -48,8 +49,9 @@ Process::~Process() {
 
 }
 
-bool Process::Start() {
-    Scheduler::AddProcess(this);
+bool Process::Start(bool insert) {
+    if (insert)
+        Scheduler::AddProcess(this);
     Scheduler::ScheduleThread(m_MainThread);
     m_Threads.lock();
     m_Threads.Enumerate([](Thread* thread, void*) -> ThreadList::IteratorDecision {
@@ -230,19 +232,19 @@ uint8_t Process::GetNice() const {
     return m_Nice;
 }
 
-void Process::SetPID(uint64_t pid) {
+void Process::SetPID(int64_t pid) {
     m_PID = pid;
 }
 
-uint64_t Process::GetPID() const {
+int64_t Process::GetPID() const {
     return m_PID;
 }
 
-void Process::SetPPID(uint64_t ppid) {
+void Process::SetPPID(int64_t ppid) {
     m_PPID = ppid;
 }
 
-uint64_t Process::GetPPID() const {
+int64_t Process::GetPPID() const {
     return m_PPID;
 }
 
@@ -278,11 +280,11 @@ void Process::SetCWD(FS::VNode* cwd) {
     m_cwd = cwd;
 }
 
-bool Process::Fork(Process* other, uint64_t newMainReturn) {
+bool Process::Fork(Process* other, uint64_t newMainReturn, CPU_Registers* regs) {
     m_MainThread = new Thread();
     m_MainThread->SetParent(this);
     m_MainThread->SetTID(0);
-    if (!m_MainThread->Fork(other->m_MainThread, newMainReturn))
+    if (!m_MainThread->Fork(other->m_MainThread, newMainReturn, regs))
         return false;
     Scheduler::AddProcess(this);
     int state = Processor::DisableInterrupts();
@@ -297,6 +299,26 @@ bool Process::Fork(Process* other, uint64_t newMainReturn) {
 
 AVLTree::wAVLTree<uint64_t, FutexWaitQueue*>& Process::GetFutextList() {
     return m_futexList;
+}
+
+ProcessState Process::GetState() const {
+    return m_state;
+}
+
+void Process::SetState(ProcessState state) {
+    m_state = state;
+}
+
+int Process::GetExitStatus() const {
+    return m_exitStatus;
+}
+
+void Process::SetExitStatus(int status) {
+    m_exitStatus = status;
+}
+
+EventWaitQueue& Process::GetChildWaitQueue() {
+    return m_childWaitQueue;
 }
 
 int Process::SetSignalAction(int signal, sigaction_t* newAct, sigaction_t* oldAct) {
@@ -350,18 +372,25 @@ int Process::RaiseSignal(int signal) {
         sigset_t& pending = thread->GetPendingSignals();
 
         if (SIGNAL_GET(&blocked, signal) == 0 || notIgnorable) {
-            SIGNAL_SET(&pending, signal);
-            if (notIgnored || notIgnorable) {
-                // wake-up, including stopped check for SIGCONT
-            }
+            // SIGNAL_SET(&pending, signal);
+            // if (notIgnored || notIgnorable) {
+            //     // wake-up, including stopped check for SIGCONT
+            // }
 
-            if (!(shouldStop || signal == SIGCONT)) { // stopping or continuing, possible race prevention
-                m_Threads.unlock();
-                thread->ReleaseSignalLock();
-                spinlock_release(&m_signalLock);
-                Processor::EnableInterrupts(state);
-                return 0;
-            }
+            // if (!(shouldStop || signal == SIGCONT)) { // stopping or continuing, possible race prevention
+            //     m_Threads.unlock();
+            //     thread->ReleaseSignalLock();
+            //     spinlock_release(&m_signalLock);
+            //     Processor::EnableInterrupts(state);
+            //     return 0;
+            // }
+            thread->ReleaseSignalLock();
+            m_Threads.unlock();
+            spinlock_release(&m_signalLock);
+
+            thread->RaiseSignal(signal);
+            Processor::EnableInterrupts(state);
+            return 0;
         }
 
         thread->ReleaseSignalLock();
@@ -383,13 +412,13 @@ int Process::RaiseSignal(int signal) {
     Processor::EnableInterrupts(state);
 
     // tell the parent when a child stopped
-    if ((notIgnorable || notIgnored) && g_signalDefaultActions[signal] == SIGACTION_STOP) {
-        // TODO: proc status
+    // if ((notIgnorable || notIgnored) && g_signalDefaultActions[signal] == SIGACTION_STOP) {
+    //     // TODO: proc status
 
-        Process* parent = Scheduler::GetProcess(m_PPID);
-        if (parent != nullptr && (parent->m_sigActions[SIGCHLD].flags & SA_NOCLDSTOP) == 0)
-            parent->RaiseSignal(SIGCHLD);
-    }
+    //     Process* parent = Scheduler::GetProcess(m_PPID);
+    //     if (parent != nullptr && (parent->m_sigActions[SIGCHLD].flags & SA_NOCLDSTOP) == 0)
+    //         parent->RaiseSignal(SIGCHLD);
+    // }
 
     return 0;
 }
