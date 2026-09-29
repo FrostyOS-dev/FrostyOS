@@ -93,7 +93,7 @@ void x86_64_SerialIRQHandler(x86_64_ISR_Frame* frame, void* ctx) {
     port->HandleIRQ();
 }
 
-x86_64_SerialPort::x86_64_SerialPort(uint8_t id) : m_id(id), m_ioBase(0), m_irq(nullptr), m_currentDivisor(0), m_loopback(true) {
+x86_64_SerialPort::x86_64_SerialPort(uint8_t id) : m_id(id), m_ioBase(0), m_irq(nullptr), m_TTY(nullptr), m_currentDivisor(0) {
 
 }
 
@@ -121,8 +121,12 @@ int x86_64_SerialPort::Init() {
 
     printf("COM%d: %d baud, 8 bit charlen, 1 stop bit, no parity\n", m_id, SERIAL_DEFAULT_BAUD);
 
-    if (m_id == 0)
+    if (m_id == 0) {
         g_defaultSerialDevice = this;
+        TTYBackendSerial* serialBackend = new TTYBackendSerial(g_defaultSerialDevice);
+        m_TTY = g_KTTY;
+        g_KTTY->SetInputBackend(serialBackend);
+    }
 
     return ESUCCESS;
 }
@@ -161,14 +165,9 @@ void x86_64_SerialPort::HandleIRQ() {
 }
 
 bool x86_64_SerialPort::ReadByte(uint8_t& out, bool block) {
-    bool rc = m_rxBuffer.pop(out);
-    if (rc || !block)
-        return rc;
-    do {
-        m_rxSemaphore.Wait();
-        rc = m_rxBuffer.pop(out);
-    } while (!rc);
-    return rc;
+    (void)out;
+    (void)block;
+    return false;
 }
 
 bool x86_64_SerialPort::WriteByte(uint8_t byte, bool block) {
@@ -179,18 +178,6 @@ bool x86_64_SerialPort::WriteByte(uint8_t byte, bool block) {
     }
     WritePort(PORT_TX, byte);
     return true;
-}
-
-void x86_64_SerialPort::EnableLoopback() {
-    m_loopback = true;
-}
-
-void x86_64_SerialPort::DisableLoopback() {
-    m_loopback = false;
-}
-
-bool x86_64_SerialPort::isLoopbackEnabled() const {
-    return m_loopback;
 }
 
 bool x86_64_SerialPort::HasData() {
@@ -204,16 +191,8 @@ bool x86_64_SerialPort::CanTransmit() {
 void x86_64_SerialPort::ProcessData() {
     while (HasData()) {
         uint8_t c = ReadPort(PORT_RX);
-        if (m_rxBuffer.push(c))
-            m_rxSemaphore.Signal();
-        if (m_loopback) {
-            WriteByte(c);
-            g_CurrentTTY->Write((char*)&c, 1, true);
-            if (c == 0x08) { // backspace
-                WriteByte(' ');
-                WriteByte(c);
-            }
-        }
+        if (m_TTY != nullptr)
+            m_TTY->HandleInput(c);
     }
 }
 
@@ -275,11 +254,6 @@ int x86_64_InitSerial() {
     rc = uacpi_find_devices("PNP0501", x86_64_InitSerialPort, nullptr);
     if (uacpi_unlikely_error(rc))
         return -ENODEV;
-
-     if (g_defaultSerialDevice != nullptr) {
-        TTYBackendSerial* serialBackend = new TTYBackendSerial(g_defaultSerialDevice);
-        g_CurrentTTY->SetInputBackend(serialBackend);
-    }
 
     return ESUCCESS;
 }

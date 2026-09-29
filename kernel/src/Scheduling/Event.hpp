@@ -6,6 +6,7 @@
 #include <spinlock.h>
 
 #define PROCESS_EXIT_EVENT 1
+#define POLLIN 2
 
 class Thread;
 class EventWaitQueue;

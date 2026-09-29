@@ -59,7 +59,7 @@ Colour g_KForegroundColour;
 TTYBackendDebug g_KDebugBackend;
 TTYBackendVGA g_KVGABackend;
 
-GraphicalTTY g_KTTY;
+GraphicalTTY KTTY;
 
 Credential KCred = {0, 0, 0, 0, 0, 0};
 
@@ -84,12 +84,13 @@ void StartKernel() {
 
     g_KVGABackend.Init(&g_FBVideoDevice);
 
-    g_KTTY.Init();
-    g_KTTY.SetOutputBackend(&g_KVGABackend);
-    g_KTTY.SetDebugBackend(&g_KDebugBackend);
-    g_KTTY.SetVideoDevice(&g_FBVideoDevice);
+    KTTY.Init();
+    KTTY.SetOutputBackend(&g_KVGABackend);
+    KTTY.SetDebugBackend(&g_KDebugBackend);
+    KTTY.SetVideoDevice(&g_FBVideoDevice);
 
-    g_CurrentTTY = &g_KTTY;
+    g_CurrentTTY = &KTTY;
+    g_KTTY = &KTTY;
 
     g_KProcess = &KProcess;
     KProcess.SetCred(KCred);

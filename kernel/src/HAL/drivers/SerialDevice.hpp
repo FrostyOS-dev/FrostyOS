@@ -29,11 +29,6 @@ public:
     
     virtual bool ReadByte(uint8_t& out, bool block = true) = 0;
     virtual bool WriteByte(uint8_t byte, bool block = true) = 0;
-
-    // Loopback controls. If enabled, the device will send any input to the output
-    virtual void EnableLoopback() = 0;
-    virtual void DisableLoopback() = 0;
-    virtual bool isLoopbackEnabled() const = 0;
 };
 
 extern SerialDevice* g_defaultSerialDevice;

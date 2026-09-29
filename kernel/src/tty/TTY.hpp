@@ -21,7 +21,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stddef.h>
 #include <stdint.h>
 
+#include <DataStructures/Buffer.hpp>
+
 #include <HAL/drivers/Video/VideoDevice.hpp>
+
+#include <Scheduling/Event.hpp>
 
 #include "Termios.hpp"
 #include "TTYBackend.hpp"
@@ -29,6 +33,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define DEBUG_MIRRORING_DEFAULT_ENABLED true
 
 #define ANSI_BUFFER_SIZE 64
+
+#define TTY_INTERNAL_BUFFER_SIZE 512
+#define TTY_READ_BUFFER_SIZE 4096
 
 enum class TTYStream {
     IN,
@@ -45,6 +52,8 @@ enum class TTYType {
 
 class Process;
 
+typedef int (*termiosCallback)(void* data, termios_t* termios);
+
 class TTY {
 public:
     TTY();
@@ -53,10 +62,11 @@ public:
 
     virtual void Init();
 
-    int Read(char* buf, size_t size, size_t* realCount = 0); // Only blocks for the first character, and reads any waiting to be read
-    int ReadBlock(char* buf, size_t size);
-    virtual int Write(const char* buf, size_t size, bool flush = false);
+    int Read(char* buf, size_t size, size_t* realCount = 0);
+    int Write(const char* buf, size_t size, bool flush = false);
     int WriteDebug(const char* buf, size_t size);
+
+    void HandleInput(char c); // Interrupt safe, only 1 user
 
     void SetCursor(uint64_t x, uint64_t y);
     void GetCursor(uint64_t& x, uint64_t& y);
@@ -93,14 +103,29 @@ public:
     TTYType GetType() const;
     void SetType(TTYType type);
 
+    void SetTermiosCallback(termiosCallback callback, void* data);
+
     static bool CanRead(TTYStream stream);
     static bool CanWrite(TTYStream stream);
 
 protected:
+    virtual int InternalWrite(const char* buf, size_t size, bool flush = false);
+
     TTYBackend* m_inputBackend;
     TTYBackend* m_outputBackend;
     TTYBackend* m_debugBackend;
+    termios_t m_termios;
+    termiosCallback m_termiosCallback;
+    void* m_termiosCallbackData;
     bool m_debugMirroring;
+
+    char m_internalBuffer[TTY_INTERNAL_BUFFER_SIZE];
+    uint64_t m_internalBufferOffset;
+
+    // interrupt-safe SPMC ringbuffer
+    RingBuffer<char, TTY_READ_BUFFER_SIZE> m_readBuffer;
+
+    EventWaitQueue m_inputWaitQueue;
 
 private:
     TTYType m_type;
@@ -112,18 +137,17 @@ public:
     GraphicalTTY(VideoDevice* video);
     ~GraphicalTTY() override;
 
-    void Init() override;
-
-    int Write(const char* buf, size_t size, bool flush = false) override;
-
     uint64_t GetMaxSeek() const override;
     uint64_t GetCurrentSeek() const override;
-
+    
     int SetSize(const winsize_t* size) override;
     int GetSize(winsize_t* size) override;
-
+    
     void SetVideoDevice(VideoDevice* video);
     VideoDevice* GetVideoDevice() const;
+
+protected:
+    int InternalWrite(const char* buf, size_t size, bool flush = false) override;
 
 private:
     struct EscapeState {
@@ -134,5 +158,6 @@ private:
 };
 
 extern TTY* g_CurrentTTY;
+extern TTY* g_KTTY;
 
 #endif /* _TTY_HPP */

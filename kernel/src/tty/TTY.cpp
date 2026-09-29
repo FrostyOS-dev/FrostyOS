@@ -19,13 +19,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "TTY.hpp"
 #include "TTYBackend.hpp"
 
-#include <cstdint>
 #include <errno.h>
+#include <stdint.h>
+#include <string.h>
+#include <util.h>
 
 #include <frostyos/asm/ioctls.h>
 
 #include <Graphics/VGAFont.hpp>
 
+#include <Scheduling/Event.hpp>
+
+#include <SystemCalls/Signal.hpp>
 #include <SystemCalls/SystemCall.hpp>
 
 #define ANSI_MAX_PARAMS 16
@@ -43,12 +48,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define ANSI_COLOR_DEFAULT_BG Colour(0x00, 0x00, 0x00)
 
 TTY* g_CurrentTTY = nullptr;
+TTY* g_KTTY = nullptr;
 
-TTY::TTY() : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_type(TTYType::Invalid) {
+TTY::TTY() : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_type(TTYType::Invalid) {
     
 }
 
-TTY::TTY(TTYType type) : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_type(type) {
+TTY::TTY(TTYType type) : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_type(type) {
 
 }
 
@@ -57,44 +63,90 @@ TTY::~TTY() {
 }
 
 void TTY::Init() {
-    
+    m_termios.c_iflag = ICRNL;
+    m_termios.c_oflag = ONLCR;
+    m_termios.c_lflag = ECHO | ICANON | ISIG | ECHOCTL;
+    m_termios.c_cflag = CS8 | B38400;
+    m_termios.c_cc[VMIN] = 1;
+    m_termios.c_cc[VINTR] = 0x3;
+    m_termios.c_cc[VQUIT] = 0x1c;
+    m_termios.c_cc[VERASE] = '\b';
+    m_termios.c_cc[VKILL] = 0x15;
+    m_termios.c_cc[VEOF] = 0x4;
+    m_termios.c_cc[VSTART] = 0x11;
+    m_termios.c_cc[VSTOP] = 0x13;
+    m_termios.c_cc[VSUSP] = 0x1a;
 }
 
 int TTY::Read(char* buf, size_t size, size_t* realCount) {
     if (m_inputBackend == nullptr)
         return -ENODEV;
-    size_t i = 0;
-    buf[i] = m_inputBackend->ReadChar();
-    for (i = 1; i < size; i++) {
-        char c = 0;
-        bool rc = m_inputBackend->ReadCharNoBlock(&c);
-        if (!rc)
-            break;
-        buf[i] = c;
-    }
-    *realCount = i;
-    return 0;
-}
+    
+    uint64_t min = static_cast<int>((m_termios.c_lflag & ICANON) > 0 ? 1 : m_termios.c_cc[VMIN]); // minimum characters to read, default to 1 in non-canonical mode
+    int time = (m_termios.c_lflag & ICANON) > 0 ? 0 : m_termios.c_cc[VTIME]; // maximum time to wait, default to 0 in non-canonical mode
 
-int TTY::ReadBlock(char* buf, size_t size) {
-    if (m_inputBackend == nullptr)
-        return -ENODEV;
-    for (size_t i = 0; i < size; i++)
-        buf[i] = m_inputBackend->ReadChar();
+    if (min == 0 && time == 0) { // no minimum, and no waiting, just read what is available
+        uint64_t i;
+        for (i = 0; i < size; i++) {
+            if (!m_readBuffer.pop(buf[i]))
+                break;
+        }
+        if (realCount != nullptr)
+            *realCount = i;
+        return 0;
+    }
+
+    // time is in 1/10 of a second, we want milliseconds, use UINT64_MAX to sleep indefinitely
+    size_t timeMS = (time == 0) ? UINT64_MAX : (time * 100);
+    size_t readCount = 0;
+
+    while (readCount < min && readCount < size) {
+        while (readCount < size && m_readBuffer.pop(buf[readCount]))
+            readCount++;
+
+        if (readCount >= min || readCount >= size)
+            break;
+
+        EventWaitNode waitNode;
+        waitNode.queue = &m_inputWaitQueue;
+        waitNode.requestedEvents = POLLIN;
+
+        EventWaitNode* nodes[] = { &waitNode };
+
+        // Wait for the event
+        int rc = Event::WaitOnEvents(nodes, 1, timeMS);
+        if (rc < 0 && rc != ETIMEDOUT) {
+            if (readCount > 0)
+                break;
+            return rc;
+        }
+
+        if (rc == -ETIMEDOUT)
+            break;
+    }
+
+    if (realCount != nullptr)
+        *realCount = readCount;
     return 0;
 }
 
 int TTY::Write(const char* buf, size_t size, bool flush) {
-    if (m_outputBackend == nullptr)
-        return -ENODEV;
+    int rc = 0;
     for (size_t i = 0; i < size; i++) {
-        m_outputBackend->WriteChar(buf[i]);
-        if (m_debugMirroring && m_debugBackend != nullptr)
-            m_debugBackend->WriteChar(buf[i]);
+        if (buf[i] == '\n' && (m_termios.c_oflag & ONLCR) > 0) {
+            char c = '\r';
+            rc = InternalWrite(&c, 1, false);
+            if (rc < 0)
+                break;
+        }
+
+        rc = InternalWrite(&buf[i], 1, false);
+        if (rc < 0)
+            break;
     }
     if (flush)
         m_outputBackend->Flush();
-    return 0;
+    return rc;
 }
 
 int TTY::WriteDebug(const char* buf, size_t size) {
@@ -103,6 +155,90 @@ int TTY::WriteDebug(const char* buf, size_t size) {
     for (size_t i = 0; i < size; i++)
         m_debugBackend->WriteChar(buf[i]);
     return 0;
+}
+
+void TTY::HandleInput(char c) {
+    if (c == '\r' && (m_termios.c_iflag & IGNCR) > 0)
+        return;
+
+    if (c == '\r' && (m_termios.c_iflag & ICRNL) > 0)
+        c = '\n';
+    else if (c == '\n' && (m_termios.c_iflag & INLCR) > 0)
+        c = '\r';
+
+    char echo = (m_termios.c_lflag & ECHO) > 0 ? c : '\0';
+
+    // echo control characters
+    if ((m_termios.c_lflag & ECHOCTL) > 0 && (m_termios.c_lflag & ECHO) > 0 && c < 32 && c != '\n' && c != '\r' && c != '\b' && c != '\t' && c != '\x1b') {
+        char temp[2] = {'^', static_cast<char>(c + 0x40)};
+        InternalWrite(temp, 2, true);
+        echo = 0;
+    }
+
+    if ((m_termios.c_lflag & ISIG) > 0) {
+        int signal = -1;
+        if (m_termios.c_cc[VINTR] == c)
+            signal = SIGINT;
+        else if (m_termios.c_cc[VQUIT] == c)
+            signal = SIGQUIT;
+        else if (m_termios.c_cc[VSUSP] == c)
+            signal = SIGTSTP;
+
+        if (signal >= 0) {
+            // TODO: get process that is controlling the tty, and raise the signal on it
+
+            return;
+        }
+    }
+
+    if ((m_termios.c_lflag & ICANON) > 0) {
+        bool flush = false;
+        if (c == m_termios.c_cc[VERASE]) { // backspace
+            if (m_internalBufferOffset == 0)
+                return;
+
+            m_internalBufferOffset--;
+            m_internalBuffer[m_internalBufferOffset] = '\0';
+
+            if ((m_termios.c_lflag & ECHO) > 0)
+                InternalWrite("\b \b", 3, true);
+            return;
+        } else if (c == m_termios.c_cc[VKILL]) { // clear everything
+            InternalWrite("\f", 1, true);
+
+            m_internalBufferOffset = 0;
+            memset(m_internalBuffer, 0, TTY_INTERNAL_BUFFER_SIZE);
+        } else if (c == m_termios.c_cc[VEOF]) // EOF
+            flush = true;
+        else if (c == '\n' || c == m_termios.c_cc[VEOL] || c == m_termios.c_cc[VEOL2]) // new line
+            flush = true;
+        
+        if (echo != 0)
+            InternalWrite(&echo, 1, true);
+
+        // Check if the buffer is full
+        m_internalBuffer[m_internalBufferOffset] = c;
+        m_internalBufferOffset++;
+        if (m_internalBufferOffset == TTY_INTERNAL_BUFFER_SIZE)
+            flush = true;
+
+        if (flush) {
+            for (size_t i = 0; i < m_internalBufferOffset; i++)
+                m_readBuffer.push(m_internalBuffer[i]);
+
+            memset(m_internalBuffer, 0, m_internalBufferOffset);
+
+            m_internalBufferOffset = 0;
+
+            m_inputWaitQueue.Trigger(POLLIN);
+        }
+    } else {
+        if (echo != 0)
+            InternalWrite(&echo, 1, true);
+
+        m_readBuffer.push(c);
+        m_inputWaitQueue.Trigger(POLLIN);
+    }
 }
 
 void TTY::SetCursor(uint64_t x, uint64_t y) {
@@ -174,7 +310,19 @@ int TTY::Ioctl(uint64_t op, void* arg, int* result, Process* currentProc) {
         return 0;
     }
     case TCGETS:
-    case TCSETS:
+        if (!UserWrite(arg, &m_termios, sizeof(termios_t), currentProc))
+            return EFAULT;
+        return 0;
+    case TCSETS: {
+        if (!UserRead(arg, &m_termios, sizeof(termios_t), currentProc))
+            return EFAULT;
+
+        int rc = 0;
+        if (m_termiosCallback != nullptr)
+            rc = m_termiosCallback(m_termiosCallbackData, &m_termios);
+
+        return rc;
+    }
     case TIOCSCTTY:
     case TIOCGPGRP:
     case TIOCSPGRP:
@@ -255,6 +403,11 @@ void TTY::SetType(TTYType type) {
     m_type = type;
 }
 
+void TTY::SetTermiosCallback(termiosCallback callback, void* data) {
+    m_termiosCallback = callback;
+    m_termiosCallbackData = data;
+}
+
 bool TTY::CanRead(TTYStream stream) {
     switch (stream) {
     case TTYStream::IN:
@@ -272,6 +425,21 @@ bool TTY::CanWrite(TTYStream stream) {
     default:
         return false;
     }
+}
+
+int TTY::InternalWrite(const char* buf, size_t size, bool flush) {
+    if (m_outputBackend == nullptr)
+        return -ENODEV;
+    for (size_t i = 0; i < size; i++) {
+        m_outputBackend->WriteChar(buf[i]);
+        if (m_debugMirroring && m_debugBackend != nullptr)
+            m_debugBackend->WriteChar(buf[i]);
+        if (m_inputBackend != nullptr && m_inputBackend != m_outputBackend)
+            m_inputBackend->WriteChar(buf[i]);
+    }
+    if (flush)
+        m_outputBackend->Flush();
+    return 0;
 }
 
 void ParseANSIParams(const char* escapeStr, int* params, int& paramCount) {
@@ -355,11 +523,7 @@ GraphicalTTY::~GraphicalTTY() {
 
 }
 
-void GraphicalTTY::Init() {
-
-}
-
-int GraphicalTTY::Write(const char* buf, size_t size, bool flush) {
+int GraphicalTTY::InternalWrite(const char* buf, size_t size, bool flush) {
     if (m_video == nullptr)
         return -ENODEV;
 
@@ -368,6 +532,9 @@ int GraphicalTTY::Write(const char* buf, size_t size, bool flush) {
 
         if (m_debugMirroring && m_debugBackend != nullptr)
             m_debugBackend->WriteChar(c);
+
+        if (m_inputBackend != nullptr && m_inputBackend != m_outputBackend)
+            m_inputBackend->WriteChar(c);
 
         if (m_escapeState.inEscape) {
             size_t len = 0;

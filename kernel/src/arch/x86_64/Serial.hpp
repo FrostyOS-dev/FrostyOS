@@ -20,11 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
-#include <DataStructures/Buffer.hpp>
-
 #include <HAL/drivers/SerialDevice.hpp>
-
-#include <Scheduling/Semaphore.hpp>
 
 #define SERIAL_RX_BUFFER_SIZE 1024
 
@@ -34,6 +30,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define SERIAL_DEFAULT_DIVISOR (SERIAL_BASE_BAUD / SERIAL_DEFAULT_BAUD)
 
 struct x86_64_SerialIRQ;
+
+class TTY;
 
 class x86_64_SerialPort : public SerialDevice {
 public:
@@ -51,10 +49,6 @@ public:
 
     bool ReadByte(uint8_t& out, bool block = true) override;
     bool WriteByte(uint8_t byte, bool block = true) override;
-
-    void EnableLoopback() override;
-    void DisableLoopback() override;
-    bool isLoopbackEnabled() const override;
     
 private:
     bool HasData();
@@ -67,13 +61,9 @@ private:
     uint8_t m_id;
     uint16_t m_ioBase;
     x86_64_SerialIRQ* m_irq;
+    TTY* m_TTY;
     
     uint16_t m_currentDivisor;
-
-    RingBuffer<uint8_t, SERIAL_RX_BUFFER_SIZE> m_rxBuffer;
-    Semaphore m_rxSemaphore;
-
-    bool m_loopback;
 };
 
 int x86_64_InitSerial();
