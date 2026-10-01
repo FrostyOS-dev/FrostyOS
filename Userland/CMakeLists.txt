@@ -15,6 +15,6 @@
 
 add_custom_target(Userland)
 
-add_dependencies(Userland deps)
+add_dependencies(Userland jinx-sources)
 
-add_subdirectory(deps)
+add_subdirectory(jinx-sources)

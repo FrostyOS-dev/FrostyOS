@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (©) 2024  Frosty515
+# Copyright (©) 2024-2026  Frosty515
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -32,6 +32,14 @@ if [ -z "$SYSROOT" ]; then
     SYSROOT=$PWD/root
 fi
 
+if [ ! -e "$PWD/Userland/jinx-sources/sysroot" ]; then
+    mkdir -p $PWD/Userland/jinx-sources/sysroot
+fi
+
+if [ ! -e "$SYSROOT" ]; then
+    ln -sf $PWD/Userland/jinx-sources/sysroot $SYSROOT
+fi
+
 # Make the toolchain directory prefix, and install kernel and LibC headers
 mkdir -p $TOOLCHAIN_PREFIX
 
@@ -52,5 +60,5 @@ else
     cd build
 fi
 
-cmake -GNinja -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DFROSTYOS_BUILD_CONFIG=$FROSTYOS_BUILD_CONFIG --toolchain=build-scripts/x86_64/toolchain.cmake ..
+cmake -GNinja -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DFROSTYOS_BUILD_CONFIG=$FROSTYOS_BUILD_CONFIG -DFROSTYOS_TOOLCHAIN_PREFIX=$FROSTYOS_TOOLCHAIN_PREFIX --toolchain=build-scripts/x86_64/toolchain.cmake ..
 ninja run-qemu

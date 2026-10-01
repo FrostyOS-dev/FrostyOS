@@ -272,6 +272,6 @@ endif()
 
 add_custom_target(install_kernel_headers
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_newer ${CMAKE_CURRENT_SOURCE_DIR}/headers/frostyos ${SYSROOT}/data/include/
-    COMMAND ${CMAKE_COMMAND} -E create_symlink ${SYSROOT}/data/include/asm ${CMAKE_SOURCE_DIR}/Userland/deps/mlibc/sysdeps/frostyos/include/asm
-    BYPRODUCTS ${CMAKE_SOURCE_DIR}/Userland/deps/mlibc/sysdeps/frostyos/include/asm
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_newer ${CMAKE_CURRENT_SOURCE_DIR}/headers/frostyos/asm ${CMAKE_SOURCE_DIR}/Userland/jinx-sources/deps/mlibc/sysdeps/frostyos/include/asm
+    BYPRODUCTS ${CMAKE_SOURCE_DIR}/Userland/jinx-sources/deps/mlibc/sysdeps/frostyos/include/asm
 )

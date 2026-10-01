@@ -1,0 +1,20 @@
+name=xgcc
+version=15.2.0
+revision=1
+tarball_url="https://ftpmirror.gnu.org/gcc/gcc-${version}/gcc-${version}.tar.xz"
+tarball_sha512=89047a2e07bd9da265b507b516ed3635adb17491c7f4f67cf090f0bd5b3fc7f2ee6e4cc4008beef7ca884b6b71dffe2bb652b21f01a702e17b468cca2d10b2de
+imagedeps="build-essential libmpfr-dev libmpc-dev libgmp-dev"
+hostdeps="xbinutils"
+deps="mlibc-headers"
+
+configure() {
+    ${source_dir}/configure --target=x86_64-frostyos --prefix=${prefix} --with-sysroot=${sysroot} --enable-languages=c,c++ --enable-threads=posix --disable-multilib --enable-shared --enable-host-shared --with-pic CXXFLAGS="-fno-char8_t"
+}
+
+build() {
+    make -j${parallelism} all-gcc all-target-libgcc
+}
+
+package() {
+    make install-gcc install-target-libgcc DESTDIR="${dest_dir}"
+}

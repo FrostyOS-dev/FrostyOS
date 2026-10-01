@@ -22,7 +22,7 @@ mkdir -p $TOOLCHAIN_PREFIX
 
 GCC_VERSION=15.2.0
 
-# Now check that x86_64-frostyos-gcc is version 14.1.1
+# Now check that x86_64-frostyos-gcc is version 15.2.0
 
 if [ -f "$TOOLCHAIN_PREFIX/bin/x86_64-frostyos-gcc" ]; then
     if [ "$($TOOLCHAIN_PREFIX/bin/x86_64-frostyos-gcc -dumpversion | grep $GCC_VERSION)" ]; then
@@ -30,11 +30,6 @@ if [ -f "$TOOLCHAIN_PREFIX/bin/x86_64-frostyos-gcc" ]; then
         exit 0
     fi
 fi
-
-# Install kernel and LibC headers
-# mkdir -p $SYSROOT/data/include/kernel
-# cp -r kernel/headers/* $SYSROOT/data/include/kernel/
-# cp -r Userland/Libraries/LibC/include/* $SYSROOT/data/include/
 
 # Install x86_64-frostyos-gcc
 

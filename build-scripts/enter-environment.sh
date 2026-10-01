@@ -20,4 +20,4 @@ set -e
 
 # This script is used to enter the build environment.
 
-env PATH=$PATH:$PWD/toolchain/local/bin SYSROOT=$PWD/root /bin/bash
+env PATH=$PATH:$PWD/toolchain/local/bin SYSROOT=$PWD/root FROSTYOS_TOOLCHAIN_PREFIX=$PWD/toolchain/local /bin/bash

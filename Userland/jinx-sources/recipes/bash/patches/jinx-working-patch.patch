@@ -1,0 +1,70 @@
+diff -ruN bash-clean/examples/loadables/finfo.c bash-working/examples/loadables/finfo.c
+--- bash-clean/examples/loadables/finfo.c	2023-10-31 05:01:06.000000000 +1000
++++ bash-working/examples/loadables/finfo.c	2026-10-01 21:23:17.188216451 +1000
+@@ -270,9 +270,18 @@
+ 	struct group	*gr;
+ 	char	*owner;
+ 	int	ma, mi, d;
+-
++#if defined (major)
+ 	ma = major (st->st_rdev);
++#else
++	ma = INT_MAX;
++#endif
++
++#if defined (minor)
+ 	mi = minor (st->st_rdev);
++#else
++	mi = INT_MAX;
++#endif
++
+ #if defined (makedev)
+ 	d = makedev (ma, mi);
+ #else
+diff -ruN bash-clean/examples/loadables/fltexpr.c bash-working/examples/loadables/fltexpr.c
+--- bash-clean/examples/loadables/fltexpr.c	2025-04-12 05:31:04.000000000 +1000
++++ bash-working/examples/loadables/fltexpr.c	2026-10-01 21:32:14.168840153 +1000
+@@ -211,8 +211,8 @@
+ /* Function replacements for some math functions that don't conform to the
+    supported prototypes. */
+ static sh_float_t xscalbn(sh_float_t d1, sh_float_t d2) { int x = d2; return (scalbn (d1, x)); }
+-static sh_float_t xjn(sh_float_t d1, sh_float_t d2) { int x = d1; return (jn (x, d2)); }
+-static sh_float_t xyn(sh_float_t d1, sh_float_t d2) { int x = d1; return (yn (x, d2)); }
++static sh_float_t xjn(sh_float_t d1, sh_float_t d2) { int x = d1; return 0.f; }
++static sh_float_t xyn(sh_float_t d1, sh_float_t d2) { int x = d1; return 0.f; }
+ static sh_float_t xldexp(sh_float_t d1, sh_float_t d2) { int x = d2; return (ldexp (d1, x)); }
+ 
+ /* Some additional math functions that aren't in libm */
+@@ -273,8 +273,8 @@
+   { "expm1",	1,	{ .func1 = expm1 }	},
+   { "fabs",	1,	{ .func1 = fabs }	},
+   { "floor",	1,	{ .func1 = floor }	},
+-  { "j0",	1,	{ .func1 = j0 }		},
+-  { "j1",	1,	{ .func1 = j1 }		},
++  { "j0",	1,	{ .func1 = NULL }		},
++  { "j1",	1,	{ .func1 = NULL }		},
+   { "lgamma",	1,	{ .func1 = lgamma }	},
+   { "log",	1,	{ .func1 = log }	},
+   { "log10",	1,	{ .func1 = log10 }	},
+@@ -291,8 +291,8 @@
+   { "tanh",	1,	{ .func1 = tanh }	},
+   { "tgamma",	1,	{ .func1 = tgamma }	},
+   { "trunc",	1,	{ .func1 = trunc }	},
+-  { "y0",	1,	{ .func1 = y0 }		},
+-  { "y1",	1,	{ .func1 = y1 }		},
++  { "y0",	1,	{ .func1 = NULL }		},
++  { "y1",	1,	{ .func1 = NULL }		},
+ 
+   { "atan2",	2,	{ .func2 = atan2 }	},
+   { "copysign",	2,	{ .func2 = copysign }	},
+diff -ruN bash-clean/support/config.sub bash-working/support/config.sub
+--- bash-clean/support/config.sub	2024-12-14 00:06:05.000000000 +1000
++++ bash-working/support/config.sub	2026-09-19 15:21:50.255376034 +1000
+@@ -2006,6 +2006,7 @@
+ 	| es* \
+ 	| fiwix* \
+ 	| freebsd* \
++        | frostyos* \
+ 	| fuchsia* \
+ 	| genix* \
+ 	| genode* \

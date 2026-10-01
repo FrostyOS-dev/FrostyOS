@@ -2,7 +2,10 @@
 	path = kernel/dependencies/uACPI
 	url = https://github.com/uACPI/uACPI.git
 	branch = master
-[submodule "Userland/deps/mlibc"]
-	path = Userland/deps/mlibc
+[submodule "Userland/jinx-sources/deps/mlibc"]
+	path = Userland/jinx-sources/deps/mlibc
 	url = https://github.com/FrostyOS-dev/mlibc
 	branch = frostyos
+[submodule "Userland/jinx-sources/jinx"]
+	path = Userland/jinx-sources/jinx
+	url = https://github.com/Mintsuki/Jinx

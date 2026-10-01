@@ -9,10 +9,10 @@ dist/
 iso/
 bin/
 test/
-root/data
 
 # Files
 compile_commands.json
 .clangd
 limine.h
 dump
+root

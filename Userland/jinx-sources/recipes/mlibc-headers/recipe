@@ -1,0 +1,16 @@
+name=mlibc-headers
+from_source=mlibc
+revision=1
+imagedeps="ninja-build meson build-essential rsync"
+
+configure() {
+    meson setup --cross-file="${base_dir}/deps/frostyos.cross-file" --prefix=/data -Dheaders_only=true "${source_dir}"
+}
+
+build() {
+    ninja
+}
+
+package() {
+    DESTDIR=${dest_dir} ninja install
+}
