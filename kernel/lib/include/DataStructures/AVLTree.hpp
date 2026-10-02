@@ -25,6 +25,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "tree.h"
 #pragma GCC diagnostic pop
 
+#include <Function.hpp>
+
 #include <spinlock.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -132,6 +134,14 @@ namespace AVLTree {
 
         wAVLTreeNode* NextNode(wAVLTreeNode* node) const {
             return RB_NEXT(raw_wAVLTree, &m_tree, node);
+        }
+
+        void forEach(FunctionRef<bool (K, D)> callback) {
+            wAVLTreeNode* node;
+            RB_FOREACH(node, raw_wAVLTree, &m_tree) {
+                if (!callback((K)node->key, (D)node->value))
+                    return;
+            }
         }
 
         void forEach(void (*callback)(void*, K, D), void* data = nullptr) {
