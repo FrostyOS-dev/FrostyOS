@@ -20,6 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
+#include <Function.hpp>
+
 bool InitMCFG();
 
 bool MCFG_Validate(uint16_t segment, uint8_t bus);
@@ -32,5 +34,13 @@ bool MCFG_Write8(uint8_t data, uint16_t segment, uint8_t bus, uint8_t device, ui
 bool MCFG_Write16(uint16_t data, uint16_t segment, uint8_t bus, uint8_t device, uint8_t function, uint32_t offset);
 bool MCFG_Write32(uint32_t data, uint16_t segment, uint8_t bus, uint8_t device, uint8_t function, uint32_t offset);
 
+bool MCFG_Read8(uint8_t* out, void* alloc, uint8_t bus, uint8_t device, uint8_t func, uint32_t offset);
+bool MCFG_Read16(uint16_t* out, void* alloc, uint8_t bus, uint8_t device, uint8_t func, uint32_t offset);
+bool MCFG_Read32(uint32_t* out, void* alloc, uint8_t bus, uint8_t device, uint8_t func, uint32_t offset);
+bool MCFG_Write8(uint8_t data, void* alloc, uint8_t bus, uint8_t device, uint8_t func, uint32_t offset);
+bool MCFG_Write16(uint16_t data, void* alloc, uint8_t bus, uint8_t device, uint8_t func, uint32_t offset);
+bool MCFG_Write32(uint32_t data, void* alloc, uint8_t bus, uint8_t device, uint8_t func, uint32_t offset);
+
+void MCFG_EnumerateBusses(FunctionRef<bool(uint16_t segment, uint8_t bus, void* alloc)> callback);
 
 #endif /* _HAL_MCFG_HPP */

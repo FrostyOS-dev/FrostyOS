@@ -21,6 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "ACPI/Init.hpp"
 
+#include "drivers/PCI.hpp"
+
 #ifdef __x86_64__
 #include <arch/x86_64/interrupts/IRQ.hpp>
 #endif
@@ -35,6 +37,8 @@ void HAL_EarlyInit(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t mem
 void HAL_Stage2() {
     ACPI::Stage2Init();
     g_BSP->InitStage2();
+
+    PCI_Walk();
 }
 
 struct HAL_IntHandlerData {

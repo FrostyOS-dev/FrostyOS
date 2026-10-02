@@ -133,6 +133,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/uACPIAPI.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/FBVideoDevice.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/HPET.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/PCI.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/SerialDevice.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/HAL.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/Power.cpp
