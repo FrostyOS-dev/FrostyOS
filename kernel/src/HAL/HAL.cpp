@@ -21,6 +21,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "ACPI/Init.hpp"
 
+#include "HAL/drivers/BasicDevices/NullDevice.hpp"
+#include "HAL/drivers/BasicDevices/ZeroDevice.hpp"
+
+#include "drivers/DeviceManager.hpp"
 #include "drivers/PCI.hpp"
 
 #ifdef __x86_64__
@@ -39,6 +43,22 @@ void HAL_Stage2() {
     g_BSP->InitStage2();
 
     PCI_Walk();
+
+    g_DeviceManager->ProbeDevices();
+}
+
+void HAL_InitialseDevices() {
+    g_NullDevice = new NullDevice;
+    if (g_NullDevice == nullptr || 0 != g_DeviceManager->AddDevice(g_NullDevice)) {
+        PANIC("Null device creation failed!");
+    }
+
+    g_ZeroDevice = new ZeroDevice;
+    if (g_ZeroDevice == nullptr || 0 != g_DeviceManager->AddDevice(g_ZeroDevice)) {
+        PANIC("Zero device creation failed!");
+    }
+
+    g_DeviceManager->InitDevices();
 }
 
 struct HAL_IntHandlerData {

@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "VFS.hpp"
 
+#include "DevTempFS/DevTempFS.hpp"
 #include "TempFS/TempFS.hpp"
 
 #include <cstddef>
@@ -33,6 +34,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace FS {
 
     VFS* g_rootVFS = nullptr;
+    VFS* g_VFSList = nullptr;
+    Mutex g_listLock;
 
     VFS::VFS() : m_next(nullptr), m_nodeCovered(nullptr), m_root(nullptr), m_flags(0) {
 
@@ -46,12 +49,24 @@ namespace FS {
         return m_next;
     }
 
+    void VFS::SetNext(VFS* vfs) {
+        m_next = vfs;
+    }
+
     VNode* VFS::GetCoveredVNode() {
         return m_nodeCovered;
     }
 
     VNode* VFS::GetRoot() {
         return m_root;
+    }
+
+    void VFS::Lock() {
+        m_lock.Lock();
+    }
+
+    void VFS::Unlock() {
+        m_lock.Unlock();
     }
 
 
@@ -81,6 +96,10 @@ namespace FS {
 
     VNode* VNode::GetParent() {
         return m_parent;
+    }
+
+    void VNode::SetMountedVFS(VFS* vfs) {
+        m_vfsMounted = vfs;
     }
 
     void VNode::Lock() {
@@ -116,16 +135,76 @@ namespace FS {
             root = new TempFS();
             break;
         }
+        default:
+            return -EINVAL;
         }
 
-        int rc = root->Mount(flags, backing, cred);
+        int rc = root->Mount(nullptr, flags, backing, cred);
         if (rc < 0) {
             delete root;
             return rc;
         }
 
         g_rootVFS = root;
+        g_VFSList = root;
         return ESUCCESS;
+    }
+
+    int VFS_Mount(FSType type, const char* path, int flags, void* backing, VNode* cwd, Credential cred) {
+        if (path == nullptr)
+            return -EINVAL;
+
+        VNode* vnode = nullptr;
+        VFS* parentVFS = nullptr;
+        int rc = VFS_LookupPath(path, &vnode, &parentVFS, cwd, cred);
+        if (rc < 0)
+            return rc;
+
+        vnode->Lock();
+        RefVNode(vnode); // prevent the vnode from being deleted
+
+        VAttr attr;
+        rc = vnode->GetAttr(&attr);
+        if (rc < 0 || attr.type != VType::DIR || vnode->HasChildren()) {
+            UnrefVNode(vnode);
+            vnode->Unlock();
+            return rc < 0 ? rc : (attr.type != VType::DIR ? -ENOTDIR : -ENOTEMPTY);
+        }
+
+        VFS* vfs = nullptr;
+        switch (type) {
+        case FSType::TempFS: {
+            vfs = new TempFS();
+            break;
+        }
+        case FSType::DevTempFS: {
+            vfs = new DevTempFS();
+            break;
+        }
+        default:
+            return -EINVAL;
+        }
+
+        vfs->Lock();
+        rc = vfs->Mount(vnode, flags, backing, cred);
+        UnrefVNode(vnode); // Mount should increase the refcount, so the temporary increase can be removed
+        if (rc < 0) {
+            vnode->Unlock();
+            delete vfs;
+            return rc;
+        }
+
+        g_listLock.Lock();
+        vfs->SetNext(g_VFSList);
+        g_VFSList = vfs;
+        g_listLock.Unlock();
+
+        vfs->Unlock();
+
+        vnode->SetMountedVFS(vfs);
+        vnode->Unlock();
+
+        return 0;
     }
 
     int VFS_LookupPath(const char* path, VNode** vnode, VFS** vfs, VNode* cwd, Credential cred) {
@@ -266,7 +345,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int VFS_CreateDir(const char* path, const char* name, VNode* cwd, Credential cred) {
+    int VFS_CreateDir(const char* path, const char* name, VNode* cwd, Credential cred, VNode* vnode, VNode** outVNode) {
         if (path == nullptr || name == nullptr)
             return -EINVAL;
 
@@ -276,13 +355,17 @@ namespace FS {
         if (rc < 0)
             return rc;
 
-        VNode* vnode = nullptr;
-        switch (vfs->GetType()) {
-        case FSType::TempFS:
-            vnode = new TempFSVNode(vfs);
-            break;
-        default:
-            return -ENOSYS;
+        if (vnode == nullptr) {
+            switch (vfs->GetType()) {
+            case FSType::TempFS:
+                vnode = new TempFSVNode(vfs);
+                break;
+            case FSType::DevTempFS:
+                vnode = new DevTempFSVNode(vfs, nullptr);
+                break;
+            default:
+                return -ENOSYS;
+            }
         }
 
         size_t nameLen = strlen(name);
@@ -298,10 +381,13 @@ namespace FS {
             return rc;
         }
 
+        if (outVNode != nullptr)
+            *outVNode = vnode;
+
         return ESUCCESS;
     }
 
-    int VFS_CreateFile(const char* path, const char* name, VNode* cwd, Credential cred) {
+    int VFS_CreateFile(const char* path, const char* name, VNode* cwd, Credential cred, VNode* vnode, VNode** outVNode) {
         if (path == nullptr || name == nullptr)
             return -EINVAL;
 
@@ -311,13 +397,17 @@ namespace FS {
         if (rc < 0)
             return rc;
 
-        VNode* vnode = nullptr;
-        switch (vfs->GetType()) {
-        case FSType::TempFS:
-            vnode = new TempFSVNode(vfs);
-            break;
-        default:
-            return -ENOSYS;
+        if (vnode == nullptr) {
+            switch (vfs->GetType()) {
+            case FSType::TempFS:
+                vnode = new TempFSVNode(vfs);
+                break;
+            case FSType::DevTempFS:
+                vnode = new DevTempFSVNode(vfs, nullptr);
+                break;
+            default:
+                return -ENOSYS;
+            }
         }
 
         size_t nameLen = strlen(name);
@@ -332,6 +422,9 @@ namespace FS {
             delete vnode;
             return rc;
         }
+
+        if (outVNode != nullptr)
+            *outVNode = vnode;
 
         return ESUCCESS;
     }

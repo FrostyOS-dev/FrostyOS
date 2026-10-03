@@ -57,6 +57,11 @@ SECTIONS
         *(.dtors)
         __dtors_end = .;
 
+        . = ALIGN(8);
+        __pci_drivers_start = .;
+        KEEP(*(pci_drivers))
+        __pci_drivers_end = .;
+
         *(.rodata .rodata.*)
         __rodata_end = .;
     } :rodata

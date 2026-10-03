@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "kernel.hpp"
 #include "KernelSymbols.hpp"
 
+#include <errno.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -32,6 +33,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <fs/VFS.hpp>
 
 #include <HAL/HAL.hpp>
+
+#include <HAL/drivers/DeviceManager.hpp>
 
 #include <HAL/drivers/Video/FBVideoDevice.hpp>
 
@@ -147,6 +150,20 @@ void Kernel_Stage2(void* data) {
         LoadInitRAMFS(params->initramfs, params->initramfsSize);
     else
         PANIC("No initramfs!");
+
+    int rc = FS::VFS_CreateDir("/", "dev", nullptr, KCred);
+    if (rc < 0 && rc != -EEXIST)
+        PANIC("Cannot create /dev");
+
+    rc = FS::VFS_Mount(FS::FSType::DevTempFS, "/dev", 0, g_DeviceManager, nullptr, KCred);
+    if (rc < 0)
+        PANIC("Cannot mount DevTempFS");
+
+    printf("DevTempFS mounted at /dev!\n");
+
+    g_DeviceManager->SetCred(KCred);
+
+    HAL_InitialseDevices();
 
     while (true) {
         __asm__ volatile("hlt");

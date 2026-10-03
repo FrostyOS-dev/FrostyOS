@@ -15,28 +15,26 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _TEMPFS_HPP
-#define _TEMPFS_HPP
+#ifndef _FS_DEVTEMPFS_HPP
+#define _FS_DEVTEMPFS_HPP
 
 #include <stdint.h>
 
-#include <DataStructures/AVLTree.hpp>
 #include <DataStructures/LinkedList.hpp>
 
 #include <Memory/VMM.hpp>
 
 #include <Scheduling/Process.hpp>
 
-#include "TempFSPager.hpp"
-
 #include "../VFS.hpp"
 
+class Device;
 
 namespace FS {
-    class TempFS : public VFS {
+    class DevTempFS : public VFS {
     public:
-        TempFS();
-        virtual ~TempFS() override;
+        DevTempFS();
+        virtual ~DevTempFS() override;
 
         virtual int Mount(VNode* nodeCovered, int flags, void* backing, Credential cred) override;
         virtual int Unmount() override;
@@ -44,18 +42,12 @@ namespace FS {
         virtual int Sync() override;
 
         virtual FSType GetType() override;
-
-        TempFSPager* GetPager();
-
-    private:
-        TempFSPager m_pager;
     };
 
-
-    class TempFSVNode : public VNode {
+    class DevTempFSVNode : public VNode {
     public:
-        TempFSVNode(VFS* vfs);
-        virtual ~TempFSVNode() override;
+        DevTempFSVNode(VFS* vfs, Device* dev);
+        virtual ~DevTempFSVNode() override;
 
         virtual int Open(int flags, Credential cred) override;
         virtual int Close(int flags, Credential cred) override;
@@ -79,29 +71,20 @@ namespace FS {
         virtual int Ioctl(size_t op, void* arg, int* result, Credential cred) override;
         virtual bool HasChildren() override;
 
-        void* GetAddr(uint64_t offset);
-        VMM::Protection GetDefaultProt() const;
+        void SetDevice(Device* dev);
+        Device* GetDevice();
 
     private:
-        struct Block {
-            void* addr;
-            size_t pages;
-        };
-
-        Block* CreateBlock(uint64_t offset, uint64_t pages); // offset and pages are page count numbers, not bytes
-
         char* m_name;
         size_t m_nameLen;
 
         char* m_linkDest;
         size_t m_linkLen;
 
-        VMM::MemoryObject* m_memObj;
-        VMM::Protection m_defaultProt;
+        Device* m_dev;
 
-        AVLTree::wAVLTree<uint64_t, Block*> m_blocks;
-        LinkedList::RearInsertLinkedList<TempFSVNode> m_children;
+        LinkedList::RearInsertLinkedList<DevTempFSVNode> m_children;
     };
 }
 
-#endif /* _TEMPFS_HPP */
+#endif /* _FS_DEVTEMPFS_HPP */

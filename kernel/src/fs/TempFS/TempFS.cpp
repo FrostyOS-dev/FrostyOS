@@ -47,7 +47,7 @@ namespace FS {
 
     }
 
-    int TempFS::Mount(int flags, void* backing, Credential cred) {
+    int TempFS::Mount(VNode* nodeCovered, int flags, void* backing, Credential cred) {
         VAttr attr = {VType::DIR, ROOT_DIR_MODE, cred.euid, cred.egid, FSType::TempFS, -1, 0, 0, PAGE_SIZE, {0, 0}, {0, 0}, {0, 0}, 0};
 
         TempFSVNode* root = new TempFSVNode(this);
@@ -60,7 +60,7 @@ namespace FS {
         RefVNode(root);
 
         m_root = root;
-        m_nodeCovered = nullptr;
+        m_nodeCovered = nodeCovered;
         m_next = nullptr;
         m_flags = 0;
 
@@ -420,6 +420,14 @@ namespace FS {
         memcpy(buf, m_name, m_nameLen);
         *realSize = m_nameLen;
         return ESUCCESS;
+    }
+
+    int TempFSVNode::Ioctl(size_t op, void* arg, int* result, Credential cred) {
+        return ENOSYS;
+    }
+
+    bool TempFSVNode::HasChildren() {
+        return m_children.getCount() != 0;
     }
 
     void* TempFSVNode::GetAddr(uint64_t offset) {

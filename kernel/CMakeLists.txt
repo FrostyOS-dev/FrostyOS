@@ -115,6 +115,7 @@ endif()
 set(kernel_sources
     ${kernel_sources}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Exec/ELF.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/fs/DevTempFS/DevTempFS.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/fs/TempFS/TempFS.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/fs/TempFS/TempFSPager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/fs/FDManager.cpp
@@ -131,7 +132,10 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/MCFG.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/Sleep.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/uACPIAPI.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/BasicDevices/NullDevice.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/BasicDevices/ZeroDevice.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/FBVideoDevice.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/DeviceManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/HPET.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/PCI.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/SerialDevice.cpp
