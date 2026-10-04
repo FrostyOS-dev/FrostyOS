@@ -277,8 +277,8 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int DevTempFSVNode::Ioctl(size_t op, void* arg, int* result, Credential cred) {
-        CALL_DEV_OP(Ioctl, op, arg, result, cred);
+    int DevTempFSVNode::Ioctl(size_t op, void* arg, int* result, Process* proc, Credential cred) {
+        CALL_DEV_OP(Ioctl, op, arg, result, proc, cred);
     }
 
     bool DevTempFSVNode::HasChildren() {

@@ -422,7 +422,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int TempFSVNode::Ioctl(size_t op, void* arg, int* result, Credential cred) {
+    int TempFSVNode::Ioctl(size_t op, void* arg, int* result, Process* proc, Credential cred) {
         return ENOSYS;
     }
 

@@ -78,6 +78,6 @@ int ZeroDevice::Munmap() {
     return -ENOSYS;
 }
 
-int ZeroDevice::Ioctl(size_t op, void* arg, int* result, const Credential& cred) {
+int ZeroDevice::Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) {
     return -ENOSYS;
 }

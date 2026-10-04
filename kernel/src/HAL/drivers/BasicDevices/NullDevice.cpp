@@ -73,6 +73,6 @@ int NullDevice::Munmap() {
     return -ENOSYS;
 }
 
-int NullDevice::Ioctl(size_t op, void* arg, int* result, const Credential& cred) {
+int NullDevice::Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) {
     return -ENOSYS;
 }

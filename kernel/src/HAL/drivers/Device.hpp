@@ -40,7 +40,7 @@ public:
     virtual int Write(const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, const Credential& cred) = 0;
     virtual int Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, const Credential& cred) = 0;
     virtual int Munmap() = 0;
-    virtual int Ioctl(size_t op, void* arg, int* result, const Credential& cred) = 0;
+    virtual int Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) = 0;
 };
 
 #endif /* _HAL_DEVICE_HPP */
