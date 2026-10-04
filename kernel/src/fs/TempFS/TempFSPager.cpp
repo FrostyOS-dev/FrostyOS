@@ -18,8 +18,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "TempFS.hpp"
 #include "TempFSPager.hpp"
 
-#include "../VFS.hpp"
-
 #include <stdint.h>
 #include <spinlock.h>
 #include <string.h>
