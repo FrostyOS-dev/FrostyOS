@@ -36,9 +36,11 @@ typedef x86_64_ExtraContext CPU_ExtraContext;
 typedef uint32_t (*GSIHandler_t)(void* ctx);
 #endif
 
+class FBConsole;
+
 void HAL_EarlyInit(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical, void* RSDP);
 void HAL_Stage2();
-void HAL_InitialseDevices();
+void HAL_InitialseDevices(FBConsole** newConsole);
 
 void* HAL_RegisterIntHandler(uint32_t GSI, GSIHandler_t handler, void* ctx);
 bool HAL_RemoveIntHandler(void* data);

@@ -36,8 +36,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <HAL/drivers/DeviceManager.hpp>
 
-#include <HAL/drivers/Video/FBVideoDevice.hpp>
-
 #include <Memory/VMM.hpp>
 
 #include <Scheduling/Process.hpp>
@@ -45,8 +43,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Scheduling/Thread.hpp>
 
 #include <tty/backends/DebugBackend.hpp>
-#include <tty/backends/VGABackend.hpp>
+#include <tty/backends/FBConsoleBackend.hpp>
 
+#include <tty/FBConsole.hpp>
 #include <tty/TTY.hpp>
 
 #ifdef __x86_64__
@@ -55,12 +54,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 KernelParams g_kernelParams;
 
-FBVideoDevice g_FBVideoDevice;
 Colour g_KBackgroundColour;
 Colour g_KForegroundColour;
 
+TTYBackendFBConsole g_KFBConBackend;
 TTYBackendDebug g_KDebugBackend;
-TTYBackendVGA g_KVGABackend;
 
 GraphicalTTY KTTY;
 
@@ -83,14 +81,13 @@ void StartKernel() {
     g_KBackgroundColour = Colour(0, 0, 0);
     g_KForegroundColour = Colour(255, 255, 255);
 
-    g_FBVideoDevice.Init(&g_kernelParams.framebuffer, g_KBackgroundColour, g_KForegroundColour);
-
-    g_KVGABackend.Init(&g_FBVideoDevice);
+    assert(0 == FBConsole_EarlyInit(&g_kernelParams.framebuffer));
+    g_KFBConBackend.Init(g_KFBConsole);
 
     KTTY.Init();
-    KTTY.SetOutputBackend(&g_KVGABackend);
+    KTTY.SetOutputBackend(&g_KFBConBackend);
     KTTY.SetDebugBackend(&g_KDebugBackend);
-    KTTY.SetVideoDevice(&g_FBVideoDevice);
+    KTTY.SetConsole(g_KFBConsole);
 
     g_CurrentTTY = &KTTY;
     g_KTTY = &KTTY;
@@ -99,10 +96,6 @@ void StartKernel() {
     KProcess.SetCred(KCred);
 
     HAL_EarlyInit(g_kernelParams.HHDMStart, g_kernelParams.MemoryMap, g_kernelParams.MemoryMapEntryCount, g_kernelParams.pagingMode, g_kernelParams.kernelVirtual, g_kernelParams.kernelPhysical, g_kernelParams.RSDP);
-
-    memcpy(&g_KFramebuffer, &g_kernelParams.framebuffer, sizeof(FrameBuffer));
-    g_KFramebuffer.BaseAddress = VMM::g_KVMM->AllocateAnonPages(DIV_ROUNDUP(g_KFramebuffer.pitch * g_KFramebuffer.height, PAGE_SIZE), {VMM::Protection::READ_WRITE, VMM::CacheType::DEFAULT, false, true, false, true, true, false});
-    g_FBVideoDevice.EnableDoubleBuffering(&g_KFramebuffer);
 
     if (g_kernelParams.symbolTable != nullptr && g_kernelParams.symbolTableSize > 0) {
         SymbolTable* table = new SymbolTable();
@@ -163,7 +156,12 @@ void Kernel_Stage2(void* data) {
 
     g_DeviceManager->SetCred(KCred);
 
-    HAL_InitialseDevices();
+    FBConsole* console = nullptr;
+    HAL_InitialseDevices(&console);
+    if (console != nullptr) {
+        KTTY.SetConsole(console);
+        g_KFBConBackend.SetConsole(console);
+    }
 
     while (true) {
         __asm__ volatile("hlt");

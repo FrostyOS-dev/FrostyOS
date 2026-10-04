@@ -144,7 +144,7 @@ int TTY::Write(const char* buf, size_t size, bool flush) {
         if (rc < 0)
             break;
     }
-    if (flush)
+    if (flush && m_outputBackend != nullptr)
         m_outputBackend->Flush();
     return rc;
 }
@@ -511,11 +511,11 @@ static Colour& GetANSI256Colour(uint8_t index) {
     return s_ansiColours[index];
 }
 
-GraphicalTTY::GraphicalTTY() : TTY(TTYType::Graphical), m_video(nullptr) {
+GraphicalTTY::GraphicalTTY() : TTY(TTYType::Graphical), m_console(nullptr) {
 
 }
 
-GraphicalTTY::GraphicalTTY(VideoDevice* video) : TTY(TTYType::Graphical), m_video(video) {
+GraphicalTTY::GraphicalTTY(FBConsole* console) : TTY(TTYType::Graphical), m_console(console) {
 
 }
 
@@ -524,7 +524,7 @@ GraphicalTTY::~GraphicalTTY() {
 }
 
 int GraphicalTTY::InternalWrite(const char* buf, size_t size, bool flush) {
-    if (m_video == nullptr)
+    if (m_console == nullptr)
         return -ENODEV;
 
     for (uint64_t i = 0; i < size; i++) {
@@ -560,53 +560,53 @@ int GraphicalTTY::InternalWrite(const char* buf, size_t size, bool flush) {
                             
                             switch (cmd) {
                             case 0:
-                                m_video->SetBackgroundColour(GetANSI256Colour(0));
-                                m_video->SetForegroundColour(GetANSI256Colour(7));
+                                m_console->SetBackgroundColour(GetANSI256Colour(0));
+                                m_console->SetForegroundColour(GetANSI256Colour(7));
                                 break;
-                            case 30: m_video->SetForegroundColour(GetANSI256Colour(0)); break;
-                            case 31: m_video->SetForegroundColour(GetANSI256Colour(1)); break;
-                            case 32: m_video->SetForegroundColour(GetANSI256Colour(2)); break;
-                            case 33: m_video->SetForegroundColour(GetANSI256Colour(3)); break;
-                            case 34: m_video->SetForegroundColour(GetANSI256Colour(4)); break;
-                            case 35: m_video->SetForegroundColour(GetANSI256Colour(5)); break;
-                            case 36: m_video->SetForegroundColour(GetANSI256Colour(6)); break;
-                            case 37: m_video->SetForegroundColour(GetANSI256Colour(7)); break;
+                            case 30: m_console->SetForegroundColour(GetANSI256Colour(0)); break;
+                            case 31: m_console->SetForegroundColour(GetANSI256Colour(1)); break;
+                            case 32: m_console->SetForegroundColour(GetANSI256Colour(2)); break;
+                            case 33: m_console->SetForegroundColour(GetANSI256Colour(3)); break;
+                            case 34: m_console->SetForegroundColour(GetANSI256Colour(4)); break;
+                            case 35: m_console->SetForegroundColour(GetANSI256Colour(5)); break;
+                            case 36: m_console->SetForegroundColour(GetANSI256Colour(6)); break;
+                            case 37: m_console->SetForegroundColour(GetANSI256Colour(7)); break;
                             
                             case 38: // Extended Foreground
                             case 48: { // Extended Background
                                 bool isForeground = (cmd == 38);
                                 if (p + 2 < paramCount && params[p + 1] == 5) {
-                                    if (isForeground) m_video->SetForegroundColour(GetANSI256Colour(params[p + 2]));
-                                    else m_video->SetBackgroundColour(GetANSI256Colour(params[p + 2]));
+                                    if (isForeground) m_console->SetForegroundColour(GetANSI256Colour(params[p + 2]));
+                                    else m_console->SetBackgroundColour(GetANSI256Colour(params[p + 2]));
                                     p += 2;
                                 } else if (p + 4 < paramCount && params[p + 1] == 2) {
                                     // True Color objects are constructed dynamically
                                     Colour trueColour(params[p + 2], params[p + 3], params[p + 4]);
-                                    if (isForeground) m_video->SetForegroundColour(trueColour);
-                                    else m_video->SetBackgroundColour(trueColour);
+                                    if (isForeground) m_console->SetForegroundColour(trueColour);
+                                    else m_console->SetBackgroundColour(trueColour);
                                     p += 4;
                                 }
                                 break;
                             }
                             
-                            case 39: m_video->SetForegroundColour(GetANSI256Colour(15)); break;
-                            case 40: m_video->SetBackgroundColour(GetANSI256Colour(0)); break;
-                            case 41: m_video->SetBackgroundColour(GetANSI256Colour(1)); break;
-                            case 42: m_video->SetBackgroundColour(GetANSI256Colour(2)); break;
-                            case 43: m_video->SetBackgroundColour(GetANSI256Colour(3)); break;
-                            case 44: m_video->SetBackgroundColour(GetANSI256Colour(4)); break;
-                            case 45: m_video->SetBackgroundColour(GetANSI256Colour(5)); break;
-                            case 46: m_video->SetBackgroundColour(GetANSI256Colour(6)); break;
-                            case 47: m_video->SetBackgroundColour(GetANSI256Colour(7)); break;
-                            case 49: m_video->SetBackgroundColour(GetANSI256Colour(0)); break;
+                            case 39: m_console->SetForegroundColour(GetANSI256Colour(15)); break;
+                            case 40: m_console->SetBackgroundColour(GetANSI256Colour(0)); break;
+                            case 41: m_console->SetBackgroundColour(GetANSI256Colour(1)); break;
+                            case 42: m_console->SetBackgroundColour(GetANSI256Colour(2)); break;
+                            case 43: m_console->SetBackgroundColour(GetANSI256Colour(3)); break;
+                            case 44: m_console->SetBackgroundColour(GetANSI256Colour(4)); break;
+                            case 45: m_console->SetBackgroundColour(GetANSI256Colour(5)); break;
+                            case 46: m_console->SetBackgroundColour(GetANSI256Colour(6)); break;
+                            case 47: m_console->SetBackgroundColour(GetANSI256Colour(7)); break;
+                            case 49: m_console->SetBackgroundColour(GetANSI256Colour(0)); break;
                             }
                         }
                         break;
                     }
                     case 'J': { // Erase Display
                         if (paramCount > 0 && params[0] == 2) {
-                            m_video->ClearScreen();
-                            m_video->SetCursor(0, 0);
+                            m_console->ClearScreen();
+                            m_console->SetCursor(0, 0);
                         }
                         break;
                     }
@@ -617,43 +617,43 @@ int GraphicalTTY::InternalWrite(const char* buf, size_t size, bool flush) {
                         uint64_t col = (paramCount > 1 && params[1] > 0) ? params[1] - 1 : 0;
 
                         // Bound to maximum rows/cols
-                        uint64_t maxRow = m_video->GetNumberOfRows() > 0 ? m_video->GetNumberOfRows() - 1 : 0;
-                        uint64_t maxCol = m_video->GetNumberOfColumns() > 0 ? m_video->GetNumberOfColumns() - 1 : 0;
+                        uint64_t maxRow = m_console->GetNumberOfRows() > 0 ? m_console->GetNumberOfRows() - 1 : 0;
+                        uint64_t maxCol = m_console->GetNumberOfColumns() > 0 ? m_console->GetNumberOfColumns() - 1 : 0;
 
                         row = (row > maxRow) ? maxRow : row;
                         col = (col > maxCol) ? maxCol : col;
 
-                        m_video->SetCursor(col * CHAR_WIDTH, row * CHAR_HEIGHT);
+                        m_console->SetCursor(col * CHAR_WIDTH, row * CHAR_HEIGHT);
                         break;
                     }
                     case 'A': { // Cursor Up
                         uint64_t x, y;
-                        m_video->GetCursor(x, y);
+                        m_console->GetCursor(x, y);
                         uint64_t moveBy = ((paramCount > 0 && params[0] > 0) ? params[0] : 1) * CHAR_HEIGHT;
-                        m_video->SetCursor(x, (y > moveBy) ? y - moveBy : 0);
+                        m_console->SetCursor(x, (y > moveBy) ? y - moveBy : 0);
                         break;
                     }
                     case 'B': { // Cursor Down
                         uint64_t x, y;
-                        m_video->GetCursor(x, y);
+                        m_console->GetCursor(x, y);
                         uint64_t moveBy = ((paramCount > 0 && params[0] > 0) ? params[0] : 1) * CHAR_HEIGHT;
-                        uint64_t maxY = (m_video->GetNumberOfRows() - 1) * CHAR_HEIGHT;
-                        m_video->SetCursor(x, (y + moveBy < maxY) ? y + moveBy : maxY);
+                        uint64_t maxY = (m_console->GetNumberOfRows() - 1) * CHAR_HEIGHT;
+                        m_console->SetCursor(x, (y + moveBy < maxY) ? y + moveBy : maxY);
                         break;
                     }
                     case 'C': { // Cursor Forward (Right)
                         uint64_t x, y;
-                        m_video->GetCursor(x, y);
+                        m_console->GetCursor(x, y);
                         uint64_t moveBy = ((paramCount > 0 && params[0] > 0) ? params[0] : 1) * CHAR_WIDTH;
-                        uint64_t maxX = (m_video->GetNumberOfColumns() - 1) * CHAR_WIDTH;
-                        m_video->SetCursor((x + moveBy < maxX) ? x + moveBy : maxX, y);
+                        uint64_t maxX = (m_console->GetNumberOfColumns() - 1) * CHAR_WIDTH;
+                        m_console->SetCursor((x + moveBy < maxX) ? x + moveBy : maxX, y);
                         break;
                     }
                     case 'D': { // Cursor Back (Left)
                         uint64_t x, y;
-                        m_video->GetCursor(x, y);
+                        m_console->GetCursor(x, y);
                         uint64_t moveBy = ((paramCount > 0 && params[0] > 0) ? params[0] : 1) * CHAR_WIDTH;
-                        m_video->SetCursor((x > moveBy) ? x - moveBy : 0, y);
+                        m_console->SetCursor((x > moveBy) ? x - moveBy : 0, y);
                         break;
                     }
                     }
@@ -669,27 +669,27 @@ int GraphicalTTY::InternalWrite(const char* buf, size_t size, bool flush) {
                 break;
             case '\n':
             case '\v':
-                m_video->NewLine();
+                m_console->NewLine();
                 break;
             case '\b':
-                m_video->Backspace();
+                m_console->Backspace();
                 break;
             case '\r': {
                 uint64_t x, y;
-                m_video->GetCursor(x, y);
-                m_video->SetCursor(0, y);
+                m_console->GetCursor(x, y);
+                m_console->SetCursor(0, y);
                 break;
             }
             case '\t':
                 for (int j = 0; j < 4; j++)
-                    m_video->PrintChar(' ');
+                    m_console->PrintChar(' ');
                 break;
             case '\f':
-                m_video->ClearScreen();
-                m_video->SetCursor(0, 0);
+                m_console->ClearScreen();
+                m_console->SetCursor(0, 0);
                 break;
             default:
-                m_video->PrintChar(c);
+                m_console->PrintChar(c);
                 break;
             }
         }
@@ -701,40 +701,40 @@ int GraphicalTTY::InternalWrite(const char* buf, size_t size, bool flush) {
 }
 
 uint64_t GraphicalTTY::GetMaxSeek() const {
-    if (m_video == nullptr)
+    if (m_console == nullptr)
         return UINT64_MAX;
-    return m_video->GetNumberOfColumns() * m_video->GetNumberOfRows();
+    return m_console->GetNumberOfColumns() * m_console->GetNumberOfRows();
 }
 
 uint64_t GraphicalTTY::GetCurrentSeek() const {
-    if (m_video == nullptr)
+    if (m_console == nullptr)
         return UINT64_MAX;
     uint64_t x, y;
-    m_video->GetCursor(x, y);
-    return m_video->GetNumberOfColumns() * y + x;
+    m_console->GetCursor(x, y);
+    return m_console->GetNumberOfColumns() * y + x;
 }
 
 int GraphicalTTY::SetSize(const winsize_t* size) {
     // Say it was successful if the requested dimensions are <= to the current, but don't actually set them.
-    if (size->ws_col > m_video->GetNumberOfColumns() || size->ws_row > m_video->GetNumberOfRows())
+    if (size->ws_col > m_console->GetNumberOfColumns() || size->ws_row > m_console->GetNumberOfRows())
         return -EINVAL;
-    if (size->ws_xpixel > m_video->GetWidth() || size->ws_ypixel > m_video->GetHeight())
+    if (size->ws_xpixel > m_console->GetWidth() || size->ws_ypixel > m_console->GetHeight())
         return -EINVAL;
     return ESUCCESS;
 }
 
 int GraphicalTTY::GetSize(winsize_t* size) {
-    size->ws_col = m_video->GetNumberOfColumns();
-    size->ws_row = m_video->GetNumberOfRows();
-    size->ws_xpixel = m_video->GetWidth();
-    size->ws_ypixel = m_video->GetHeight();
+    size->ws_col = m_console->GetNumberOfColumns();
+    size->ws_row = m_console->GetNumberOfRows();
+    size->ws_xpixel = m_console->GetWidth();
+    size->ws_ypixel = m_console->GetHeight();
     return ESUCCESS;
 }
 
-void GraphicalTTY::SetVideoDevice(VideoDevice* video) {
-    m_video = video;
+void GraphicalTTY::SetConsole(FBConsole* console) {
+    m_console = console;
 }
 
-VideoDevice* GraphicalTTY::GetVideoDevice() const {
-    return m_video;
+FBConsole* GraphicalTTY::GetConsole() {
+    return m_console;
 }

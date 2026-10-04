@@ -27,6 +27,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Scheduling/Event.hpp>
 
+#include "FBConsole.hpp"
 #include "Termios.hpp"
 #include "TTYBackend.hpp"
 
@@ -134,7 +135,7 @@ private:
 class GraphicalTTY : public TTY {
 public:
     GraphicalTTY();
-    GraphicalTTY(VideoDevice* video);
+    GraphicalTTY(FBConsole* console);
     ~GraphicalTTY() override;
 
     uint64_t GetMaxSeek() const override;
@@ -143,8 +144,8 @@ public:
     int SetSize(const winsize_t* size) override;
     int GetSize(winsize_t* size) override;
     
-    void SetVideoDevice(VideoDevice* video);
-    VideoDevice* GetVideoDevice() const;
+    void SetConsole(FBConsole* console);
+    FBConsole* GetConsole();
 
 protected:
     int InternalWrite(const char* buf, size_t size, bool flush = false) override;
@@ -154,7 +155,7 @@ private:
         bool inEscape;
         char currentEscape[ANSI_BUFFER_SIZE];
     } m_escapeState;
-    VideoDevice* m_video;
+    FBConsole* m_console;
 };
 
 extern TTY* g_CurrentTTY;

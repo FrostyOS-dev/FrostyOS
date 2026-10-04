@@ -22,7 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <spinlock.h>
 
 enum class TTYBackendType {
-    VGA,
+    FBConsole,
     Debug,
     Serial,
     INVALID

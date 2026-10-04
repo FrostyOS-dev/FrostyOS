@@ -134,7 +134,12 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/uACPIAPI.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/BasicDevices/NullDevice.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/BasicDevices/ZeroDevice.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/FBVideoDevice.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/FBVideo/FBDisplay.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/FBVideo/FBPager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/FBVideo/FBVideoDevice.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/Display.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/VideoDevice.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/VideoFS.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/DeviceManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/HPET.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/PCI.cpp
@@ -164,8 +169,9 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/SystemCall.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Time.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/DebugBackend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/FBConsoleBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/SerialBackend.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/VGABackend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/FBConsole.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/Termios.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTYBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTY.cpp

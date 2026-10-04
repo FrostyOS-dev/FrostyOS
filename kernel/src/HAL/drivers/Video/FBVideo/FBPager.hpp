@@ -15,32 +15,23 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _TTY_BACKEND_VGA_HPP
-#define _TTY_BACKEND_VGA_HPP
+#ifndef _HAL_VIDEO_FBPAGER_HPP
+#define _HAL_VIDEO_FBPAGER_HPP
 
-#include "../TTYBackend.hpp"
+#include <stdint.h>
 
-#include <HAL/drivers/Video/FBVideoDevice.hpp>
+#include <Memory/Pager.hpp>
 
-class TTYBackendVGA : public TTYBackend {
-public:
-    TTYBackendVGA();
-    TTYBackendVGA(FBVideoDevice* vga);
+namespace Video {
+    class FBDisplayPager : public VMM::DefaultPager {
+    public:
+        FBDisplayPager();
+        virtual ~FBDisplayPager() override;
 
-    void Init(FBVideoDevice* vga);
+        virtual void* AllocatePage() override;
+        virtual bool GetPage(VMM::MemoryObject* obj, uint64_t offset, VMM::Page** outPage, bool write) override;
+        virtual void FreePage(void* page) override;
+    };
+}
 
-    void WriteChar(char c) override;
-
-    void SetCursor(uint64_t x, uint64_t y) override;
-    void GetCursor(uint64_t& x, uint64_t& y) override;
-
-    void Seek(uint64_t pos) override;
-
-    void Flush() override;
-
-    void SwapBuffers();
-private:
-    FBVideoDevice* m_vga;
-};
-
-#endif /* _TTY_BACKEND_VGA_HPP */
+#endif /* _HAL_VIDEO_FBPAGER_HPP */

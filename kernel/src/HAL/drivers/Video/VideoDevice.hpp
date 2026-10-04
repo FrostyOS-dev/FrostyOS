@@ -20,41 +20,52 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
+#include <DataStructures/AVLTree.hpp>
+
 #include <Graphics/Colour.hpp>
 
-class VideoDevice {
-public:
-    VideoDevice() {}
-    virtual ~VideoDevice() {}
+#include "../Device.hpp"
 
-    virtual int Init() = 0;
+namespace Video {
 
-    virtual void ClearScreen() = 0;
-    virtual void ClearScreen(Colour colour) = 0;
+    class Display;
+    class FBDisplay;
 
-    virtual void SetBackgroundColour(Colour& colour) = 0;
-    virtual void SetForegroundColour(Colour& colour) = 0;
+    class VideoDevice : public Device {
+    public:
+        VideoDevice();
+        virtual ~VideoDevice();
 
-    virtual Colour GetBackgroundColour() const = 0;
-    virtual Colour GetForegroundColour() const = 0;
+        virtual int Init() = 0; // Early init
+        virtual int Init(DeviceManager::DeviceInfo* info) override = 0; // Full init
 
-    virtual void PrintChar(char c) = 0;
-    virtual void PrintString(const char* str) = 0;
-    virtual void PrintString(const char* str, uint64_t length) = 0;
+        virtual FBDisplay* GetFBDisplay(); // Get the FBDisplay, not required to be implemented
 
-    virtual void Backspace() = 0;
-    virtual void NewLine() = 0;
+        void SetInfo(DeviceManager::DeviceInfo* info);
+        DeviceManager::DeviceInfo* GetInfo();
 
-    virtual void Scroll(uint64_t n) = 0;
-    
-    virtual void SetCursor(uint64_t x, uint64_t y) = 0;
-    virtual void GetCursor(uint64_t& x, uint64_t& y) = 0;
+        // Assign the display an ID, and add it to the list and fs
+        int AddDisplay(Display* display);
+        Display* GetDisplay(uint64_t id);
+        int RemoveDisplay(uint64_t id);
 
-    virtual uint64_t GetNumberOfRows() = 0;
-    virtual uint64_t GetNumberOfColumns() = 0;
+        uint64_t GetID();
+        void SetID(uint64_t id);
 
-    virtual uint64_t GetWidth() = 0;
-    virtual uint64_t GetHeight() = 0;
-};
+    private:
+        DeviceManager::DeviceInfo* m_info;
+        uint64_t m_id;
+
+        uint64_t m_nextDisplayID;
+        AVLTree::wAVLTree<uint64_t, Display*> m_displays;
+    };
+
+    // Assign the VideoDevice an ID and add to the list and fs
+    int RegisterVideoDevice(VideoDevice* device);
+
+    // Setup the new FB console. Creates a generic FB device using the boot framebuffer if no devices exist.
+    int Video_FullInit(FBConsole** newConsole);
+
+}
 
 #endif /* _VIDEO_DEVICE_HPP */

@@ -24,6 +24,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "HAL/drivers/BasicDevices/NullDevice.hpp"
 #include "HAL/drivers/BasicDevices/ZeroDevice.hpp"
 
+#include "HAL/drivers/Video/VideoDevice.hpp"
+
 #include "drivers/DeviceManager.hpp"
 #include "drivers/PCI.hpp"
 
@@ -47,7 +49,7 @@ void HAL_Stage2() {
     g_DeviceManager->ProbeDevices();
 }
 
-void HAL_InitialseDevices() {
+void HAL_InitialseDevices(FBConsole** newConsole) {
     g_NullDevice = new NullDevice;
     if (g_NullDevice == nullptr || 0 != g_DeviceManager->AddDevice(g_NullDevice)) {
         PANIC("Null device creation failed!");
@@ -59,6 +61,8 @@ void HAL_InitialseDevices() {
     }
 
     g_DeviceManager->InitDevices();
+
+    Video::Video_FullInit(newConsole);
 }
 
 struct HAL_IntHandlerData {
