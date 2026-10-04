@@ -232,13 +232,13 @@ void FBConsole::CopyFrom(FBConsole* other) {
 }
 
 void FBConsole::Flush() {
-    if (m_fullFlush) {
+    if (m_fullFlush || m_oldCursorY > m_cursorY || (m_oldCursorY == m_cursorY && m_oldCursorX > m_cursorX)) {
         for (uint64_t y = 0; y < m_numberOfRows; y++) {
             for (uint64_t x = 0; x < m_numberOfColumns; x++)
                 WriteCharToFrameBuffer(m_frameBuffer, x * CHAR_WIDTH, y * CHAR_HEIGHT, m_fg, m_bg, m_buffer[y * m_numberOfColumns + x]);
         }
         m_fullFlush = false;
-    } else {
+    } else if (m_oldCursorY < m_cursorY) {
         // Step 1: Flush what remains of the first row
         uint64_t y = m_oldCursorY / CHAR_HEIGHT;
         if (m_oldCursorX > 0) {
@@ -258,6 +258,9 @@ void FBConsole::Flush() {
             for (uint64_t x = 0; x < (m_cursorX / CHAR_WIDTH); x++)
                 WriteCharToFrameBuffer(m_frameBuffer, x * CHAR_WIDTH, y * CHAR_HEIGHT, m_fg, m_bg, m_buffer[y * m_numberOfColumns + x]);
         }
+    } else if (m_oldCursorX < m_cursorX) {
+        for (uint64_t x = m_oldCursorX; x < m_cursorX; x += CHAR_WIDTH)
+            WriteCharToFrameBuffer(m_frameBuffer, x, m_cursorY, m_fg, m_bg, m_buffer[(m_cursorY / CHAR_HEIGHT) * m_numberOfColumns + (x / CHAR_WIDTH)]);
     }
     
     m_oldCursorX = m_cursorX;
