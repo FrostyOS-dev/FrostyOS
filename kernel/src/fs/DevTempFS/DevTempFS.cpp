@@ -91,10 +91,14 @@ namespace FS {
     }
 
     int DevTempFSVNode::Open(int flags, Credential cred) {
+        if (m_attr.type == VType::DIR)
+            return 0;
         CALL_DEV_OP(Open, flags, cred);
     }
 
     int DevTempFSVNode::Close(int flags, Credential cred) {
+        if (m_attr.type == VType::DIR)
+            return 0;
         CALL_DEV_OP(Close, flags, cred);
     }
 
