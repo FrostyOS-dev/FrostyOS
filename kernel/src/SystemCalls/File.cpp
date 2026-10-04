@@ -454,17 +454,15 @@ int sys_ioctl(int fd, size_t op, void* arg, int* result) {
     if (desc == nullptr || !desc->isOpen())
         return EBADF;
 
-    if (desc->GetType() != FDType::TTY)
-        return ENOTTY;
-
     if (!vmm->ValidateWrite(result, sizeof(int)))
         return EFAULT;
 
-    TTY* tty = desc->GetTTY();
     int res = 0;
-    int rc = tty->Ioctl(op, arg, &res, proc);
+    int rc = desc->Ioctl(op, arg, &res, proc);
+    if (rc < 0)
+        rc = -rc; // ioctl always returns errors as a positive value
 
-    if (!UserWrite(result, &res, sizeof(int), proc, false))
+    if (!UserWrite(result, &res, sizeof(int), proc))
         return EFAULT; // unlikely to fail
 
     return rc;
@@ -526,7 +524,7 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
             return rc;
     } else {
         FileDescriptor* desc = manager->Get(fd);
-        if (desc == nullptr || !desc->isOpen() || desc->GetType() != FDType::Directory || desc->GetType() != FDType::File)
+        if (desc == nullptr || !desc->isOpen() || (desc->GetType() != FDType::Directory && desc->GetType() != FDType::File))
             return -EBADF;
 
         vnode = desc->GetVNode();

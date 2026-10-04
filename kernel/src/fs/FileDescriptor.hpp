@@ -67,6 +67,8 @@ public:
 
     int GetDents(FS::Dentry* buf, size_t count, size_t* realCount);
 
+    int Ioctl(uint64_t op, void* arg, int* result, Process* currentProc);
+
     bool Fork(FileDescriptor* other, Process* newProc); // copy from other into this
 
     FDType GetType() const;

@@ -370,6 +370,43 @@ int FileDescriptor::GetDents(FS::Dentry* buf, size_t count, size_t* realCount) {
     return rc;
 }
 
+int FileDescriptor::Ioctl(uint64_t op, void* arg, int* result, Process* currentProc) {
+    m_mutex.Lock();
+
+    if (!m_open) {
+        m_mutex.Unlock();
+        return EBADF;
+    }
+
+    int rc;
+
+    switch (m_type) {
+    case FDType::TTY:
+        if (m_tty == nullptr) {
+            m_mutex.Unlock();
+            return EBADF;
+        }
+        rc = m_tty->Ioctl(op, arg, result, currentProc);
+        break;
+    case FDType::File:
+    case FDType::Directory:
+        if (m_vnode == nullptr) {
+            m_mutex.Unlock();
+            return EBADF;
+        }
+        m_vnode->Lock();
+        rc = m_vnode->Ioctl(op, arg, result, currentProc, currentProc->GetCred());
+        m_vnode->Unlock();
+        break;
+    default:
+        rc = ENOTSUP;
+        break;
+    }
+
+    m_mutex.Unlock();
+    return rc;
+}
+
 bool FileDescriptor::Fork(FileDescriptor* other, Process* newProc) { // no special logic is needed, just a direct data copy
     other->m_mutex.Lock();
     m_mutex.Lock();
