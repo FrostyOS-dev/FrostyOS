@@ -5,6 +5,8 @@ source_dir="deps/mlibc"
 hostdeps="xbinutils xgcc"
 imagedeps="ninja-build meson build-essential git"
 deps="mlibc-headers"
+clean_workdirs=no
+allow_network=yes
 
 configure() {
     meson setup --cross-file="${base_dir}/deps/frostyos.cross-file" -Dno_headers=true --prefix=/data -Ddefault_library=shared -Ddefault_library_paths=/data/lib ${source_dir}

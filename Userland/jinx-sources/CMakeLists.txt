@@ -18,12 +18,16 @@ set(JINX
 )
 
 set(PACKAGES
-    mlibc
     bash
+)
+
+set(ALWAYS_BUILD_PACKAGES
+    mlibc
 )
 
 # Define the primary target for building the packages
 add_custom_target(jinx-sources
+    COMMAND ${JINX} build ${ALWAYS_BUILD_PACKAGES}
     COMMAND ${JINX} update -b ${PACKAGES}
     COMMAND ${JINX} install ${SYSROOT} ${PACKAGES}
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
