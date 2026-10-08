@@ -311,7 +311,7 @@ bool Thread::Fork(Thread* other, uint64_t newReturnValue, CPU_Registers* regs) {
     return true;
 }
 
-int Thread::RaiseSignal(int signal) {
+int Thread::RaiseSignal(int signal, bool synchronous) {
     if (signal == 0 || signal >= NSIG)
         return -EINVAL;
 
@@ -319,6 +319,9 @@ int Thread::RaiseSignal(int signal) {
     int state = Processor::DisableInterrupts();
     m_Parent->AcquireSignalLock();
     spinlock_acquire(&m_signalLock);
+
+    if (m_inSignalHandler && synchronous)
+        Thread::ExitCurrentThread(0x7F | (signal << 8), true, m_Parent->GetMainThread() == this, true);
 
     sigset_t* set = &m_pendingSignals;
     SIGNAL_SET(set, signal);

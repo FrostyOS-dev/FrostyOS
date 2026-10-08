@@ -123,7 +123,7 @@ public:
 
     bool Fork(Thread* other, uint64_t newReturnValue, CPU_Registers* regs);
 
-    int RaiseSignal(int signal);
+    int RaiseSignal(int signal, bool synchronous = false);
     int CheckSignals();
     int DispatchSignals(CPU_Registers* regs, CPU_ExtraContext* extra); // returns 0 when no signal is to be dispatched, signum when there is.
     int RestoreSignalContext(CPU_Registers* regs, CPU_ExtraContext* extra);

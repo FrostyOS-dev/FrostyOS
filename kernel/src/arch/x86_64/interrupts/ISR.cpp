@@ -148,7 +148,7 @@ extern "C" void x86_64_ISR_Handler(x86_64_ISR_Frame* frame) {
                     signal = SIGSEGV;
                     break;
                 }
-                if (signal > 0 && 0 == thread->RaiseSignal(signal))
+                if (signal > 0 && 0 == thread->RaiseSignal(signal, true))
                     success = true;
             }
             if (success) {

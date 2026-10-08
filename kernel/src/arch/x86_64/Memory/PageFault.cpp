@@ -56,7 +56,7 @@ void x86_64_PageFaultHandler(x86_64_ISR_Frame* frame) {
                 vmm = process->GetVMM();
             if (vmm != nullptr && vmm->HandlePageFault({code.present, code.write, code.user, code.execute}, frame->CR2))
                 return;
-            if (frame->CS != x86_64_GDT_KERNEL_CODE_SEGMENT && process->GetMode() == ProcessMode::USER && 0 == thread->RaiseSignal(SIGSEGV))
+            if (frame->CS != x86_64_GDT_KERNEL_CODE_SEGMENT && process->GetMode() == ProcessMode::USER && 0 == thread->RaiseSignal(SIGSEGV, true))
                 return;
         }
     }
