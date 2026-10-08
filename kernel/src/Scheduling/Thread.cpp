@@ -82,7 +82,7 @@ bool Thread::Delete() {
     if (vmm == nullptr)
         return false;
 
-    if (!vmm->FreePages(reinterpret_cast<void*>(m_KernelStack - KERNEL_STACK_SIZE)))
+    if (!VMM::g_KVMM->FreePages(reinterpret_cast<void*>(m_KernelStack - KERNEL_STACK_SIZE)))
         return false;
 
     if (m_Parent->GetMode() == ProcessMode::USER && !vmm->FreePages(reinterpret_cast<void*>(m_OriginalStack - DEFAULT_USER_STACK_SIZE)))
