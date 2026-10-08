@@ -190,9 +190,12 @@ int CopyArgEnvFromUser(const char** argv, const char** envv, uint64_t* kArgc, ch
         }
         if (argc == maxArgc) {
             maxArgc += 8;
+            void* oldArgv = currentArgv;
             currentArgv = (char**)krealloc(currentArgv, maxArgc * sizeof(char*));
-            if (currentArgv == nullptr)
+            if (currentArgv == nullptr) {
+                kfree(oldArgv);
                 return -ENOMEM;
+            }
         }
         currentArgv[argc] = arg;
         if (arg == nullptr)
@@ -212,9 +215,11 @@ int CopyArgEnvFromUser(const char** argv, const char** envv, uint64_t* kArgc, ch
         }
         if (envc == maxEnvc) {
             maxEnvc += 8;
+            void* oldEnv = currentEnv;
             currentEnv = (char**)krealloc(currentEnv, maxEnvc * sizeof(char*));
             if (currentEnv == nullptr) {
-                kfree(currentEnv);
+                kfree(currentArgv);
+                kfree(oldEnv);
                 return -ENOMEM;
             }
         }
