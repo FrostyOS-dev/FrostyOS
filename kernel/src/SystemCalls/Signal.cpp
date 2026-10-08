@@ -118,7 +118,7 @@ int sys_sigaction(int signal, sigaction_t* newAct, sigaction_t* oldAct) {
 	if (rc < 0)
 		return rc;
 
-	if (oldAct != nullptr && !UserWrite(oldAct, &kNewAct, sizeof(sigaction_t), currentProc))
+	if (oldAct != nullptr && !UserWrite(oldAct, &kOldAct, sizeof(sigaction_t), currentProc))
 		return -EFAULT;
 
 	return ESUCCESS;
@@ -148,7 +148,7 @@ int sys_sigprocmask(int how, sigset_t* set, sigset_t* oldSet) {
 		if (how != SIG_BLOCK && how != SIG_UNBLOCK && how != SIG_SETMASK)
 			return -EINVAL;
 
-		if (!UserRead(&kNewSet, set, sizeof(sigset_t), currentProc))
+		if (!UserRead(set, &kNewSet, sizeof(sigset_t), currentProc))
 			return -EFAULT;
 	}
 
