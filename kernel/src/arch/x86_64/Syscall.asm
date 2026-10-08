@@ -16,7 +16,6 @@
 [bits 64]
 
 global x86_64_SyscallEntry
-global x86_64_InitSyscall
 
 extern x86_64_SyscallHandler
 
@@ -88,6 +87,3 @@ x86_64_SyscallEntry:
 
     swapgs
     o64 sysret
-
-
-x86_64_InitSyscall:
