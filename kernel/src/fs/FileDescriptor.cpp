@@ -327,9 +327,7 @@ int FileDescriptor::Seek(int64_t offset, FDOffsetStart whence, int64_t* realOffs
                 m_mutex.Unlock();
                 return -EBADF;
             }
-            m_tty->Seek(newOffset);
-            *realOffset = newOffset;
-            rc = ESUCCESS;
+            rc = -ESPIPE;
             break;
         case FDType::Directory: {
             rc = -EBADF;
