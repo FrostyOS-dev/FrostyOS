@@ -213,10 +213,6 @@ namespace Video {
             display = device->GetFBDisplay();
             if (display == nullptr)
                 return -ENODEV;
-
-            int rc = RegisterVideoDevice(device);
-            if (rc < 0)
-                return rc; // TODO: maybe destroy the device?
         }
 
         return FBConsole_FullInit(display, newConsole);
