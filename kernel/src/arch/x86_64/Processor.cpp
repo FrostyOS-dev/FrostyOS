@@ -218,8 +218,7 @@ void x86_64_Processor::InitExtraContext(CPU_ExtraContext* extraContext) {
     extraContext->gsBase = 0;
 
     if (m_info.SIMDInfo.saveMethod == x86_64_SIMDSaveMethod::XSAVE) {
-        void* buffer = kcalloc(1, m_info.SIMDInfo.XSAVESize + 48);
-        extraContext->SIMDSaveRegion = ALIGN_UP_ADDRESS(buffer, 64);
+        extraContext->SIMDSaveRegion = kcalloc(1, m_info.SIMDInfo.XSAVESize + 48);
     } else
         extraContext->SIMDSaveRegion = kcalloc(1, m_info.SIMDInfo.XSAVESize);
 
@@ -238,9 +237,9 @@ void x86_64_Processor::SaveExtraContext(CPU_ExtraContext* extraContext) {
     extraContext->gsBase = x86_64_ReadMSR(MSR_KERNEL_GS_BASE);
 
     if (m_info.SIMDInfo.saveMethod == x86_64_SIMDSaveMethod::XSAVE)
-        __asm__ volatile ("xsaveq %0" :: "m"(*(char*)extraContext->SIMDSaveRegion), "d"(-1), "a"(-1) : "memory");
+        __asm__ volatile ("xsaveq %0" :: "m"(*(char*)ALIGN_UP_ADDRESS(extraContext->SIMDSaveRegion, 64)), "d"(-1), "a"(-1) : "memory");
     else
-        __asm__ volatile ("fxsaveq %0" :: "m"(*(char*)extraContext->SIMDSaveRegion) : "memory");
+        __asm__ volatile ("fxsaveq %0" :: "m"(*(char*)ALIGN_UP_ADDRESS(extraContext->SIMDSaveRegion, 64)) : "memory");
 }
 
 void x86_64_Processor::RestoreExtraContext(CPU_ExtraContext* extraContext) {
@@ -248,9 +247,9 @@ void x86_64_Processor::RestoreExtraContext(CPU_ExtraContext* extraContext) {
     x86_64_WriteMSR(MSR_KERNEL_GS_BASE, extraContext->gsBase);
 
     if (m_info.SIMDInfo.saveMethod == x86_64_SIMDSaveMethod::XSAVE)
-        __asm__ volatile ("xrstorq %0" :: "m"(*(char*)extraContext->SIMDSaveRegion), "d"(-1), "a"(-1) : "memory");
+        __asm__ volatile ("xrstorq %0" :: "m"(*(char*)ALIGN_UP_ADDRESS(extraContext->SIMDSaveRegion, 64)), "d"(-1), "a"(-1) : "memory");
     else
-        __asm__ volatile ("fxrstorq %0" :: "m"(*(char*)extraContext->SIMDSaveRegion) : "memory");
+        __asm__ volatile ("fxrstorq %0" :: "m"(*(char*)ALIGN_UP_ADDRESS(extraContext->SIMDSaveRegion, 64)) : "memory");
 }
 
 void x86_64_Processor::CopyExtraContext(CPU_ExtraContext* dst, const CPU_ExtraContext* src) {
