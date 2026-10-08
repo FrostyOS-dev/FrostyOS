@@ -160,11 +160,11 @@ namespace Event {
         spinlock_release(&currentThread->eventLock);
         Processor::EnableInterrupts(intState);
 
-        if (currentThread->HasPendingUnblockedSignals())
-            return -EINTR;
-
         if (triggeredCount > 0)
             return triggeredCount;
+
+        if (currentThread->HasPendingUnblockedSignals())
+            return -EINTR;
 
         return -ETIMEDOUT;
     }
