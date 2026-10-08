@@ -39,7 +39,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <arch/x86_64/Scheduling/TaskUtil.hpp>
 #endif
 
-Thread::Thread() : eventLock(SPINLOCK_DEFAULT_VALUE), eventWaitActive(false), activeEventNodes(nullptr), m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_OriginalStack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true, false, -1, 0) {
+Thread::Thread() : eventLock(SPINLOCK_DEFAULT_VALUE), eventWaitActive(false), activeEventNodes(nullptr), m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_OriginalStack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true, false, -1, 0), m_blockedSignals{}, m_pendingSignals{}, m_inSignalHandler(false), m_signalLock(SPINLOCK_DEFAULT_VALUE) {
     sleepRemainingTime = 0;
     yieldCallback = {nullptr, nullptr};
     m_InSchedList = false;
@@ -47,7 +47,7 @@ Thread::Thread() : eventLock(SPINLOCK_DEFAULT_VALUE), eventWaitActive(false), ac
 
 }
 
-Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : eventLock(SPINLOCK_DEFAULT_VALUE), eventWaitActive(false), activeEventNodes(nullptr), m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_OriginalStack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true, false, -1, 0) {
+Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : eventLock(SPINLOCK_DEFAULT_VALUE), eventWaitActive(false), activeEventNodes(nullptr), m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_OriginalStack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true, false, -1, 0), m_blockedSignals{}, m_pendingSignals{}, m_inSignalHandler(false), m_signalLock(SPINLOCK_DEFAULT_VALUE) {
     sleepRemainingTime = 0;
     yieldCallback = {nullptr, nullptr};
 
@@ -290,11 +290,14 @@ bool Thread::Fork(Thread* other, uint64_t newReturnValue, CPU_Registers* regs) {
 
     // Don't need to create a new user stack as the entire user address space is duplicated
     m_Stack = other->m_Stack;
+    m_OriginalStack = other->m_OriginalStack;
 
     m_EntryPoint = other->m_EntryPoint;
     m_TimeRemaining = 0;
     
     memcpy(&m_deleteProp, &other->m_deleteProp, sizeof(m_deleteProp));
+
+    memcpy(&m_blockedSignals, &other->m_blockedSignals, sizeof(sigset_t));
 
     int state = Processor::DisableInterrupts();
     Processor* proc = GetCurrentProcessor();
