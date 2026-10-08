@@ -348,7 +348,6 @@ int Process::RaiseSignal(int signal) {
     AcquireSignalLock();
 
     void* addr = m_sigActions[signal].address;
-    bool notIgnored = addr != SIG_IGN && ((addr == SIG_DFL && g_signalDefaultActions[signal] != SIGACTION_IGN) || addr != SIG_DFL);
     bool notIgnorable = signal == SIGKILL || signal == SIGSTOP || signal == SIGCONT;
     bool continued = false;
     bool isDefaultAct = addr == SIG_DFL;
@@ -369,21 +368,8 @@ int Process::RaiseSignal(int signal) {
         thread->AcquireSignalLock();
 
         sigset_t& blocked = thread->GetBlockedSignals();
-        sigset_t& pending = thread->GetPendingSignals();
 
         if (SIGNAL_GET(&blocked, signal) == 0 || notIgnorable) {
-            // SIGNAL_SET(&pending, signal);
-            // if (notIgnored || notIgnorable) {
-            //     // wake-up, including stopped check for SIGCONT
-            // }
-
-            // if (!(shouldStop || signal == SIGCONT)) { // stopping or continuing, possible race prevention
-            //     m_Threads.unlock();
-            //     thread->ReleaseSignalLock();
-            //     spinlock_release(&m_signalLock);
-            //     Processor::EnableInterrupts(state);
-            //     return 0;
-            // }
             thread->ReleaseSignalLock();
             m_Threads.unlock();
             spinlock_release(&m_signalLock);
@@ -401,8 +387,6 @@ int Process::RaiseSignal(int signal) {
             thread = m_Threads.getNext(thread);
     }
 
-    // TODO: no threads have it unmasked, check for threads waiting for the signal
-
     m_Threads.unlock();
 
     if (!notIgnorable && !(continued || shouldStop)) // no thread has it unmasked, so set it as pending for the whole process
@@ -410,15 +394,6 @@ int Process::RaiseSignal(int signal) {
 
     spinlock_release(&m_signalLock);
     Processor::EnableInterrupts(state);
-
-    // tell the parent when a child stopped
-    // if ((notIgnorable || notIgnored) && g_signalDefaultActions[signal] == SIGACTION_STOP) {
-    //     // TODO: proc status
-
-    //     Process* parent = Scheduler::GetProcess(m_PPID);
-    //     if (parent != nullptr && (parent->m_sigActions[SIGCHLD].flags & SA_NOCLDSTOP) == 0)
-    //         parent->RaiseSignal(SIGCHLD);
-    // }
 
     return 0;
 }
