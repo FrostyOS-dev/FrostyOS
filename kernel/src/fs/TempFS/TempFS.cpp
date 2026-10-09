@@ -105,8 +105,10 @@ namespace FS {
     }
 
     int TempFSVNode::Read(void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, Credential cred) {
-        if (offset >= m_attr.size)
-            return -EINVAL;
+        if (offset >= m_attr.size) {
+            *bytesRead = 0;
+            return ESUCCESS;
+        }
 
         if (offset + size > m_attr.size)
             size = m_attr.size - offset;

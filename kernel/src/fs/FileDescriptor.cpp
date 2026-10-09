@@ -106,8 +106,13 @@ bool FileDescriptor::isOpen() const {
 }
 
 int FileDescriptor::Read(void* buf, size_t count, size_t* realCount) {
-    if (buf == nullptr || count == 0 || realCount == nullptr)
+    if (buf == nullptr || realCount == nullptr)
         return -EINVAL;
+
+    if (count == 0) {
+        *realCount = 0;
+        return ESUCCESS;
+    }
 
     m_mutex.Lock();
 
@@ -156,8 +161,13 @@ int FileDescriptor::Read(void* buf, size_t count, size_t* realCount) {
 }
 
 int FileDescriptor::Write(const void* buf, size_t count, size_t* realCount) {
-    if (buf == nullptr || count == 0 || realCount == nullptr)
+    if (buf == nullptr || realCount == nullptr)
         return -EINVAL;
+
+    if (count == 0) {
+        *realCount = 0;
+        return ESUCCESS;
+    }
 
     m_mutex.Lock();
 
