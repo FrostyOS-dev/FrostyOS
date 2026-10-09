@@ -159,7 +159,7 @@ int sys_close(int fd) {
 
 ssize_t sys_read(int fd, void* buf, size_t count) {
     if (count == 0)
-        return -EINVAL;
+        return 0;
 
     Thread* current = Thread::GetCurrentThread();
     Process* proc = current->GetParent();
@@ -524,12 +524,27 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
             return rc;
     } else {
         FileDescriptor* desc = manager->Get(fd);
-        if (desc == nullptr || !desc->isOpen() || (desc->GetType() != FDType::Directory && desc->GetType() != FDType::File))
+        if (desc == nullptr || !desc->isOpen() || (desc->GetType() != FDType::Directory && desc->GetType() != FDType::File && desc->GetType() != FDType::TTY))
             return -EBADF;
 
         vnode = desc->GetVNode();
-        if (vnode == nullptr)
-            return -EBADF;
+        if (vnode == nullptr) {
+            if (desc->GetType() != FDType::TTY)
+                return -EBADF;
+
+            Stat buf;
+            memset(&buf, 0, sizeof(Stat));
+
+            // dev, rdev, ino, nlink, uid, gid, atime, mtime, ctime, size, blocks are all 0
+
+            buf.mode = 0600 | ((FS::VFS_GetPosixType(FS::VType::CHR) & 0xF) << 12);
+            buf.blksize = TTY_INTERNAL_BUFFER_SIZE;
+
+            if (!UserWrite(stat, &buf, sizeof(Stat), proc))
+                return -EFAULT;
+
+            return ESUCCESS;
+        }
     }
 
     Stat buf;
