@@ -183,6 +183,7 @@ int x86_64_SetupSignalFrame(Process* proc, x86_64_Registers* regs, x86_64_ExtraC
     regs->CS = x86_64_GDT_USER_CODE_SEGMENT | 3;
     regs->SS = x86_64_GDT_USER_DATA_SEGMENT | 3;
 
+    processor->SaveExtraContext(extra);
     memcpy(reinterpret_cast<void*>((reinterpret_cast<uint64_t>(frame) + sizeof(x86_64_SignalFrame))), extra->SIMDSaveRegion, SIMDSize);
 
     if (!UserWrite(reinterpret_cast<void*>(rsp), frame, sizeof(x86_64_SignalFrame) + SIMDSize, proc, false))

@@ -49,6 +49,7 @@ struct [[gnu::packed, gnu::aligned(8)]] x86_64_Registers {
 
 struct x86_64_ExtraContext {
     void* SIMDSaveRegion;
+    void* SIMDAllocBase;
     uint64_t fsBase;
     uint64_t gsBase;
 };

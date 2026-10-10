@@ -301,6 +301,7 @@ bool Thread::Fork(Thread* other, uint64_t newReturnValue, CPU_Registers* regs) {
 
     int state = Processor::DisableInterrupts();
     Processor* proc = GetCurrentProcessor();
+    proc->SaveExtraContext(&other->m_extraContext);
     proc->InitExtraContext(&m_extraContext);
     proc->CopyExtraContext(&m_extraContext, &other->m_extraContext);
     Processor::EnableInterrupts(state);

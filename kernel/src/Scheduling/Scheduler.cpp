@@ -60,6 +60,7 @@ namespace Scheduler {
     Semaphore g_deadThreadsSemaphore(0, 1);
 
     [[noreturn]] void RunThread(Thread* thread, bool interrupt, bool noSignals) {
+        Processor::DisableInterrupts();
         ProcessorState* state = GetCurrentProcessorState();
         Process* parent = thread->GetParent();
         if (parent != nullptr && parent->GetMode() == ProcessMode::USER) {

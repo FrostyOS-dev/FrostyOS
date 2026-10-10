@@ -93,7 +93,8 @@ x86_64_Processor::~x86_64_Processor() {
     if (m_info.SIMDInfo.saveMethod == x86_64_SIMDSaveMethod::XSAVE) {
         x86_64_CPUIDResult result = x86_64_CPUID(0xD, 0);
         m_info.SIMDInfo.XSAVESize = result.EBX;
-    }
+    } else
+        m_info.SIMDInfo.XSAVESize = 512;
 
     spinlock_release(&apLock);
 
@@ -218,9 +219,12 @@ void x86_64_Processor::InitExtraContext(CPU_ExtraContext* extraContext) {
     extraContext->gsBase = 0;
 
     if (m_info.SIMDInfo.saveMethod == x86_64_SIMDSaveMethod::XSAVE) {
-        extraContext->SIMDSaveRegion = kcalloc(1, m_info.SIMDInfo.XSAVESize + 48);
-    } else
-        extraContext->SIMDSaveRegion = kcalloc(1, m_info.SIMDInfo.XSAVESize);
+        extraContext->SIMDAllocBase = kcalloc(1, m_info.SIMDInfo.XSAVESize + 48);
+        extraContext->SIMDSaveRegion = ALIGN_UP_ADDRESS(extraContext->SIMDAllocBase, 64);
+    } else {
+        extraContext->SIMDAllocBase = kcalloc(1, m_info.SIMDInfo.XSAVESize);
+        extraContext->SIMDSaveRegion = extraContext->SIMDAllocBase;
+    }
 
     // Initialise the x87 FPU state to what it would be after the FNINIT instruction
     FXSaveRegion* save = static_cast<FXSaveRegion*>(extraContext->SIMDSaveRegion);
@@ -229,7 +233,7 @@ void x86_64_Processor::InitExtraContext(CPU_ExtraContext* extraContext) {
 }
 
 void x86_64_Processor::DestroyExtraContext(CPU_ExtraContext* extraContext) {
-    kfree(extraContext->SIMDSaveRegion);
+    kfree(extraContext->SIMDAllocBase);
 }
 
 void x86_64_Processor::SaveExtraContext(CPU_ExtraContext* extraContext) {
@@ -237,9 +241,9 @@ void x86_64_Processor::SaveExtraContext(CPU_ExtraContext* extraContext) {
     extraContext->gsBase = x86_64_ReadMSR(MSR_KERNEL_GS_BASE);
 
     if (m_info.SIMDInfo.saveMethod == x86_64_SIMDSaveMethod::XSAVE)
-        __asm__ volatile ("xsaveq %0" :: "m"(*(char*)ALIGN_UP_ADDRESS(extraContext->SIMDSaveRegion, 64)), "d"(-1), "a"(-1) : "memory");
+        __asm__ volatile ("xsaveq %0" :: "m"(*(char*)extraContext->SIMDSaveRegion), "d"(-1), "a"(-1) : "memory");
     else
-        __asm__ volatile ("fxsaveq %0" :: "m"(*(char*)ALIGN_UP_ADDRESS(extraContext->SIMDSaveRegion, 64)) : "memory");
+        __asm__ volatile ("fxsaveq %0" :: "m"(*(char*)extraContext->SIMDSaveRegion) : "memory");
 }
 
 void x86_64_Processor::RestoreExtraContext(CPU_ExtraContext* extraContext) {
@@ -247,9 +251,9 @@ void x86_64_Processor::RestoreExtraContext(CPU_ExtraContext* extraContext) {
     x86_64_WriteMSR(MSR_KERNEL_GS_BASE, extraContext->gsBase);
 
     if (m_info.SIMDInfo.saveMethod == x86_64_SIMDSaveMethod::XSAVE)
-        __asm__ volatile ("xrstorq %0" :: "m"(*(char*)ALIGN_UP_ADDRESS(extraContext->SIMDSaveRegion, 64)), "d"(-1), "a"(-1) : "memory");
+        __asm__ volatile ("xrstorq %0" :: "m"(*(char*)extraContext->SIMDSaveRegion), "d"(-1), "a"(-1) : "memory");
     else
-        __asm__ volatile ("fxrstorq %0" :: "m"(*(char*)ALIGN_UP_ADDRESS(extraContext->SIMDSaveRegion, 64)) : "memory");
+        __asm__ volatile ("fxrstorq %0" :: "m"(*(char*)extraContext->SIMDSaveRegion) : "memory");
 }
 
 void x86_64_Processor::CopyExtraContext(CPU_ExtraContext* dst, const CPU_ExtraContext* src) {
