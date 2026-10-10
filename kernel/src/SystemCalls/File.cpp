@@ -341,7 +341,7 @@ int sys_getcwd(char* buf, size_t size) {
     return ret ? ESUCCESS : -EFAULT;
 }
 
-int sys_symlink(const char* target, size_t targetLen, const char* linkPath, size_t linkLen) {
+int sys_symlinkat(int dirFD, const char* target, size_t targetLen, const char* linkPath, size_t linkLen) {
     if (target == nullptr || targetLen == 0 || linkPath == nullptr || linkLen == 0)
         return -EINVAL;
 
@@ -350,6 +350,9 @@ int sys_symlink(const char* target, size_t targetLen, const char* linkPath, size
 
     Thread* current = Thread::GetCurrentThread();
     Process* proc = current->GetParent();
+    FileDescriptorManager* manager = proc->GetFDManager();
+    if (manager == nullptr)
+        return -ENOSYS;
 
     char* kTarget = new char[targetLen + 1];
     char* kLinkPath = new char[linkLen + 1];
@@ -370,6 +373,26 @@ int sys_symlink(const char* target, size_t targetLen, const char* linkPath, size
     kTarget[targetLen] = 0;
     kLinkPath[linkLen] = 0;
 
+    FS::VNode* dirVNode = nullptr;
+    if (dirFD == AT_FDCWD)
+        dirVNode = proc->GetCWD();
+    else {
+        FileDescriptor* desc = manager->Get(dirFD);
+        if (desc == nullptr || !desc->isOpen() || desc->GetType() != FDType::Directory) {
+            delete[] kTarget;
+            delete[] kLinkPath;
+            return -EBADF;
+        }
+
+        dirVNode = desc->GetVNode();
+    }
+
+    if (dirVNode == nullptr) {
+        delete[] kTarget;
+        delete[] kLinkPath;
+        return -EINVAL;
+    }
+
     // Need to split the path
     if (kLinkPath[linkLen - 1] == '/') {
         delete[] kTarget;
@@ -386,10 +409,13 @@ int sys_symlink(const char* target, size_t targetLen, const char* linkPath, size
         name++;
     }
 
-    int rc = FS::VFS_CreateSymlink(parent, name, kTarget, proc->GetCWD(), proc->GetCred());
+    int rc = FS::VFS_CreateSymlink(parent, name, kTarget, dirVNode, proc->GetCred());
 
     delete[] kTarget;
     delete[] kLinkPath;
+
+    if (rc < 0)
+        return rc;
 
     return rc;
 }

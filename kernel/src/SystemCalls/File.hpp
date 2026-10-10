@@ -114,7 +114,7 @@ int sys_getdents(int fd, void* buf, size_t maxRead, size_t* bytesRead);
 
 int sys_getcwd(char* buf, size_t size);
 
-int sys_symlink(const char* target, size_t targetLen, const char* linkPath, size_t linkLen);
+int sys_symlinkat(int dirFD, const char* target, size_t targetLen, const char* linkPath, size_t linkLen);
 
 int sys_chdir(const char* path, size_t pathLen);
 int sys_fchdir(int fd);

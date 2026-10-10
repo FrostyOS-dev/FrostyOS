@@ -55,7 +55,7 @@ bool UserReadAtomic32(const uint32_t* userBuf, uint32_t* kBuf, Process* currentP
     SC(EXEC, exec) \
     SC(FUTEX, futex) \
     SC(GETCWD, getcwd) \
-    SC(SYMLINK, symlink) \
+    SC(SYMLINKAT, symlinkat) \
     SC(SIGACTION, sigaction) \
     SC(SIGPENDING, sigpending) \
     SC(SIGPROCMASK, sigprocmask) \
