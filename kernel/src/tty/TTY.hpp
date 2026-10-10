@@ -33,7 +33,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define DEBUG_MIRRORING_DEFAULT_ENABLED true
 
-#define ANSI_BUFFER_SIZE 64
+#define ANSI_MAX_PARAMS 16
 
 #define TTY_INTERNAL_BUFFER_SIZE 512
 #define TTY_READ_BUFFER_SIZE 4096
@@ -112,6 +112,10 @@ public:
 protected:
     virtual int InternalWrite(const char* buf, size_t size, bool flush = false);
 
+    uint8_t EchoChar(char c); // echo c per termios flags, returns columns occupied
+    bool EraseBufferedChar(); // remove last char of the pending line and erase its echo
+    uint64_t GetOutputColumn();
+
     TTYBackend* m_inputBackend;
     TTYBackend* m_outputBackend;
     TTYBackend* m_debugBackend;
@@ -121,6 +125,7 @@ protected:
     bool m_debugMirroring;
 
     char m_internalBuffer[TTY_INTERNAL_BUFFER_SIZE];
+    uint8_t m_internalWidths[TTY_INTERNAL_BUFFER_SIZE];
     uint64_t m_internalBufferOffset;
 
     // interrupt-safe SPMC ringbuffer
@@ -151,10 +156,43 @@ protected:
     int InternalWrite(const char* buf, size_t size, bool flush = false) override;
 
 private:
+    enum class EscState : uint8_t {
+        Ground,
+        Escape,
+        CSI,
+        OSC,
+        OSCEscape,
+        Charset
+    };
+
     struct EscapeState {
-        bool inEscape;
-        char currentEscape[ANSI_BUFFER_SIZE];
+        EscState state;
+        int params[ANSI_MAX_PARAMS];
+        int paramCount;
+        int current;
+        bool hasCurrent;
+        bool ignore;
+        char privateMarker;
     } m_escapeState;
+
+    struct TextAttributes {
+        Colour fg;
+        Colour bg;
+        int fgBase;
+        bool bold;
+        bool reverse;
+    } m_attr;
+
+    void ResetEscapeState();
+    void ResetAttributes();
+    void ApplyAttributes();
+    void ProcessChar(char c);
+    void PushParam();
+    void ExecuteCSI(char final);
+    void HandleSGR();
+
+    uint64_t m_savedX;
+    uint64_t m_savedY;
     FBConsole* m_console;
 };
 

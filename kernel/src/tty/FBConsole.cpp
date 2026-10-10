@@ -29,11 +29,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <HAL/drivers/Video/FBVideo/FBDisplay.hpp>
 #include <HAL/drivers/Video/FBVideo/FBVideoDevice.hpp>
 
-FBConsole::FBConsole() : m_display(nullptr), m_frameBuffer(nullptr), m_bg(), m_fg(), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_buffer(nullptr), m_oldCursorX(0), m_oldCursorY(0), m_fullFlush(false) {
+FBConsole::FBConsole() : m_display(nullptr), m_frameBuffer(nullptr), m_bg(), m_fg(), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_buffer(nullptr) {
 
 }
 
-FBConsole::FBConsole(Video::FBDisplay* display, Colour bg, Colour fg) : m_display(display), m_frameBuffer(nullptr), m_bg(bg), m_fg(fg), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_buffer(nullptr), m_oldCursorX(0), m_oldCursorY(0), m_fullFlush(false) {
+FBConsole::FBConsole(Video::FBDisplay* display, Colour bg, Colour fg) : m_display(display), m_frameBuffer(nullptr), m_bg(bg), m_fg(fg), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_buffer(nullptr) {
     if (m_display != nullptr)
         m_frameBuffer = m_display->GetFrameBuffer();
 }
@@ -53,8 +53,6 @@ int FBConsole::Init() {
 
     m_cursorX = 0;
     m_cursorY = 0;
-    m_oldCursorX = 0;
-    m_oldCursorY = 0;
 
     ClearScreen(m_bg);
     return 0;
@@ -69,11 +67,24 @@ int FBConsole::Init(Video::FBDisplay* display, Colour bg, Colour fg) {
 }
 
 void FBConsole::ClearScreen() {
-    ClearFrameBuffer(m_frameBuffer, m_bg);
+    ClearScreen(m_bg);
 }
 
 void FBConsole::ClearScreen(Colour colour) {
     ClearFrameBuffer(m_frameBuffer, colour);
+    if (m_buffer == nullptr)
+        return;
+    for (size_t i = 0; i < m_numberOfRows * m_numberOfColumns; i++) {
+        FBConsoleCell& c = m_buffer[i];
+        c.ch = ' ';
+        c.fgR = m_fg.GetR();
+        c.fgG = m_fg.GetG();
+        c.fgB = m_fg.GetB();
+        c.bgR = colour.GetR();
+        c.bgG = colour.GetG();
+        c.bgB = colour.GetB();
+        c.dirty = false; // pixels already match
+    }
 }
 
 void FBConsole::PlotPixel(uint64_t x, uint64_t y, Colour colour) {
@@ -132,21 +143,23 @@ void FBConsole::PrintChar(char c) {
     case '\r':
         m_cursorX = 0;
         break;
-    case '\t':
-        for (uint64_t i = 0; i < 4; i++)
-            PrintChar(' ');
+    case '\t': {
+        uint64_t col = m_cursorX / CHAR_WIDTH;
+        uint64_t next = (col + 8) & ~UINT64_C(7);
+        if (next >= m_numberOfColumns)
+            next = m_numberOfColumns - 1;
+        m_cursorX = next * CHAR_WIDTH;
         break;
+    }
     case '\f':
-        // ClearScreen(m_bg);
-        memset(m_buffer, ' ', m_numberOfColumns * m_numberOfRows);
+        BlankCells(0, m_numberOfColumns * m_numberOfRows);
         m_cursorX = 0;
         m_cursorY = 0;
         break;
     default:
         if (c >= ' ' && c < 0x7F) {
-            m_buffer[(m_cursorY / CHAR_HEIGHT) * m_numberOfColumns + (m_cursorX / CHAR_WIDTH)] = c;
+            SetCell((m_cursorY / CHAR_HEIGHT) * m_numberOfColumns + (m_cursorX / CHAR_WIDTH), c);
             m_cursorX += CHAR_WIDTH;
-
             if (m_cursorX >= (m_numberOfColumns * CHAR_WIDTH))
                 NewLine();
         }
@@ -164,7 +177,7 @@ void FBConsole::Backspace() {
     else
         m_cursorX -= CHAR_WIDTH;
 
-    m_buffer[(m_cursorY / CHAR_HEIGHT) * m_numberOfColumns + (m_cursorX / CHAR_WIDTH)] = ' ';
+    // SetCell((m_cursorY / CHAR_HEIGHT) * m_numberOfColumns + (m_cursorX / CHAR_WIDTH), ' ');
 }
 
 void FBConsole::NewLine() {
@@ -177,12 +190,21 @@ void FBConsole::NewLine() {
 
 void FBConsole::Scroll(uint64_t n) {
     m_cursorY -= n * CHAR_HEIGHT;
-    memmove(m_buffer, (void*)((uint64_t)m_buffer + n * m_numberOfColumns), (m_cursorY / CHAR_HEIGHT) * m_numberOfColumns);
-    memset((void*)((uint64_t)m_buffer + (m_cursorY / CHAR_HEIGHT) * m_numberOfColumns), ' ', n * m_numberOfColumns);
-    m_fullFlush = true;
+    if (m_buffer == nullptr)
+        return;
+    size_t keep = (m_cursorY / CHAR_HEIGHT) * m_numberOfColumns;
+    memmove(m_buffer, m_buffer + n * m_numberOfColumns, keep * sizeof(FBConsoleCell));
+    for (size_t i = 0; i < keep; i++)
+        m_buffer[i].dirty = true;
+    BlankCells(keep, n * m_numberOfColumns);
 }
 
 void FBConsole::SetCursor(uint64_t x, uint64_t y) {
+    if (m_numberOfColumns > 0 && m_numberOfRows > 0) {
+        x = MIN(x, (m_numberOfColumns - 1) * CHAR_HEIGHT);
+        y = MIN(y, (m_numberOfRows - 1) * CHAR_WIDTH);
+    }
+
     m_cursorX = x;
     m_cursorY = y;
 }
@@ -213,71 +235,112 @@ FrameBuffer* FBConsole::GetFrameBuffer() {
 }
 
 void FBConsole::CopyFrom(FBConsole* other) {
-    m_cursorX = other->m_cursorX;
-    m_cursorY = other->m_cursorY;
-    m_oldCursorX = other->m_oldCursorX;
-    m_oldCursorY = other->m_oldCursorY;
+    SetCursor(other->m_cursorX, other->m_cursorY);
 
     size_t rows = MIN(other->m_numberOfRows, m_numberOfRows);
-    size_t columns = MIN(other->m_numberOfColumns, m_numberOfColumns);
+    size_t cols = MIN(other->m_numberOfColumns, m_numberOfColumns);
 
-    for (uint64_t i = 0; i < rows; i++) {
-        memcpy((void*)((uint64_t)m_buffer + i * m_numberOfColumns), (void*)((uint64_t)other->m_buffer + i * other->m_numberOfColumns), columns);
-        if ((m_numberOfColumns - columns) > 0)
-            memset((void*)((uint64_t)m_buffer + i * m_numberOfColumns + columns), ' ', (m_numberOfColumns - columns));
+    BlankCells(0, m_numberOfRows * m_numberOfColumns);
+    for (size_t r = 0; r < rows; r++) {
+        for (size_t c = 0; c < cols; c++) {
+            m_buffer[r * m_numberOfColumns + c] = other->m_buffer[r * other->m_numberOfColumns + c];
+            m_buffer[r * m_numberOfColumns + c].dirty = true;
+        }
     }
-
-    if ((m_numberOfRows - rows) > 0)
-        memset((void*)((uint64_t)m_buffer + rows * m_numberOfColumns), ' ', (m_numberOfRows - rows) * m_numberOfColumns);
 }
 
 void FBConsole::Flush() {
-    if (m_fullFlush || m_oldCursorY > m_cursorY || (m_oldCursorY == m_cursorY && m_oldCursorX > m_cursorX)) {
-        for (uint64_t y = 0; y < m_numberOfRows; y++) {
-            for (uint64_t x = 0; x < m_numberOfColumns; x++)
-                WriteCharToFrameBuffer(m_frameBuffer, x * CHAR_WIDTH, y * CHAR_HEIGHT, m_fg, m_bg, m_buffer[y * m_numberOfColumns + x]);
-        }
-        m_fullFlush = false;
-    } else if (m_oldCursorY < m_cursorY) {
-        // Step 1: Flush what remains of the first row
-        uint64_t y = m_oldCursorY / CHAR_HEIGHT;
-        if (m_oldCursorX > 0) {
-            for (uint64_t x = m_cursorX / CHAR_WIDTH; x < m_numberOfColumns; x++)
-                WriteCharToFrameBuffer(m_frameBuffer, x * CHAR_WIDTH, y * CHAR_HEIGHT, m_fg, m_bg, m_buffer[y * m_numberOfColumns + x]);
-            y++;
-        }
+    if (m_buffer == nullptr)
+        return;
 
-        // Step 2: Flush all the rows in between
-        for (; y < (m_cursorY / CHAR_HEIGHT); y++) {
-            for (uint64_t x = 0; x < m_numberOfColumns; x++)
-                WriteCharToFrameBuffer(m_frameBuffer, x * CHAR_WIDTH, y * CHAR_HEIGHT, m_fg, m_bg, m_buffer[y * m_numberOfColumns + x]);
+    for (uint64_t y = 0; y < m_numberOfRows; y++) {
+        for (uint64_t x = 0; x < m_numberOfColumns; x++) {
+            FBConsoleCell& c = m_buffer[y * m_numberOfColumns + x];
+            if (!c.dirty)
+                continue;
+            Colour fg(c.fgR, c.fgG, c.fgB);
+            Colour bg(c.bgR, c.bgG, c.bgB);
+            WriteCharToFrameBuffer(m_frameBuffer, x * CHAR_WIDTH, y * CHAR_HEIGHT, fg, bg, c.ch);
+            c.dirty = false;
         }
-
-        // Step 3: Flush the first part of the remaining row
-        if (m_cursorX > 0) {
-            for (uint64_t x = 0; x < (m_cursorX / CHAR_WIDTH); x++)
-                WriteCharToFrameBuffer(m_frameBuffer, x * CHAR_WIDTH, y * CHAR_HEIGHT, m_fg, m_bg, m_buffer[y * m_numberOfColumns + x]);
-        }
-    } else if (m_oldCursorX < m_cursorX) {
-        for (uint64_t x = m_oldCursorX; x < m_cursorX; x += CHAR_WIDTH)
-            WriteCharToFrameBuffer(m_frameBuffer, x, m_cursorY, m_fg, m_bg, m_buffer[(m_cursorY / CHAR_HEIGHT) * m_numberOfColumns + (x / CHAR_WIDTH)]);
     }
-    
-    m_oldCursorX = m_cursorX;
-    m_oldCursorY = m_cursorY;
 }
 
-void FBConsole::SetBuffer(char* buf, size_t rows, size_t columns) {
+void FBConsole::SetBuffer(FBConsoleCell* buf, size_t rows, size_t columns) {
     m_buffer = buf;
     m_numberOfRows = MIN(rows, m_numberOfRows);
     m_numberOfColumns = MIN(columns, m_numberOfColumns);
+    BlankCells(0, m_numberOfRows * m_numberOfColumns);
 }
 
 void FBConsole::CreateBuffer() {
     m_numberOfRows = m_frameBuffer->height / CHAR_HEIGHT;
     m_numberOfColumns = m_frameBuffer->width / CHAR_WIDTH;
 
-    m_buffer = new char[m_numberOfRows * m_numberOfColumns];
+    m_buffer = new FBConsoleCell[m_numberOfRows * m_numberOfColumns];
+    BlankCells(0, m_numberOfRows * m_numberOfColumns);
+}
+
+void FBConsole::EraseInLine(int mode) {
+    if (m_buffer == nullptr || m_numberOfRows == 0 || m_numberOfColumns == 0)
+        return;
+
+    size_t row = MIN(m_cursorY / CHAR_HEIGHT, m_numberOfRows - 1);
+    size_t col = MIN(m_cursorX / CHAR_WIDTH, m_numberOfColumns - 1);
+    size_t start = row * m_numberOfColumns;
+    switch (mode) {
+    case 0:
+        BlankCells(start + col, m_numberOfColumns - col);
+        break;
+    case 1:
+        BlankCells(start, col + 1);
+        break;
+    case 2:
+        BlankCells(start, m_numberOfColumns);
+        break;
+    }
+}
+
+void FBConsole::EraseInDisplay(int mode) {
+    if (m_buffer == nullptr || m_numberOfRows == 0 || m_numberOfColumns == 0)
+        return;
+
+    size_t row = MIN(m_cursorY / CHAR_HEIGHT, m_numberOfRows - 1);
+    size_t col = MIN(m_cursorX / CHAR_WIDTH, m_numberOfColumns - 1);
+    size_t cur = row * m_numberOfColumns + col;
+    size_t total = m_numberOfRows * m_numberOfColumns;
+    switch (mode) {
+    case 0:
+        BlankCells(cur, total - cur);
+        break;
+    case 1:
+        BlankCells(0, cur + 1);
+        break;
+    case 2:
+    case 3:
+        BlankCells(0, total);
+        break;
+    }
+}
+
+void FBConsole::SetCell(size_t i, char c) {
+    if (m_buffer == nullptr || i >= m_numberOfRows * m_numberOfColumns)
+        return;
+
+    FBConsoleCell& cell = m_buffer[i];
+    cell.ch = c;
+    cell.fgR = m_fg.GetR();
+    cell.fgG = m_fg.GetG();
+    cell.fgB = m_fg.GetB();
+    cell.bgR = m_bg.GetR();
+    cell.bgG = m_bg.GetG();
+    cell.bgB = m_bg.GetB();
+    cell.dirty = true;
+}
+
+void FBConsole::BlankCells(size_t start, size_t count) {
+    for (size_t i = 0; i < count; i++)
+        SetCell(start + i, ' ');
 }
 
 
@@ -290,7 +353,7 @@ Video::FBVideoDevice KEarlyFBDevice;
 #define EARLY_MAX_WIDTH 1024
 #define EARLY_MAX_HEIGHT 768
 
-char KEarlyFBBuffer[(EARLY_MAX_WIDTH / CHAR_WIDTH) * (EARLY_MAX_HEIGHT / CHAR_HEIGHT)];
+FBConsoleCell KEarlyFBBuffer[(EARLY_MAX_WIDTH / CHAR_WIDTH) * (EARLY_MAX_HEIGHT / CHAR_HEIGHT)];
 
 extern Colour g_KBackgroundColour;
 extern Colour g_KForegroundColour;
@@ -306,7 +369,6 @@ int FBConsole_EarlyInit(FrameBuffer* fb) {
     if (rc < 0)
         return rc;
     
-    memset(KEarlyFBBuffer, ' ', (EARLY_MAX_WIDTH / CHAR_WIDTH) * (EARLY_MAX_HEIGHT / CHAR_HEIGHT));
     KEarlyFBConsole.SetBuffer(KEarlyFBBuffer, (EARLY_MAX_HEIGHT / CHAR_HEIGHT), (EARLY_MAX_WIDTH / CHAR_WIDTH));
     
     g_KFBConsole = &KEarlyFBConsole;

@@ -25,6 +25,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <HAL/drivers/Video/FBVideo/FBDisplay.hpp>
 
+struct FBConsoleCell {
+    char ch;
+    uint8_t fgR, fgG, fgB;
+    uint8_t bgR, bgG, bgB;
+    bool dirty;
+};
+
 class FBConsole {
 public:
     FBConsole();
@@ -69,10 +76,16 @@ public:
 
     void Flush();
 
-    void SetBuffer(char* buf, size_t rows, size_t columns); // set the buffer, and set the screen size to the requested
+    void SetBuffer(FBConsoleCell* buf, size_t rows, size_t columns); // set the buffer, and set the screen size to the requested
     void CreateBuffer(); // Create a buffer that is the appropriate size for the display dimensions
 
+    void EraseInLine(int mode); // 0 = cursor to end, 1 = start to cursor, 2 = whole line
+    void EraseInDisplay(int mode); // 0 = cursor to end, 1 = start to cursor, 2/3 = whole screen
+
 private:
+    void SetCell(size_t index, char c);
+    void BlankCells(size_t start, size_t count);
+
     Video::FBDisplay* m_display;
     FrameBuffer* m_frameBuffer;
     Colour m_bg;
@@ -83,10 +96,10 @@ private:
     uint64_t m_numberOfRows;
     uint64_t m_numberOfColumns;
 
-    char* m_buffer;
-    uint64_t m_oldCursorX;
-    uint64_t m_oldCursorY;
-    bool m_fullFlush;
+    FBConsoleCell* m_buffer;
+    // uint64_t m_oldCursorX;
+    // uint64_t m_oldCursorY;
+    // bool m_fullFlush;
 };
 
 extern FBConsole* g_KFBConsole;

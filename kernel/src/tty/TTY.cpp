@@ -33,8 +33,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <SystemCalls/Signal.hpp>
 #include <SystemCalls/SystemCall.hpp>
 
-#define ANSI_MAX_PARAMS 16
-
 // Standard VGA-style Linux Console Colors
 #define ANSI_COLOR_BLACK   Colour(0x00, 0x00, 0x00)
 #define ANSI_COLOR_RED     Colour(0xAA, 0x00, 0x00)
@@ -50,11 +48,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 TTY* g_CurrentTTY = nullptr;
 TTY* g_KTTY = nullptr;
 
-TTY::TTY() : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_type(TTYType::Invalid) {
+static inline bool IsSpecialChar(char c, char special) {
+    return special != '\0' && c == special;
+}
+
+TTY::TTY() : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termios(), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_internalBufferOffset(0), m_type(TTYType::Invalid) {
     
 }
 
-TTY::TTY(TTYType type) : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_type(type) {
+TTY::TTY(TTYType type) : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termios(), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_internalBufferOffset(0), m_type(type) {
 
 }
 
@@ -166,76 +168,56 @@ void TTY::HandleInput(char c) {
     else if (c == '\n' && (m_termios.c_iflag & INLCR) > 0)
         c = '\r';
 
-    char echo = (m_termios.c_lflag & ECHO) > 0 ? c : '\0';
-
-    // echo control characters
-    if ((m_termios.c_lflag & ECHOCTL) > 0 && (m_termios.c_lflag & ECHO) > 0 && c < 32 && c != '\n' && c != '\r' && c != '\b' && c != '\t' && c != '\x1b') {
-        char temp[2] = {'^', static_cast<char>(c + 0x40)};
-        InternalWrite(temp, 2, true);
-        echo = 0;
-    }
-
     if ((m_termios.c_lflag & ISIG) > 0) {
         int signal = -1;
-        if (m_termios.c_cc[VINTR] == c)
+        if (IsSpecialChar(c, m_termios.c_cc[VINTR]))
             signal = SIGINT;
-        else if (m_termios.c_cc[VQUIT] == c)
+        else if (IsSpecialChar(c, m_termios.c_cc[VQUIT]))
             signal = SIGQUIT;
-        else if (m_termios.c_cc[VSUSP] == c)
+        else if (IsSpecialChar(c, m_termios.c_cc[VSUSP]))
             signal = SIGTSTP;
 
         if (signal >= 0) {
+            EchoChar(c);
             // TODO: get process that is controlling the tty, and raise the signal on it
-
             return;
         }
     }
 
     if ((m_termios.c_lflag & ICANON) > 0) {
-        bool flush = false;
-        if (c == m_termios.c_cc[VERASE]) { // backspace
-            if (m_internalBufferOffset == 0)
-                return;
-
-            m_internalBufferOffset--;
-            m_internalBuffer[m_internalBufferOffset] = '\0';
-
-            if ((m_termios.c_lflag & ECHO) > 0)
-                InternalWrite("\b \b", 3, true);
+        if (IsSpecialChar(c, m_termios.c_cc[VERASE]) || c == 0x7F) { // backspace
+            EraseBufferedChar();
             return;
-        } else if (c == m_termios.c_cc[VKILL]) { // clear everything
-            InternalWrite("\f", 1, true);
-
-            m_internalBufferOffset = 0;
-            memset(m_internalBuffer, 0, TTY_INTERNAL_BUFFER_SIZE);
-        } else if (c == m_termios.c_cc[VEOF]) // EOF
-            flush = true;
-        else if (c == '\n' || c == m_termios.c_cc[VEOL] || c == m_termios.c_cc[VEOL2]) // new line
-            flush = true;
+        } else if (IsSpecialChar(c, m_termios.c_cc[VKILL])) {
+            while (EraseBufferedChar()) {} // visually erase pending line
+            return;
+        }
         
-        if (echo != 0)
-            InternalWrite(&echo, 1, true);
-
-        // Check if the buffer is full
-        m_internalBuffer[m_internalBufferOffset] = c;
-        m_internalBufferOffset++;
-        if (m_internalBufferOffset == TTY_INTERNAL_BUFFER_SIZE)
+        bool flush = false;
+        if (IsSpecialChar(c, m_termios.c_cc[VEOF])) // EOF
             flush = true;
+        else {
+            uint8_t width = EchoChar(c);
+            m_internalBuffer[m_internalBufferOffset] = c;
+            m_internalWidths[m_internalBufferOffset] = width;
+            m_internalBufferOffset++;
+
+            if (c == '\n' || IsSpecialChar(c, m_termios.c_cc[VEOL]) || IsSpecialChar(c, m_termios.c_cc[VEOL2]) || m_internalBufferOffset == TTY_INTERNAL_BUFFER_SIZE)
+                flush = true;
+        }
 
         if (flush) {
             for (size_t i = 0; i < m_internalBufferOffset; i++)
                 m_readBuffer.push(m_internalBuffer[i]);
 
             memset(m_internalBuffer, 0, m_internalBufferOffset);
-
+            memset(m_internalWidths, 0, m_internalBufferOffset);
             m_internalBufferOffset = 0;
 
             m_inputWaitQueue.Trigger(POLLIN);
         }
     } else {
-        if (echo != 0)
-            InternalWrite(&echo, 1, true);
-
+        EchoChar(c);
         m_readBuffer.push(c);
         m_inputWaitQueue.Trigger(POLLIN);
     }
@@ -442,27 +424,68 @@ int TTY::InternalWrite(const char* buf, size_t size, bool flush) {
     return 0;
 }
 
-void ParseANSIParams(const char* escapeStr, int* params, int& paramCount) {
-    paramCount = 0;
-    int currentVal = 0;
-    bool hasVal = false;
+uint8_t TTY::EchoChar(char c) {
+    if ((m_termios.c_lflag & ECHO) == 0)
+        return 0;
 
-    for (int i = 1; escapeStr[i] != '\0'; i++) {
-        char c = escapeStr[i];
-        if (c >= '0' && c <= '9') {
-            currentVal = (currentVal * 10) + (c - '0');
-            hasVal = true;
-        } else if (c == ';') {
-            if (paramCount < ANSI_MAX_PARAMS)
-                params[paramCount++] = currentVal;
-            currentVal = 0;
-            hasVal = false;
-        } else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
-            if (hasVal && paramCount < ANSI_MAX_PARAMS)
-                params[paramCount++] = currentVal;
-            break;
-        }
+    unsigned char u = static_cast<unsigned char>(c);
+
+    if (c == '\n') {
+        if ((m_termios.c_oflag & ONLCR) > 0)
+            InternalWrite("\r\n", 2, true);
+        else
+            InternalWrite("\n", 1, true);
+        return 0;
     }
+
+    if (c == '\t') {
+        uint8_t n = 8 - (GetOutputColumn() % 8);
+        for (uint8_t i = 0; i < n; i++)
+            InternalWrite(" ", 1, i + 1 == n);
+        return n;
+    }
+
+    if (u < 32 || u == 0x7F) {
+        if (c == '\r' || c == '\b') {
+            InternalWrite(&c, 1, true);
+            return 0;
+        }
+
+        if ((m_termios.c_lflag & ECHOCTL) > 0) {
+            char t[2] = {'^', (u == 0x7F) ? '?' : static_cast<char>(u + 0x40)};
+            InternalWrite(t, 2, true);
+            return 2;
+        }
+
+        InternalWrite(&c, 1, true); // raw control byte, no visible width
+        return 0;
+    }
+
+    InternalWrite(&c, 1, true);
+    return 1;
+}
+
+bool TTY::EraseBufferedChar() {
+    if (m_internalBufferOffset == 0)
+        return false;
+
+    m_internalBufferOffset--;
+    uint8_t width = m_internalWidths[m_internalBufferOffset];
+    m_internalBuffer[m_internalBufferOffset] = '\0';
+    m_internalWidths[m_internalBufferOffset] = 0;
+
+    if ((m_termios.c_lflag & ECHO) > 0) {
+        for (uint8_t i = 0; i < width; i++)
+            InternalWrite("\b \b", 3, i + 1 == width);
+    }
+    return true;
+}
+
+uint64_t TTY::GetOutputColumn() {
+    uint64_t x = 0, y = 0;
+    if (m_outputBackend != nullptr)
+        m_outputBackend->GetCursor(x, y);
+    return x;
 }
 
 static Colour& GetANSI256Colour(uint8_t index) {
@@ -511,12 +534,22 @@ static Colour& GetANSI256Colour(uint8_t index) {
     return s_ansiColours[index];
 }
 
-GraphicalTTY::GraphicalTTY() : TTY(TTYType::Graphical), m_console(nullptr) {
+static inline int CSIParam(const int* params, int count, int index, int def) {
+    return (index < count && params[index] > 0) ? params[index] : def;
+}
 
+static inline uint8_t ClampColour(int v) {
+    return v < 0 ? 0 : (v > 255 ? 255 : static_cast<uint8_t>(v));
+}
+
+GraphicalTTY::GraphicalTTY() : TTY(TTYType::Graphical), m_console(nullptr) {
+    ResetEscapeState();
+    ResetAttributes();
 }
 
 GraphicalTTY::GraphicalTTY(FBConsole* console) : TTY(TTYType::Graphical), m_console(console) {
-
+    ResetEscapeState();
+    ResetAttributes();
 }
 
 GraphicalTTY::~GraphicalTTY() {
@@ -536,163 +569,7 @@ int GraphicalTTY::InternalWrite(const char* buf, size_t size, bool flush) {
         if (m_inputBackend != nullptr && m_inputBackend != m_outputBackend)
             m_inputBackend->WriteChar(c);
 
-        if (m_escapeState.inEscape) {
-            size_t len = 0;
-            while (len < ANSI_BUFFER_SIZE - 1 && m_escapeState.currentEscape[len] != '\0') {
-                len++;
-            }
-
-            if (len < ANSI_BUFFER_SIZE - 1) {
-                m_escapeState.currentEscape[len] = c;
-                m_escapeState.currentEscape[len + 1] = '\0';
-            }
-
-            if ((c >= 'a' && c <='z') || (c >= 'A' && c <= 'Z')) {
-                if (m_escapeState.currentEscape[0] == '[') {
-                    int params[ANSI_MAX_PARAMS] = {0};
-                    int paramCount = 0;
-                    ParseANSIParams(m_escapeState.currentEscape, params, paramCount);
-
-                    switch (c) {
-                    case 'm': {
-                        for (int p = 0; p < paramCount || (p == 0 && paramCount == 0); p++) {
-                            int cmd = paramCount == 0 ? 0 : params[p];
-                            
-                            switch (cmd) {
-                            case 0:
-                                m_console->SetBackgroundColour(GetANSI256Colour(0));
-                                m_console->SetForegroundColour(GetANSI256Colour(7));
-                                break;
-                            case 30: m_console->SetForegroundColour(GetANSI256Colour(0)); break;
-                            case 31: m_console->SetForegroundColour(GetANSI256Colour(1)); break;
-                            case 32: m_console->SetForegroundColour(GetANSI256Colour(2)); break;
-                            case 33: m_console->SetForegroundColour(GetANSI256Colour(3)); break;
-                            case 34: m_console->SetForegroundColour(GetANSI256Colour(4)); break;
-                            case 35: m_console->SetForegroundColour(GetANSI256Colour(5)); break;
-                            case 36: m_console->SetForegroundColour(GetANSI256Colour(6)); break;
-                            case 37: m_console->SetForegroundColour(GetANSI256Colour(7)); break;
-                            
-                            case 38: // Extended Foreground
-                            case 48: { // Extended Background
-                                bool isForeground = (cmd == 38);
-                                if (p + 2 < paramCount && params[p + 1] == 5) {
-                                    if (isForeground) m_console->SetForegroundColour(GetANSI256Colour(params[p + 2]));
-                                    else m_console->SetBackgroundColour(GetANSI256Colour(params[p + 2]));
-                                    p += 2;
-                                } else if (p + 4 < paramCount && params[p + 1] == 2) {
-                                    // True Color objects are constructed dynamically
-                                    Colour trueColour(params[p + 2], params[p + 3], params[p + 4]);
-                                    if (isForeground) m_console->SetForegroundColour(trueColour);
-                                    else m_console->SetBackgroundColour(trueColour);
-                                    p += 4;
-                                }
-                                break;
-                            }
-                            
-                            case 39: m_console->SetForegroundColour(GetANSI256Colour(15)); break;
-                            case 40: m_console->SetBackgroundColour(GetANSI256Colour(0)); break;
-                            case 41: m_console->SetBackgroundColour(GetANSI256Colour(1)); break;
-                            case 42: m_console->SetBackgroundColour(GetANSI256Colour(2)); break;
-                            case 43: m_console->SetBackgroundColour(GetANSI256Colour(3)); break;
-                            case 44: m_console->SetBackgroundColour(GetANSI256Colour(4)); break;
-                            case 45: m_console->SetBackgroundColour(GetANSI256Colour(5)); break;
-                            case 46: m_console->SetBackgroundColour(GetANSI256Colour(6)); break;
-                            case 47: m_console->SetBackgroundColour(GetANSI256Colour(7)); break;
-                            case 49: m_console->SetBackgroundColour(GetANSI256Colour(0)); break;
-                            }
-                        }
-                        break;
-                    }
-                    case 'J': { // Erase Display
-                        if (paramCount > 0 && params[0] == 2) {
-                            m_console->ClearScreen();
-                            m_console->SetCursor(0, 0);
-                        }
-                        break;
-                    }
-                    case 'H': // Cursor position (Row;Column)
-                    case 'f': {
-                        // ANSI rows/cols are 1-indexed. Default to 0 if omitted.
-                        uint64_t row = (paramCount > 0 && params[0] > 0) ? params[0] - 1 : 0;
-                        uint64_t col = (paramCount > 1 && params[1] > 0) ? params[1] - 1 : 0;
-
-                        // Bound to maximum rows/cols
-                        uint64_t maxRow = m_console->GetNumberOfRows() > 0 ? m_console->GetNumberOfRows() - 1 : 0;
-                        uint64_t maxCol = m_console->GetNumberOfColumns() > 0 ? m_console->GetNumberOfColumns() - 1 : 0;
-
-                        row = (row > maxRow) ? maxRow : row;
-                        col = (col > maxCol) ? maxCol : col;
-
-                        m_console->SetCursor(col * CHAR_WIDTH, row * CHAR_HEIGHT);
-                        break;
-                    }
-                    case 'A': { // Cursor Up
-                        uint64_t x, y;
-                        m_console->GetCursor(x, y);
-                        uint64_t moveBy = ((paramCount > 0 && params[0] > 0) ? params[0] : 1) * CHAR_HEIGHT;
-                        m_console->SetCursor(x, (y > moveBy) ? y - moveBy : 0);
-                        break;
-                    }
-                    case 'B': { // Cursor Down
-                        uint64_t x, y;
-                        m_console->GetCursor(x, y);
-                        uint64_t moveBy = ((paramCount > 0 && params[0] > 0) ? params[0] : 1) * CHAR_HEIGHT;
-                        uint64_t maxY = (m_console->GetNumberOfRows() - 1) * CHAR_HEIGHT;
-                        m_console->SetCursor(x, (y + moveBy < maxY) ? y + moveBy : maxY);
-                        break;
-                    }
-                    case 'C': { // Cursor Forward (Right)
-                        uint64_t x, y;
-                        m_console->GetCursor(x, y);
-                        uint64_t moveBy = ((paramCount > 0 && params[0] > 0) ? params[0] : 1) * CHAR_WIDTH;
-                        uint64_t maxX = (m_console->GetNumberOfColumns() - 1) * CHAR_WIDTH;
-                        m_console->SetCursor((x + moveBy < maxX) ? x + moveBy : maxX, y);
-                        break;
-                    }
-                    case 'D': { // Cursor Back (Left)
-                        uint64_t x, y;
-                        m_console->GetCursor(x, y);
-                        uint64_t moveBy = ((paramCount > 0 && params[0] > 0) ? params[0] : 1) * CHAR_WIDTH;
-                        m_console->SetCursor((x > moveBy) ? x - moveBy : 0, y);
-                        break;
-                    }
-                    }
-                }
-                m_escapeState.inEscape = false;
-                m_escapeState.currentEscape[0] = '0';
-            }
-        } else {
-            switch (c) {
-            case '\x1b':
-                m_escapeState.inEscape = true;
-                m_escapeState.currentEscape[0] = '\0';
-                break;
-            case '\n':
-            case '\v':
-                m_console->NewLine();
-                break;
-            case '\b':
-                m_console->Backspace();
-                break;
-            case '\r': {
-                uint64_t x, y;
-                m_console->GetCursor(x, y);
-                m_console->SetCursor(0, y);
-                break;
-            }
-            case '\t':
-                for (int j = 0; j < 4; j++)
-                    m_console->PrintChar(' ');
-                break;
-            case '\f':
-                m_console->ClearScreen();
-                m_console->SetCursor(0, 0);
-                break;
-            default:
-                m_console->PrintChar(c);
-                break;
-            }
-        }
+        ProcessChar(c);
     }
 
     if (flush && m_outputBackend != nullptr)
@@ -711,10 +588,12 @@ uint64_t GraphicalTTY::GetCurrentSeek() const {
         return UINT64_MAX;
     uint64_t x, y;
     m_console->GetCursor(x, y);
-    return m_console->GetNumberOfColumns() * y + x;
+    return (y / CHAR_HEIGHT) * m_console->GetNumberOfColumns() + (x / CHAR_WIDTH);
 }
 
 int GraphicalTTY::SetSize(const winsize_t* size) {
+    if (m_console == nullptr)
+        return -ENODEV;
     // Say it was successful if the requested dimensions are <= to the current, but don't actually set them.
     if (size->ws_col > m_console->GetNumberOfColumns() || size->ws_row > m_console->GetNumberOfRows())
         return -EINVAL;
@@ -724,6 +603,8 @@ int GraphicalTTY::SetSize(const winsize_t* size) {
 }
 
 int GraphicalTTY::GetSize(winsize_t* size) {
+    if (m_console == nullptr)
+        return -ENODEV;
     size->ws_col = m_console->GetNumberOfColumns();
     size->ws_row = m_console->GetNumberOfRows();
     size->ws_xpixel = m_console->GetWidth();
@@ -737,4 +618,270 @@ void GraphicalTTY::SetConsole(FBConsole* console) {
 
 FBConsole* GraphicalTTY::GetConsole() {
     return m_console;
+}
+
+void GraphicalTTY::ResetEscapeState() {
+    m_escapeState.state = EscState::Ground;
+    for (int i = 0; i < ANSI_MAX_PARAMS; i++)
+        m_escapeState.params[i] = 0;
+    m_escapeState.paramCount = 0;
+    m_escapeState.current = 0;
+    m_escapeState.hasCurrent = 0;
+    m_escapeState.ignore = 0;
+    m_escapeState.privateMarker = 0;
+}
+
+void GraphicalTTY::ResetAttributes() {
+    m_attr.fg = ANSI_COLOR_DEFAULT_FG;
+    m_attr.bg = ANSI_COLOR_DEFAULT_BG;
+    m_attr.fgBase = -1;
+    m_attr.bold = false;
+    m_attr.reverse = false;
+}
+
+void GraphicalTTY::ApplyAttributes() {
+    if (m_console == nullptr)
+        return;
+
+    Colour fg = m_attr.fg;
+    if (m_attr.bold && m_attr.fgBase >= 0)
+        fg = GetANSI256Colour(m_attr.fgBase + 8);
+    Colour bg = m_attr.bg;
+
+    if (m_attr.reverse) {
+        Colour tmp = fg;
+        fg = bg;
+        bg = tmp;
+    }
+
+    m_console->SetForegroundColour(fg);
+    m_console->SetBackgroundColour(bg);
+}
+
+void GraphicalTTY::ProcessChar(char c) {
+    EscapeState& es = m_escapeState;
+
+    if (es.state != EscState::Ground && (c == 0x18 || c == 0x1A)) {
+        es.state = EscState::Ground;
+        return;
+    }
+
+    switch (es.state) {
+    case EscState::Ground:
+        switch (c) {
+        case '\x1b':
+            es.state = EscState::Escape;
+            break;
+        case '\n':
+        case '\v':
+            m_console->NewLine();
+            break;
+        case '\f':
+            m_console->ClearScreen();
+            m_console->SetCursor(0, 0);
+            break;
+        default:
+            m_console->PrintChar(c);
+            break;
+        }
+        break;
+
+    case EscState::Escape:
+        switch (c) {
+        case '[':
+            ResetEscapeState();
+            es.state = EscState::CSI;
+            break;
+        case ']':
+            es.current = 0;
+            es.state = EscState::OSC;
+            break;
+        case '(':
+        case ')':
+        case '*':
+        case '+':
+        case '#':
+        case '%':
+            es.state = EscState::Charset;
+            break;
+        case '7':
+            m_console->GetCursor(m_savedX, m_savedY);
+            es.state = EscState::Ground;
+            break;
+        case '8':
+            m_console->SetCursor(m_savedX, m_savedY);
+            es.state = EscState::Ground;
+            break;
+        case 'c': // full reset
+            ResetAttributes();
+            ApplyAttributes();
+            m_console->EraseInDisplay(2);
+            m_console->SetCursor(0, 0);
+            es.state = EscState::Ground;
+            break;
+        case '\x1b': // double escape, maintain current state
+            break;
+        default:
+            es.state = EscState::Ground;
+            break;
+        }
+        break;
+
+    case EscState::CSI:
+        if (c >= '0' && c <= '9') {
+            if (es.current < 100000)
+                es.current = es.current * 10 + (c - '0');
+            es.hasCurrent = true;
+        } else if (c == ';')
+            PushParam();
+        else if (c >= '<' && c <= '?') {
+            if (es.paramCount == 0 && !es.hasCurrent && es.privateMarker == 0)
+                es.privateMarker = c;
+            else
+                es.ignore = true;
+        } else if (c == ':' || (c >= 0x20 && c <= 0x2F))
+            es.ignore = true;
+        else if (c >= 0x40 && c <= 0x7E) {
+            if (es.hasCurrent || es.paramCount > 0)
+                PushParam();
+            if (!es.ignore)
+                ExecuteCSI(c);
+            es.state = EscState::Ground;
+        } else if (c == '\x1b')
+            es.state = EscState::Escape;
+        break;
+
+    case EscState::OSC:
+        if (c == '\a')
+            es.state = EscState::Ground;
+        else if (c == '\x1b')
+            es.state = EscState::OSCEscape;
+        else if (++es.current > 256)
+            es.state = EscState::Ground;
+        break;
+
+    case EscState::OSCEscape:
+        es.state = EscState::Ground;
+        if (c != '\\') {
+            es.state = EscState::Escape;
+            ProcessChar(c);
+        }
+        break;
+
+    case EscState::Charset:
+        es.state = EscState::Ground;
+        break;
+    }
+}
+
+void GraphicalTTY::PushParam() {
+    EscapeState& es = m_escapeState;
+    if (es.paramCount < ANSI_MAX_PARAMS)
+        es.params[es.paramCount++] = es.current;
+    es.current = 0;
+    es.hasCurrent = false;
+}
+
+void GraphicalTTY::ExecuteCSI(char final) {
+    if (m_escapeState.privateMarker != 0)
+        return; // unsupported, just ignore
+
+    const int* params = m_escapeState.params;
+    int count = m_escapeState.paramCount;
+
+    uint64_t rows = m_console->GetNumberOfRows();
+    uint64_t cols = m_console->GetNumberOfColumns();
+    if (rows == 0 || cols == 0)
+        return;
+
+    uint64_t x, y;
+    m_console->GetCursor(x, y);
+    uint64_t col = MIN(x / CHAR_WIDTH, cols - 1);
+    uint64_t row = MIN(y / CHAR_WIDTH, rows - 1);
+    uint64_t n = CSIParam(params, count, 0, 1);
+    int mode = (count > 0) ? params[0] : 0;
+    bool move = true;
+
+    switch (final) {
+    case 'A': row = (n > row) ? 0 : row - n; break;
+    case 'B':
+    case 'e': row = MIN(row + n, rows - 1); break;
+    case 'C':
+    case 'a': col = MIN(col + n, cols - 1); break;
+    case 'D': col = (n > col) ? 0 : col - n; break;
+    case 'E': row = MIN(row + n, rows - 1); col = 0; break;
+    case 'F': row = (n > row) ? 0 : row - n; col = 0; break;
+    case 'G':
+    case '`': col = MIN(n - 1, cols - 1); break;
+    case 'd': row = MIN(n - 1, rows - 1); break;
+    case 'H':
+    case 'f':
+        row = MIN(n - 1, rows - 1);
+        col = MIN(static_cast<uint64_t>(CSIParam(params, count, 1, 1)) - 1, cols -1);
+        break;
+    case 's': m_console->GetCursor(m_savedX, m_savedY); move = false; break;
+    case 'u': m_console->SetCursor(m_savedX, m_savedY); move = false; break;
+    case 'J': m_console->EraseInDisplay(mode); move = false; break;
+    case 'K': m_console->EraseInLine(mode); move = false; break;
+    case 'm': HandleSGR(); move = false; break;
+    default: move = false; break;
+    }
+
+    if (move)
+        m_console->SetCursor(col * CHAR_WIDTH, row * CHAR_HEIGHT);
+}
+
+void GraphicalTTY::HandleSGR() {
+    const int* params = m_escapeState.params;
+    int count = m_escapeState.paramCount;
+
+    for (int i = 0; i < count || i == 0; i++) { // no params == SGR 0
+        int cmd = (count == 0) ? 0 : params[i];
+
+        switch (cmd) {
+        case 0: ResetAttributes(); break;
+        case 1: m_attr.bold = true; break;
+        case 22: m_attr.bold = false; break;
+        case 7: m_attr.reverse = true; break;
+        case 27: m_attr.reverse = false; break;
+        case 39: m_attr.fg = ANSI_COLOR_DEFAULT_FG; m_attr.fgBase = -1; break;
+        case 49: m_attr.bg = ANSI_COLOR_DEFAULT_BG; break;
+
+        case 38:
+        case 48: {
+            Colour colour;
+            if (i + 2 < count && params[i + 1] == 5) {
+                colour = GetANSI256Colour(ClampColour(params[i + 2]));
+                i += 2;
+            } else if (i + 4 < count && params[i + 1] == 2) {
+                colour = Colour(ClampColour(params[i + 2]), ClampColour(params[i + 3]), ClampColour(params[i + 4]));
+                i += 4;
+            } else {
+                i = count; // malformed, drop the rest
+                break;
+            }
+            if (cmd == 38) {
+                m_attr.fg = colour;
+                m_attr.fgBase = -1;
+            } else
+                m_attr.bg = colour;
+            break;
+        }
+
+        default:
+            if (cmd >= 30 && cmd <= 37) {
+                m_attr.fg = GetANSI256Colour(cmd - 30);
+                m_attr.fgBase = cmd - 30;
+            } else if (cmd >= 40 && cmd <= 47)
+                m_attr.bg = GetANSI256Colour(cmd - 40);
+            else if (cmd >= 90 && cmd <= 97) {
+                m_attr.fg = GetANSI256Colour(cmd - 90 + 8);
+                m_attr.fgBase = -1;
+            } else if (cmd >= 100 && cmd <= 107)
+                m_attr.bg = GetANSI256Colour(cmd - 100 + 8);
+            // underline, italic, blink, etc. are ignored
+            break;
+        }
+    }
+    ApplyAttributes();
 }
