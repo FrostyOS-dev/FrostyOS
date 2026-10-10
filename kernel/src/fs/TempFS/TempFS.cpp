@@ -16,19 +16,21 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "TempFS.hpp"
-#include "Scheduling/Process.hpp"
 #include "TempFSPager.hpp"
 
 #include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 #include <util.h>
 
 #include <DataStructures/AVLTree.hpp>
 
 #include <Memory/PageMapper.hpp>
 #include <Memory/VMM.hpp>
+
+#include <HAL/Time.hpp>
 
 #include "../VFS.hpp"
 
@@ -48,7 +50,8 @@ namespace FS {
     }
 
     int TempFS::Mount(VNode* nodeCovered, int flags, void* backing, const Credential& cred) {
-        VAttr attr = {VType::DIR, ROOT_DIR_MODE, cred.euid, cred.egid, FSType::TempFS, -1, 0, 0, PAGE_SIZE, {0, 0}, {0, 0}, {0, 0}, 0};
+        time_t time = HAL_GetUnixEpochTime();
+        VAttr attr = {VType::DIR, ROOT_DIR_MODE, cred.euid, cred.egid, FSType::TempFS, -1, 0, 0, PAGE_SIZE, {time, 0}, {time, 0}, {time, 0}, 0};
 
         TempFSVNode* root = new TempFSVNode(this);
         int rc = root->Create(nullptr, nullptr, 0, &attr, cred);

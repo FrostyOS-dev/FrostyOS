@@ -28,6 +28,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <HAL/drivers/Device.hpp>
 #include <HAL/drivers/DeviceManager.hpp>
 
+#include <HAL/Time.hpp>
+
 #include "../VFS.hpp"
 
 #define ROOT_DIR_MODE 0755
@@ -44,7 +46,8 @@ namespace FS {
     }
 
     int DevTempFS::Mount(VNode* nodeCovered, int flags, void* backing, const Credential& cred) {
-        VAttr attr = {VType::DIR, ROOT_DIR_MODE, cred.euid, cred.egid, FSType::DevTempFS, -1, 0, 0, PAGE_SIZE, {0, 0}, {0, 0}, {0, 0}, 0};
+        time_t time = HAL_GetUnixEpochTime();
+        VAttr attr = {VType::DIR, ROOT_DIR_MODE, cred.euid, cred.egid, FSType::DevTempFS, -1, 0, 0, PAGE_SIZE, {time, 0}, {time, 0}, {time, 0}, 0};
 
         DevTempFSVNode* root = new DevTempFSVNode(this, nullptr);
         int rc = root->Create(nullptr, nullptr, 0, &attr, cred);

@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "VFS.hpp"
 
 #include "DevTempFS/DevTempFS.hpp"
+#include "HAL/Time.hpp"
 #include "TempFS/TempFS.hpp"
 
 #include <cstddef>
@@ -378,7 +379,8 @@ namespace FS {
             return -ENAMETOOLONG;
         }
 
-        VAttr attr = {VType::DIR, DEFAULT_DIR_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0};
+        time_t time = HAL_GetUnixEpochTime();
+        VAttr attr = {VType::DIR, DEFAULT_DIR_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
         if (rc < 0) {
             if (createdVNode)
@@ -425,7 +427,8 @@ namespace FS {
             return -ENAMETOOLONG;
         }
         
-        VAttr attr = {VType::REG, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0};
+        time_t time = HAL_GetUnixEpochTime();
+        VAttr attr = {VType::REG, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
         if (rc < 0) {
             if (createdVNode)
@@ -509,7 +512,8 @@ namespace FS {
             return -ENAMETOOLONG;
         }
         
-        VAttr attr = {VType::LNK, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0};
+        time_t time = HAL_GetUnixEpochTime();
+        VAttr attr = {VType::LNK, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
         if (rc < 0) {
             if (createdVNode)
