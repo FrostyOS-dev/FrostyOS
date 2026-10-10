@@ -124,4 +124,6 @@ int sys_ioctl(int fd, size_t op, void* arg, int* result);
 
 int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags);
 
+int sys_mkdirat(int dirFD, const char* path, size_t pathLen, mode_t mode);
+
 #endif /* _SYSCALL_FILE_HPP */

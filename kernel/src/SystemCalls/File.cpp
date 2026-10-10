@@ -600,3 +600,78 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
 
     return ESUCCESS;
 }
+
+int sys_mkdirat(int dirFD, const char* path, size_t pathLen, mode_t mode) {
+    if (path == nullptr || pathLen == 0)
+        return path == nullptr ? -EFAULT : -EINVAL;
+
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+    FileDescriptorManager* manager = proc->GetFDManager();
+    if (manager == nullptr)
+        return -ENOSYS;
+
+    const Credential& cred = proc->GetCred();
+
+    char* kPath = new char[pathLen];
+    if (kPath == nullptr)
+        return -ENOMEM;
+
+    if (!UserRead(path, kPath, pathLen, proc)) {
+        delete[] kPath;
+        return -EFAULT;
+    }
+
+    FS::VNode* dirVNode = nullptr;
+    if (dirFD == AT_FDCWD)
+        dirVNode = proc->GetCWD();
+    else {
+        FileDescriptor* desc = manager->Get(dirFD);
+        if (desc == nullptr || !desc->isOpen() || desc->GetType() != FDType::Directory) {
+            delete[] kPath;
+            return -EBADF;
+        }
+
+        dirVNode = desc->GetVNode();
+    }
+
+    if (dirVNode == nullptr) {
+        delete[] kPath;
+        return -EINVAL;
+    }
+
+    char* parent = kPath;
+    char* name = strrchr(kPath, '/');
+    if (name == nullptr) {
+        name = kPath;
+        parent = (char*)"";
+    } else {
+        name[0] = 0;
+        name++;
+    }
+
+    FS::VNode* vnode = nullptr;
+    int rc = FS::VFS_CreateDir(parent, name, dirVNode, cred, nullptr, &vnode);
+
+    delete[] kPath;
+
+    if (rc < 0)
+        return rc;
+
+    assert(vnode != nullptr);
+
+    FS::VAttr attr{};
+    vnode->Lock();
+    rc = vnode->GetAttr(&attr);
+    if (rc < 0) {
+        vnode->Unlock();
+        return rc;
+    }
+
+    attr.mode = mode;
+
+    rc = vnode->SetAttr(attr);
+    vnode->Unlock();
+
+    return rc;
+}
