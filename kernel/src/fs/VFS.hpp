@@ -188,7 +188,7 @@ namespace FS {
     int VFS_Open(const char* path, VNode** out, VNode* cwd, Credential cred);
     int VFS_Close(VNode* vnode, Credential cred);
 
-    int VFS_CreateSymlink(const char* path, const char* name, const char* dest, VNode* cwd, Credential cred);
+    int VFS_CreateSymlink(const char* path, const char* name, const char* dest, VNode* cwd, Credential cred, VNode* vnode = nullptr, VNode** outVNode = nullptr);
 
     // Map a vnode into memory. Flags are assumed to be pre-validated.
     int VFS_MapFile(void* hint, size_t length, VMM::Protection prot, int flags, bool user, VNode* vnode, uint64_t offset, void** addr, VMM::VMM* vmm, const Credential& cred);

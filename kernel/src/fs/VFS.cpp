@@ -355,6 +355,8 @@ namespace FS {
         if (rc < 0)
             return rc;
 
+        bool createdVNode = false;
+
         if (vnode == nullptr) {
             switch (vfs->GetType()) {
             case FSType::TempFS:
@@ -366,18 +368,21 @@ namespace FS {
             default:
                 return -ENOSYS;
             }
+            createdVNode = true;
         }
 
         size_t nameLen = strlen(name);
         if (nameLen > NAME_MAX) {
-            delete vnode;
+            if (createdVNode)
+                delete vnode;
             return -ENAMETOOLONG;
         }
 
         VAttr attr = {VType::DIR, DEFAULT_DIR_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0};
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
         if (rc < 0) {
-            delete vnode;
+            if (createdVNode)
+                delete vnode;
             return rc;
         }
 
@@ -397,6 +402,8 @@ namespace FS {
         if (rc < 0)
             return rc;
 
+        bool createdVNode = false;
+
         if (vnode == nullptr) {
             switch (vfs->GetType()) {
             case FSType::TempFS:
@@ -408,18 +415,21 @@ namespace FS {
             default:
                 return -ENOSYS;
             }
+            createdVNode = true;
         }
 
         size_t nameLen = strlen(name);
         if (nameLen > NAME_MAX) {
-            delete vnode;
+            if (createdVNode)
+                delete vnode;
             return -ENAMETOOLONG;
         }
         
         VAttr attr = {VType::REG, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0};
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
         if (rc < 0) {
-            delete vnode;
+            if (createdVNode)
+                delete vnode;
             return rc;
         }
 
@@ -463,7 +473,7 @@ namespace FS {
         return rc;
     }
 
-    int VFS_CreateSymlink(const char* path, const char* name, const char* dest, VNode* cwd, Credential cred) {
+    int VFS_CreateSymlink(const char* path, const char* name, const char* dest, VNode* cwd, Credential cred, VNode* vnode, VNode** outVNode) {
         if (path == nullptr || name == nullptr)
             return -EINVAL;
 
@@ -473,33 +483,49 @@ namespace FS {
         if (rc < 0)
             return rc;
 
-        VNode* vnode = nullptr;
-        switch (vfs->GetType()) {
-        case FSType::TempFS:
-            vnode = new TempFSVNode(vfs);
-            break;
-        default:
-            return -ENOSYS;
+        bool createdVNode = false;
+
+        if (vnode == nullptr) {
+            switch (vfs->GetType()) {
+            case FSType::TempFS:
+                vnode = new TempFSVNode(vfs);
+                break;
+            case FSType::DevTempFS:
+                vnode = new DevTempFSVNode(vfs, nullptr);
+                break;
+            default:
+                return -ENOSYS;
+            }
+            createdVNode = true;
         }
+
+        if (vnode == nullptr)
+            return -ENOMEM;
 
         size_t nameLen = strlen(name);
         if (nameLen > NAME_MAX) {
-            delete vnode;
+            if (createdVNode)
+                delete vnode;
             return -ENAMETOOLONG;
         }
         
         VAttr attr = {VType::LNK, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0};
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
         if (rc < 0) {
-            delete vnode;
+            if (createdVNode)
+                delete vnode;
             return rc;
         }
 
         rc = vnode->Symlink(dest, strlen(dest), cred);
         if (rc < 0) {
-            delete vnode; // TODO: maybe more cleanup is required??
+            if (createdVNode)
+                delete vnode; // TODO: maybe more cleanup is required??
             return rc;
         }
+
+        if (outVNode != nullptr)
+            *outVNode = vnode;
 
         return ESUCCESS;
     }
