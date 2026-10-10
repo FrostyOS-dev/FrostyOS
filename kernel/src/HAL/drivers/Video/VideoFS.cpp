@@ -39,23 +39,23 @@ namespace Video {
 
     }
 
-    int DisplayVNode::Open(int flags, Credential cred) {
+    int DisplayVNode::Open(int flags, const Credential& cred) {
         DISPLAY_OP(Open, flags);
     }
 
-    int DisplayVNode::Close(int flags, Credential cred) {
+    int DisplayVNode::Close(int flags, const Credential& cred) {
         DISPLAY_OP(Close, flags);
     }
 
-    int DisplayVNode::Read(void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, Credential cred) {
+    int DisplayVNode::Read(void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, const Credential& cred) {
         DISPLAY_OP(Read, out, size, flags, offset, bytesRead);
     }
 
-    int DisplayVNode::Write(const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, Credential cred) {
+    int DisplayVNode::Write(const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, const Credential& cred) {
         DISPLAY_OP(Write, in, size, flags, offset, bytesWritten);
     }
 
-    int DisplayVNode::Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, Credential cred) {
+    int DisplayVNode::Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, const Credential& cred) {
         DISPLAY_OP(Mmap, offset, size, obj);
     }
 
@@ -63,7 +63,7 @@ namespace Video {
         DISPLAY_OP(Munmap);
     }
 
-    int DisplayVNode::Ioctl(size_t op, void* arg, int* result, Process* proc, Credential cred) {
+    int DisplayVNode::Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) {
         DISPLAY_OP(Ioctl, op, arg, result, proc);
     }
 

@@ -128,7 +128,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int VFS_MountRoot(FSType type, int flags, void* backing, Credential cred) {
+    int VFS_MountRoot(FSType type, int flags, void* backing, const Credential& cred) {
         VFS* root = nullptr;
         switch (type) {
         case FSType::TempFS: {
@@ -150,7 +150,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int VFS_Mount(FSType type, const char* path, int flags, void* backing, VNode* cwd, Credential cred) {
+    int VFS_Mount(FSType type, const char* path, int flags, void* backing, VNode* cwd, const Credential& cred) {
         if (path == nullptr)
             return -EINVAL;
 
@@ -207,7 +207,7 @@ namespace FS {
         return 0;
     }
 
-    int VFS_LookupPath(const char* path, VNode** vnode, VFS** vfs, VNode* cwd, Credential cred, bool followSymlink) {
+    int VFS_LookupPath(const char* path, VNode** vnode, VFS** vfs, VNode* cwd, const Credential& cred, bool followSymlink) {
         if (path == nullptr || vnode == nullptr || vfs == nullptr)
             return -EINVAL;
 
@@ -345,7 +345,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int VFS_CreateDir(const char* path, const char* name, VNode* cwd, Credential cred, VNode* vnode, VNode** outVNode) {
+    int VFS_CreateDir(const char* path, const char* name, VNode* cwd, const Credential& cred, VNode* vnode, VNode** outVNode) {
         if (path == nullptr || name == nullptr)
             return -EINVAL;
 
@@ -392,7 +392,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int VFS_CreateFile(const char* path, const char* name, VNode* cwd, Credential cred, VNode* vnode, VNode** outVNode) {
+    int VFS_CreateFile(const char* path, const char* name, VNode* cwd, const Credential& cred, VNode* vnode, VNode** outVNode) {
         if (path == nullptr || name == nullptr)
             return -EINVAL;
 
@@ -439,7 +439,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int VFS_Open(const char* path, VNode** out, VNode* cwd, Credential cred) {
+    int VFS_Open(const char* path, VNode** out, VNode* cwd, const Credential& cred) {
         if (path == nullptr || out == nullptr)
             return -EINVAL;
 
@@ -461,7 +461,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int VFS_Close(VNode* vnode, Credential cred) {
+    int VFS_Close(VNode* vnode, const Credential& cred) {
         if (vnode == nullptr)
             return -EINVAL;
 
@@ -473,7 +473,7 @@ namespace FS {
         return rc;
     }
 
-    int VFS_CreateSymlink(const char* path, const char* name, const char* dest, VNode* cwd, Credential cred, VNode* vnode, VNode** outVNode) {
+    int VFS_CreateSymlink(const char* path, const char* name, const char* dest, VNode* cwd, const Credential& cred, VNode* vnode, VNode** outVNode) {
         if (path == nullptr || name == nullptr)
             return -EINVAL;
 
@@ -556,7 +556,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int VFS_BuildPath(VNode* vnode, char* buf, size_t size, Credential cred) {
+    int VFS_BuildPath(VNode* vnode, char* buf, size_t size, const Credential& cred) {
         if (vnode == nullptr || buf == nullptr || size == 0)
             return -EINVAL;
 

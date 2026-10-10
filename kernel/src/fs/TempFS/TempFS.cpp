@@ -47,7 +47,7 @@ namespace FS {
 
     }
 
-    int TempFS::Mount(VNode* nodeCovered, int flags, void* backing, Credential cred) {
+    int TempFS::Mount(VNode* nodeCovered, int flags, void* backing, const Credential& cred) {
         VAttr attr = {VType::DIR, ROOT_DIR_MODE, cred.euid, cred.egid, FSType::TempFS, -1, 0, 0, PAGE_SIZE, {0, 0}, {0, 0}, {0, 0}, 0};
 
         TempFSVNode* root = new TempFSVNode(this);
@@ -96,15 +96,15 @@ namespace FS {
 
     }
 
-    int TempFSVNode::Open(int flags, Credential cred) {
+    int TempFSVNode::Open(int flags, const Credential& cred) {
         return ESUCCESS;
     }
 
-    int TempFSVNode::Close(int flags, Credential cred) {
+    int TempFSVNode::Close(int flags, const Credential& cred) {
         return ESUCCESS;
     }
 
-    int TempFSVNode::Read(void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, Credential cred) {
+    int TempFSVNode::Read(void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, const Credential& cred) {
         if (offset >= m_attr.size) {
             *bytesRead = 0;
             return ESUCCESS;
@@ -169,7 +169,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int TempFSVNode::Write(const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, Credential cred) {
+    int TempFSVNode::Write(const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, const Credential& cred) {
         size_t written = 0;
         while (written < size) {
             uint64_t blockNum = (offset + written) >> PAGE_SIZE_SHIFT;
@@ -238,7 +238,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int TempFSVNode::Lookup(const char* name, size_t nameLen, VNode** out, Credential cred) {
+    int TempFSVNode::Lookup(const char* name, size_t nameLen, VNode** out, const Credential& cred) {
         if (name == nullptr || nameLen == 0)
             return -EINVAL;
 
@@ -271,7 +271,7 @@ namespace FS {
         return -ENOENT;
     }
 
-    int TempFSVNode::Create(VNode* parent, const char* name, size_t nameLen, VAttr* attr, Credential cred) {
+    int TempFSVNode::Create(VNode* parent, const char* name, size_t nameLen, VAttr* attr, const Credential& cred) {
         if ((parent != nullptr && (name == nullptr || nameLen == 0)) || attr == nullptr)
             return -EINVAL;
 
@@ -369,7 +369,7 @@ namespace FS {
         return -ENOSYS;
     }
 
-    int TempFSVNode::Symlink(const char* path, size_t pathLen, Credential cred) {
+    int TempFSVNode::Symlink(const char* path, size_t pathLen, const Credential& cred) {
         m_linkDest = new char[pathLen + 1];
         strncpy(m_linkDest, path, pathLen);
         m_linkDest[pathLen] = '\0';
@@ -377,7 +377,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int TempFSVNode::ReadLink(char* buffer, size_t size, Credential cred) {
+    int TempFSVNode::ReadLink(char* buffer, size_t size, const Credential& cred) {
         if (size <= m_linkLen)
             return -ENAMETOOLONG;
         strncpy(buffer, m_linkDest, m_linkLen);
@@ -385,7 +385,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int TempFSVNode::Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, Credential cred) {
+    int TempFSVNode::Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, const Credential& cred) {
         if (offset + size > m_attr.blocks || obj == nullptr || size == 0 || (offset & (PAGE_SIZE - 1)) > 0 || (size & (PAGE_SIZE - 1)) > 0)
             return -EINVAL;
 
@@ -424,7 +424,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int TempFSVNode::Ioctl(size_t op, void* arg, int* result, Process* proc, Credential cred) {
+    int TempFSVNode::Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) {
         return ENOSYS;
     }
 

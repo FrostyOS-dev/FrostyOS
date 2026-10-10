@@ -33,13 +33,13 @@ namespace Video {
         DisplayVNode(FS::VFS* vfs, Display* display);
         virtual ~DisplayVNode();
 
-        virtual int Open(int flags, Credential cred) override;
-        virtual int Close(int flags, Credential cred) override;
-        virtual int Read(void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, Credential cred) override;
-        virtual int Write(const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, Credential cred) override;
-        virtual int Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, Credential cred) override;
+        virtual int Open(int flags, const Credential& cred) override;
+        virtual int Close(int flags, const Credential& cred) override;
+        virtual int Read(void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, const Credential& cred) override;
+        virtual int Write(const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, const Credential& cred) override;
+        virtual int Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, const Credential& cred) override;
         virtual int Munmap() override;
-        virtual int Ioctl(size_t op, void* arg, int* result, Process* proc, Credential cred) override;
+        virtual int Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) override;
 
     private:
         Display* m_display;

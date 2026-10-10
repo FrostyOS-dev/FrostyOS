@@ -103,7 +103,7 @@ namespace FS {
         VFS();
         virtual ~VFS();
 
-        virtual int Mount(VNode* nodeCovered, int flags, void* backing, Credential cred) = 0;
+        virtual int Mount(VNode* nodeCovered, int flags, void* backing, const Credential& cred) = 0;
         virtual int Unmount() = 0;
         virtual int StatFS() = 0;
         virtual int Sync() = 0;
@@ -131,26 +131,26 @@ namespace FS {
         VNode(VFS* vfs);
         virtual ~VNode();
 
-        virtual int Open(int flags, Credential cred) = 0;
-        virtual int Close(int flags, Credential cred) = 0;
-        virtual int Read(void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, Credential cred) = 0;
-        virtual int Write(const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, Credential cred) = 0;
-        virtual int Lookup(const char* name, size_t nameLen, VNode** out, Credential cred) = 0;
-        virtual int Create(VNode* parent, const char* name, size_t nameLen, VAttr* attr, Credential cred) = 0;
+        virtual int Open(int flags, const Credential& cred) = 0;
+        virtual int Close(int flags, const Credential& cred) = 0;
+        virtual int Read(void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, const Credential& cred) = 0;
+        virtual int Write(const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, const Credential& cred) = 0;
+        virtual int Lookup(const char* name, size_t nameLen, VNode** out, const Credential& cred) = 0;
+        virtual int Create(VNode* parent, const char* name, size_t nameLen, VAttr* attr, const Credential& cred) = 0;
         virtual int GetAttr(VAttr* out) = 0;
         virtual int SetAttr(const VAttr& attr) = 0;
         virtual int GetDents(Dentry* buffer, size_t count, uint64_t offset, size_t* readCount) = 0;
         virtual int Access() = 0;
         virtual int Link() = 0;
         virtual int Unlink() = 0;
-        virtual int Symlink(const char* path, size_t pathLen, Credential cred) = 0;
-        virtual int ReadLink(char* buffer, size_t size, Credential cred) = 0;
-        virtual int Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, Credential cred) = 0;
+        virtual int Symlink(const char* path, size_t pathLen, const Credential& cred) = 0;
+        virtual int ReadLink(char* buffer, size_t size, const Credential& cred) = 0;
+        virtual int Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, const Credential& cred) = 0;
         virtual int Munmap() = 0;
         virtual int Resize() = 0;
         virtual int Rename() = 0;
         virtual int GetName(char* buf, size_t size, size_t* realSize) = 0;
-        virtual int Ioctl(size_t op, void* arg, int* result, Process* proc, Credential cred) = 0; // returns 0 on success, positive value on fail
+        virtual int Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) = 0; // returns 0 on success, positive value on fail
         virtual bool HasChildren() = 0;
 
         virtual VFS* GetVFS();
@@ -177,23 +177,23 @@ namespace FS {
     void UnrefVNode(VNode* node); // Decrement refCount of a VNode, and delete it if refCount is 0.
 
     int VFS_Init();
-    int VFS_MountRoot(FSType type, int flags, void* backing, Credential cred); // flags and backing are currently unusued
-    int VFS_Mount(FSType type, const char* path, int flags, void* backing, VNode* cwd, Credential cred);
+    int VFS_MountRoot(FSType type, int flags, void* backing, const Credential& cred); // flags and backing are currently unusued
+    int VFS_Mount(FSType type, const char* path, int flags, void* backing, VNode* cwd, const Credential& cred);
 
     // followSymlink is only for the last path segment
-    int VFS_LookupPath(const char* path, VNode** vnode, VFS** vfs, VNode* cwd, Credential cred, bool followSymlink = true);
+    int VFS_LookupPath(const char* path, VNode** vnode, VFS** vfs, VNode* cwd, const Credential& cred, bool followSymlink = true);
 
-    int VFS_CreateDir(const char* path, const char* name, VNode* cwd, Credential cred, VNode* vnode = nullptr, VNode** outVNode = nullptr);
-    int VFS_CreateFile(const char* path, const char* name, VNode* cwd, Credential cred, VNode* vnode = nullptr, VNode** outVNode = nullptr);
-    int VFS_Open(const char* path, VNode** out, VNode* cwd, Credential cred);
-    int VFS_Close(VNode* vnode, Credential cred);
+    int VFS_CreateDir(const char* path, const char* name, VNode* cwd, const Credential& cred, VNode* vnode = nullptr, VNode** outVNode = nullptr);
+    int VFS_CreateFile(const char* path, const char* name, VNode* cwd, const Credential& cred, VNode* vnode = nullptr, VNode** outVNode = nullptr);
+    int VFS_Open(const char* path, VNode** out, VNode* cwd, const Credential& cred);
+    int VFS_Close(VNode* vnode, const Credential& cred);
 
-    int VFS_CreateSymlink(const char* path, const char* name, const char* dest, VNode* cwd, Credential cred, VNode* vnode = nullptr, VNode** outVNode = nullptr);
+    int VFS_CreateSymlink(const char* path, const char* name, const char* dest, VNode* cwd, const Credential& cred, VNode* vnode = nullptr, VNode** outVNode = nullptr);
 
     // Map a vnode into memory. Flags are assumed to be pre-validated.
     int VFS_MapFile(void* hint, size_t length, VMM::Protection prot, int flags, bool user, VNode* vnode, uint64_t offset, void** addr, VMM::VMM* vmm, const Credential& cred);
 
-    int VFS_BuildPath(VNode* vnode, char* buf, size_t size, Credential cred);
+    int VFS_BuildPath(VNode* vnode, char* buf, size_t size, const Credential& cred);
 
     uint8_t VFS_GetPosixType(VType type);
 

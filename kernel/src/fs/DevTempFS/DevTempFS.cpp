@@ -43,7 +43,7 @@ namespace FS {
 
     }
 
-    int DevTempFS::Mount(VNode* nodeCovered, int flags, void* backing, Credential cred) {
+    int DevTempFS::Mount(VNode* nodeCovered, int flags, void* backing, const Credential& cred) {
         VAttr attr = {VType::DIR, ROOT_DIR_MODE, cred.euid, cred.egid, FSType::DevTempFS, -1, 0, 0, PAGE_SIZE, {0, 0}, {0, 0}, {0, 0}, 0};
 
         DevTempFSVNode* root = new DevTempFSVNode(this, nullptr);
@@ -90,27 +90,27 @@ namespace FS {
 
     }
 
-    int DevTempFSVNode::Open(int flags, Credential cred) {
+    int DevTempFSVNode::Open(int flags, const Credential& cred) {
         if (m_attr.type == VType::DIR)
             return 0;
         CALL_DEV_OP(Open, flags, cred);
     }
 
-    int DevTempFSVNode::Close(int flags, Credential cred) {
+    int DevTempFSVNode::Close(int flags, const Credential& cred) {
         if (m_attr.type == VType::DIR)
             return 0;
         CALL_DEV_OP(Close, flags, cred);
     }
 
-    int DevTempFSVNode::Read(void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, Credential cred) {
+    int DevTempFSVNode::Read(void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, const Credential& cred) {
         CALL_DEV_OP(Read, out, size, flags, offset, bytesRead, cred);
     }
 
-    int DevTempFSVNode::Write(const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, Credential cred) {
+    int DevTempFSVNode::Write(const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, const Credential& cred) {
         CALL_DEV_OP(Write, in, size, flags, offset, bytesWritten, cred);
     }
 
-    int DevTempFSVNode::Lookup(const char* name, size_t nameLen, VNode** out, Credential cred) {
+    int DevTempFSVNode::Lookup(const char* name, size_t nameLen, VNode** out, const Credential& cred) {
         if (name == nullptr || nameLen == 0)
             return -EINVAL;
 
@@ -143,7 +143,7 @@ namespace FS {
         return -ENOENT;
     }
 
-    int DevTempFSVNode::Create(VNode* parent, const char* name, size_t nameLen, VAttr* attr, Credential cred) {
+    int DevTempFSVNode::Create(VNode* parent, const char* name, size_t nameLen, VAttr* attr, const Credential& cred) {
         if ((parent != nullptr && (name == nullptr || nameLen == 0)) || attr == nullptr)
             return -EINVAL;
 
@@ -241,7 +241,7 @@ namespace FS {
         return -ENOSYS;
     }
 
-    int DevTempFSVNode::Symlink(const char* path, size_t pathLen, Credential cred) {
+    int DevTempFSVNode::Symlink(const char* path, size_t pathLen, const Credential& cred) {
         m_linkDest = new char[pathLen + 1];
         strncpy(m_linkDest, path, pathLen);
         m_linkDest[pathLen] = '\0';
@@ -249,7 +249,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int DevTempFSVNode::ReadLink(char* buffer, size_t size, Credential cred) {
+    int DevTempFSVNode::ReadLink(char* buffer, size_t size, const Credential& cred) {
         if (size <= m_linkLen)
             return -ENAMETOOLONG;
         strncpy(buffer, m_linkDest, m_linkLen);
@@ -257,7 +257,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int DevTempFSVNode::Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, Credential cred) {
+    int DevTempFSVNode::Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, const Credential& cred) {
         CALL_DEV_OP(Mmap, offset, size, obj, cred);
     }
 
@@ -281,7 +281,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int DevTempFSVNode::Ioctl(size_t op, void* arg, int* result, Process* proc, Credential cred) {
+    int DevTempFSVNode::Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) {
         CALL_DEV_OP(Ioctl, op, arg, result, proc, cred);
     }
 
