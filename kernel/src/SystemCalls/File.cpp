@@ -126,6 +126,9 @@ int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
 }
 
 int sys_close(int fd) {
+    if (fd <= stddebug)
+        return 0; // ignore close on stdin, stdout, stderr and stddebug
+
     Thread* current = Thread::GetCurrentThread();
     Process* proc = current->GetParent();
     FileDescriptorManager* manager = proc->GetFDManager();
