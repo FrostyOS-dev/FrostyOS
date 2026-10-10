@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -34,4 +34,28 @@ uint64_t Colour::Render(uint16_t bpp, uint8_t red_mask, uint8_t red_shift, uint8
                & (0xFFFFFFFFFFFFFFFF >> (64 - bpp));
     m_dirty = false;
     return m_colour;
+}
+
+uint8_t Colour::GetR() const {
+    return m_r;
+}
+
+uint8_t Colour::GetG() const {
+    return m_g;
+}
+
+uint8_t Colour::GetB() const {
+    return m_b;
+}
+
+void Colour::SetR(uint8_t r) {
+    m_r = r;
+}
+
+void Colour::SetG(uint8_t g) {
+    m_g = g;
+}
+
+void Colour::SetB(uint8_t b) {
+    m_b = b;
 }
