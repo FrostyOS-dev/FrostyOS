@@ -506,9 +506,6 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
 
     FS::VNode* vnode = nullptr;
 
-    if ((flags & AT_SYMLINK_NOFOLLOW) > 0)
-        return -ENOSYS;
-
     if ((flags & AT_EMPTY_PATH) == 0 && (path == nullptr || pathLen == 0))
         return -ENOENT;
 
@@ -545,7 +542,7 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
         }
 
         FS::VFS* fs;
-        int rc = FS::VFS_LookupPath(kPath, &vnode, &fs, vnode, proc->GetCred());
+        int rc = FS::VFS_LookupPath(kPath, &vnode, &fs, vnode, proc->GetCred(), (flags & AT_SYMLINK_NOFOLLOW) == 0);
 
         delete[] kPath;
 

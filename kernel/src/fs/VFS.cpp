@@ -207,7 +207,7 @@ namespace FS {
         return 0;
     }
 
-    int VFS_LookupPath(const char* path, VNode** vnode, VFS** vfs, VNode* cwd, Credential cred) {
+    int VFS_LookupPath(const char* path, VNode** vnode, VFS** vfs, VNode* cwd, Credential cred, bool followSymlink) {
         if (path == nullptr || vnode == nullptr || vfs == nullptr)
             return -EINVAL;
 
@@ -253,7 +253,7 @@ namespace FS {
             if (currentPath[0] == '\0')
                 break;
 
-            if (currentVNode->GetType() == VType::LNK) {
+            if (currentVNode->GetType() == VType::LNK && (next == nullptr && followSymlink)) {
                 symlinkDepth++;
                 if (symlinkDepth > LINK_MAX)
                     return -ELOOP;

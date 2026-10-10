@@ -180,7 +180,8 @@ namespace FS {
     int VFS_MountRoot(FSType type, int flags, void* backing, Credential cred); // flags and backing are currently unusued
     int VFS_Mount(FSType type, const char* path, int flags, void* backing, VNode* cwd, Credential cred);
 
-    int VFS_LookupPath(const char* path, VNode** vnode, VFS** vfs, VNode* cwd, Credential cred);
+    // followSymlink is only for the last path segment
+    int VFS_LookupPath(const char* path, VNode** vnode, VFS** vfs, VNode* cwd, Credential cred, bool followSymlink = true);
 
     int VFS_CreateDir(const char* path, const char* name, VNode* cwd, Credential cred, VNode* vnode = nullptr, VNode** outVNode = nullptr);
     int VFS_CreateFile(const char* path, const char* name, VNode* cwd, Credential cred, VNode* vnode = nullptr, VNode** outVNode = nullptr);
