@@ -613,7 +613,7 @@ int sys_mkdirat(int dirFD, const char* path, size_t pathLen, mode_t mode) {
 
     const Credential& cred = proc->GetCred();
 
-    char* kPath = new char[pathLen];
+    char* kPath = new char[pathLen + 1];
     if (kPath == nullptr)
         return -ENOMEM;
 
@@ -621,6 +621,8 @@ int sys_mkdirat(int dirFD, const char* path, size_t pathLen, mode_t mode) {
         delete[] kPath;
         return -EFAULT;
     }
+
+    kPath[pathLen] = '\0';
 
     FS::VNode* dirVNode = nullptr;
     if (dirFD == AT_FDCWD)

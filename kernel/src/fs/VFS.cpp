@@ -220,7 +220,7 @@ namespace FS {
 
         char const* currentPath = pathBuffer;
 
-        if (currentPath[0] != '/' && currentPath[0] != '\0') {
+        if (currentPath[0] != '/') {
             if (cwd == nullptr)
                 return -EINVAL;
             if (VFS* mounted = cwd->GetMountedVFS(); mounted != nullptr) {
