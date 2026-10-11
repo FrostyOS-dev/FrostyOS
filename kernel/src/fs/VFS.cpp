@@ -18,13 +18,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "VFS.hpp"
 
 #include "DevTempFS/DevTempFS.hpp"
-#include "HAL/Time.hpp"
+
 #include "TempFS/TempFS.hpp"
 
-#include <cstddef>
 #include <errno.h>
+#include <stddef.h>
 #include <string.h>
 #include <util.h>
+
+#include <HAL/Time.hpp>
 
 #include <Memory/VMM.hpp>
 
@@ -91,7 +93,7 @@ namespace FS {
         return m_attr.type;
     }
 
-    int& VNode::GetRefCount() {
+    uint64_t& VNode::GetRefCount() {
         return m_refCount;
     }
 
@@ -103,6 +105,14 @@ namespace FS {
         m_vfsMounted = vfs;
     }
 
+    EventWaitQueue* VNode::GetPollQueue(uint32_t events) {
+        return nullptr;
+    }
+
+    uint32_t VNode::PollReady(uint32_t events) {
+        return events & (POLLIN | POLLRDNORM | POLLOUT | POLLWRNORM);
+    }
+
     void VNode::Lock() {
         m_lock.Lock();
     }
@@ -111,16 +121,15 @@ namespace FS {
         m_lock.Unlock();
     }
 
-    // Increment refCount of a VNode, and delete it if refCount is 0.
+    // Increment refCount of a VNode
     void RefVNode(VNode* node) {
-        node->GetRefCount()++;
+        if (node != nullptr)
+            __atomic_fetch_add(&node->GetRefCount(), 1, __ATOMIC_RELAXED);
     }
 
     // Decrement refCount of a VNode, and delete it if refCount is 0.
     void UnrefVNode(VNode* node) {
-        int& refCount = node->GetRefCount();
-        refCount--;
-        if (refCount == 0)
+        if (node != nullptr && __atomic_sub_fetch(&node->GetRefCount(), 1, __ATOMIC_ACQ_REL) == 0)
             delete node;
     }
 

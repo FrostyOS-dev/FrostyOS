@@ -62,12 +62,14 @@ int FutexWaitQueue::Wait(uint32_t* futexPtr, Process* proc, uint32_t expected, t
 
     Thread* thread = Scheduler::RemoveCurrentThread(true);
     assert(thread != nullptr);
-    thread->yieldCallback = {};
+    thread->yieldCallback = {[](Thread*, void* data) -> void {
+        spinlock_release((spinlock_t*)data);
+    }, &m_lock};
     thread->sleepRemainingTime = 0; // TODO: timeout
     thread->blockedFutex = this;
     thread->wakeReason = FutexWakeReason::None;
+    __atomic_store_n(&thread->blocked, true, __ATOMIC_RELEASE);
     m_waitingThreads.pushBack(thread);
-    spinlock_release(&m_lock);
     Scheduler_SaveAndYield(thread);
     // resumed here — by Wake(), a timeout, or a forced kill
     Processor::EnableInterrupts(intState);
@@ -93,7 +95,9 @@ int FutexWaitQueue::Wake(uint32_t maxCount) {
         thread->sleepRemainingTime = 0;
         thread->blockedFutex = nullptr;
         thread->wakeReason = FutexWakeReason::Woken;
-        assert(Scheduler::AddExistingThread(thread));
+        if (thread->TryClaimWake()) {
+            assert(Scheduler::AddExistingThread(thread));
+        }
         woken++;
     }
     spinlock_release(&m_lock);
@@ -110,7 +114,9 @@ void FutexWaitQueue::Remove(Thread* thread, FutexWakeReason reason) {
         m_waitingThreads.remove(thread);
         thread->blockedFutex = nullptr;
         thread->wakeReason = reason;
-        assert(Scheduler::AddExistingThread(thread));
+        if (thread->TryClaimWake()) {
+            assert(Scheduler::AddExistingThread(thread));
+        }
     }
     spinlock_release(&m_lock);
 }

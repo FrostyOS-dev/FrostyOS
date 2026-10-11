@@ -292,20 +292,18 @@ namespace FS {
         }
 
         m_vfsMounted = nullptr;
-        m_refCount = 1;
-
-        m_refCount++;
+        m_refCount = 1; // FS's reference
 
         if (parent != nullptr) {
             TempFSVNode* fsVNode = static_cast<TempFSVNode*>(parent);
             fsVNode->m_children.lock();
             fsVNode->m_children.insert(this);
             fsVNode->m_children.unlock();
+            RefVNode(this); // parent's reference
+            RefVNode(m_parent);
         }
 
         m_parent = parent;
-        if (parent != nullptr)
-            parent->GetRefCount()++;
 
         return ESUCCESS;
     }
@@ -401,6 +399,7 @@ namespace FS {
             Block* b = CreateBlock(0, 1);
             if (b == nullptr || m_memObj == nullptr)
                 return -ENOMEM;
+            RefVNode(this); // memory object's reference
         }
 
         *obj = m_memObj;

@@ -223,12 +223,12 @@ void TTY::HandleInput(char c) {
             if (eofOnEmpty)
                 __atomic_fetch_add(&m_eofPending, 1, __ATOMIC_RELEASE);
 
-            m_inputWaitQueue.Trigger(POLLIN);
+            m_inputWaitQueue.Trigger(POLLIN | POLLRDNORM);
         }
     } else {
         EchoChar(c);
         m_readBuffer.push(c);
-        m_inputWaitQueue.Trigger(POLLIN);
+        m_inputWaitQueue.Trigger(POLLIN | POLLRDNORM);
     }
 }
 
@@ -412,6 +412,20 @@ void TTY::SetType(TTYType type) {
 void TTY::SetTermiosCallback(termiosCallback callback, void* data) {
     m_termiosCallback = callback;
     m_termiosCallbackData = data;
+}
+
+EventWaitQueue* TTY::GetPollQueue(TTYStream s) {
+    return s == TTYStream::IN ? &m_inputWaitQueue : nullptr;
+}
+
+uint32_t TTY::PollReady(TTYStream s, uint32_t events) {
+    uint32_t r = 0;
+    if (s == TTYStream::IN) {
+        if (!m_readBuffer.empty() || m_eofPending)
+            r |= POLLIN | POLLRDNORM;
+    } else
+        r |= POLLOUT | POLLWRNORM;
+    return r & events;
 }
 
 bool TTY::CanRead(TTYStream stream) {

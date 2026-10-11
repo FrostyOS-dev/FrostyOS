@@ -156,10 +156,13 @@ namespace FS {
         virtual VFS* GetVFS();
         virtual VFS* GetMountedVFS();
         virtual VType GetType();
-        virtual int& GetRefCount();
+        virtual uint64_t& GetRefCount();
         virtual VNode* GetParent();
 
         virtual void SetMountedVFS(VFS* vfs);
+
+        virtual EventWaitQueue* GetPollQueue(uint32_t events);
+        virtual uint32_t PollReady(uint32_t events);
 
         virtual void Lock();
         virtual void Unlock();
@@ -167,7 +170,7 @@ namespace FS {
     protected:
         VAttr m_attr;
         Mutex m_lock;
-        int m_refCount;
+        uint64_t m_refCount;
         VFS* m_vfs; // Parent VFS
         VFS* m_vfsMounted; // VFS that is mounted here
         VNode* m_parent;

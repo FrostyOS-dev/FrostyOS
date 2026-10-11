@@ -314,7 +314,13 @@ namespace Scheduler {
             return;
         }
 
+        spinlock_acquire(&thread->eventLock);
         thread->sleepRemainingTime = ms;
+        thread->isSleeping = true;
+        thread->yieldCallback = {[](Thread*, void* data) -> void {
+            spinlock_release((spinlock_t*)data);
+        }, &thread->eventLock};
+        __atomic_store_n(&thread->blocked, true, __ATOMIC_RELEASE);
 
         Scheduler_SaveAndYield(thread);
         Processor::EnableInterrupts(intState);
@@ -333,7 +339,11 @@ namespace Scheduler {
             uint64_t msSinceLast = *static_cast<uint64_t*>(data);
             ProcessorState* state = GetCurrentProcessorState();
             if (msSinceLast >= thread->sleepRemainingTime) {
+                if (!thread->TryClaimWake())
+                    return ThreadList::IteratorDecision::Continue;
+
                 thread->sleepRemainingTime = 0;
+                thread->isSleeping = false;
                 state->sleepingThreads.remove(thread);
 
                 int oldNice = thread->GetParent()->GetNice();
@@ -422,12 +432,15 @@ namespace Scheduler {
         spinlock_acquire(&state->lock);
 
         if (oldThread != nullptr) {
+            Thread::YieldCallback cb = oldThread->yieldCallback;
+            oldThread->yieldCallback = {};
             if (oldThread->sleepRemainingTime > 0 && oldThread->sleepRemainingTime != UINT64_MAX) {
                 state->sleepingThreads.lock();
                 state->sleepingThreads.pushBack(oldThread);
                 state->sleepingThreads.unlock();
-            } else if (oldThread->yieldCallback.func != nullptr)
-                oldThread->yieldCallback.func(oldThread, oldThread->yieldCallback.data);
+            }
+            if (cb.func != nullptr)
+                cb.func(oldThread, cb.data);
             oldThread = nullptr;
         } else {
             oldThread = state->currentThread;
@@ -640,7 +653,7 @@ namespace Scheduler {
                 Process* proc = thread->GetParent(); 
                 if (proc != nullptr)
                     proc->RemoveThread(thread);
-                if (proc->GetMode() == ProcessMode::USER)
+                if (proc != nullptr && proc->GetMode() == ProcessMode::USER)
                     GetCurrentProcessor()->DestroyExtraContext(thread->GetExtraContext());
                 thread->Delete();
 

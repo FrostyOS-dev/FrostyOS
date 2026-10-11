@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stddef.h>
 #include <stdint.h>
 
+#include <Scheduling/Event.hpp>
 #include <Scheduling/Mutex.hpp>
 
 #include <tty/TTY.hpp>
@@ -69,11 +70,17 @@ public:
 
     int Ioctl(uint64_t op, void* arg, int* result, Process* currentProc);
 
+    EventWaitQueue* GetPollQueue(uint32_t events);
+    uint32_t PollReady(uint32_t events);
+
     bool Fork(FileDescriptor* other, Process* newProc); // copy from other into this
 
     FDType GetType() const;
     FS::VNode* GetVNode();
     TTY* GetTTY(TTYStream* stream = nullptr);
+
+    void Ref();
+    void Unref();
 
 private:
     Process* m_proc;
@@ -89,6 +96,9 @@ private:
     TTYStream m_ttyStream;
 
     Mutex m_mutex;
+    uint64_t m_refCount;
+
+    Credential m_cred;
 };
 
 #endif /* _FILE_DESCRIPTOR_HPP */

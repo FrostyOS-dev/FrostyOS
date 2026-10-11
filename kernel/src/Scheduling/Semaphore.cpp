@@ -55,9 +55,10 @@ void Semaphore::Wait() {
             Thread* thread = Scheduler::RemoveCurrentThread(true);
             assert(thread != nullptr);
             thread->sleepRemainingTime = 0;
-            thread->yieldCallback = {};
+            thread->yieldCallback = {[](Thread* t, void* data) -> void {
+                spinlock_release((spinlock_t*)data);
+            }, &m_lock};
             m_waitingThreads.pushBack(thread); // queue waiter before yielding to avoid lost wakeups
-            spinlock_release(&m_lock);
             Scheduler_SaveAndYield(thread);
             spinlock_acquire(&m_lock);
         } else {

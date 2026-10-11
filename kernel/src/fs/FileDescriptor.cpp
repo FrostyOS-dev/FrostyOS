@@ -30,20 +30,21 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <tty/TTY.hpp>
 #include <tty/TTYBackend.hpp>
 
-FileDescriptor::FileDescriptor() : m_proc(nullptr), m_type(FDType::Invalid), m_offset(0), m_open(false), m_append(false), m_vnode(nullptr), m_tty(nullptr), m_ttyStream(TTYStream::INVALID) {
+FileDescriptor::FileDescriptor() : m_proc(nullptr), m_type(FDType::Invalid), m_offset(0), m_open(false), m_append(false), m_vnode(nullptr), m_tty(nullptr), m_ttyStream(TTYStream::INVALID), m_refCount(1), m_cred() {
 
 }
 
-FileDescriptor::FileDescriptor(Process* proc, FDType type, FS::VNode* vnode) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_append(false), m_vnode(vnode), m_tty(nullptr), m_ttyStream(TTYStream::INVALID) {
+FileDescriptor::FileDescriptor(Process* proc, FDType type, FS::VNode* vnode) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_append(false), m_vnode(vnode), m_tty(nullptr), m_ttyStream(TTYStream::INVALID), m_refCount(1), m_cred() {
 
 }
 
-FileDescriptor::FileDescriptor(Process* proc, FDType type, TTY* tty, TTYStream stream) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_append(false), m_vnode(nullptr), m_tty(tty), m_ttyStream(stream) {
+FileDescriptor::FileDescriptor(Process* proc, FDType type, TTY* tty, TTYStream stream) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_append(false), m_vnode(nullptr), m_tty(tty), m_ttyStream(stream), m_refCount(1), m_cred() {
 
 }
 
 FileDescriptor::~FileDescriptor() {
-
+    if (m_vnode != nullptr)
+        FS::VFS_Close(m_vnode, m_cred);
 }
 
 void FileDescriptor::Init(Process* proc, FDType type, FS::VNode* vnode) {
@@ -89,16 +90,16 @@ int FileDescriptor::Open(int flags) {
 
     m_open = true;
     m_offset = 0;
+    if (m_proc != nullptr)
+        m_cred = m_proc->GetCred();
     m_mutex.Unlock();
     return ESUCCESS;
 }
 
 void FileDescriptor::Close() {
-    m_mutex.Lock();
     m_offset = 0;
     m_append = false;
     m_open = false;
-    m_mutex.Unlock();
 }
 
 bool FileDescriptor::isOpen() const {
@@ -131,7 +132,7 @@ int FileDescriptor::Read(void* buf, size_t count, size_t* realCount) {
         }
         size_t bytesRead = 0;
         m_vnode->Lock();
-        rc = m_vnode->Read(buf, count, 0, m_offset, &bytesRead, m_proc->GetCred());
+        rc = m_vnode->Read(buf, count, 0, m_offset, &bytesRead, m_cred);
         m_vnode->Unlock();
         m_offset += bytesRead;
         *realCount = bytesRead;
@@ -196,7 +197,7 @@ int FileDescriptor::Write(const void* buf, size_t count, size_t* realCount) {
             }
             offset = attr.size;
         }
-        rc = m_vnode->Write(buf, count, 0, offset, &bytesWritten, m_proc->GetCred());
+        rc = m_vnode->Write(buf, count, 0, offset, &bytesWritten, m_cred);
         m_vnode->Unlock();
         if (!m_append)
             m_offset += bytesWritten;
@@ -403,7 +404,7 @@ int FileDescriptor::Ioctl(uint64_t op, void* arg, int* result, Process* currentP
             return EBADF;
         }
         m_vnode->Lock();
-        rc = m_vnode->Ioctl(op, arg, result, currentProc, currentProc->GetCred());
+        rc = m_vnode->Ioctl(op, arg, result, currentProc, m_cred);
         m_vnode->Unlock();
         break;
     default:
@@ -413,6 +414,30 @@ int FileDescriptor::Ioctl(uint64_t op, void* arg, int* result, Process* currentP
 
     m_mutex.Unlock();
     return rc;
+}
+
+EventWaitQueue* FileDescriptor::GetPollQueue(uint32_t events) {
+    switch (m_type) {
+    case FDType::TTY:
+        return m_tty != nullptr ? m_tty->GetPollQueue(m_ttyStream) : nullptr;
+    case FDType::File:
+    case FDType::Directory:
+        return m_vnode != nullptr ? m_vnode->GetPollQueue(events) : nullptr;
+    }
+    return nullptr;
+}
+
+uint32_t FileDescriptor::PollReady(uint32_t events) {
+    if (!m_open)
+        return POLLNVAL;
+    switch (m_type) {
+    case FDType::TTY:
+        return m_tty != nullptr ? m_tty->PollReady(m_ttyStream, events) : 0;
+    case FDType::File:
+    case FDType::Directory:
+        return m_vnode != nullptr ? m_vnode->PollReady(events) : 0;
+    }
+    return 0;
 }
 
 bool FileDescriptor::Fork(FileDescriptor* other, Process* newProc) { // no special logic is needed, just a direct data copy
@@ -427,9 +452,13 @@ bool FileDescriptor::Fork(FileDescriptor* other, Process* newProc) { // no speci
     m_append = other->m_append;
 
     m_vnode = other->m_vnode;
+    if (m_vnode != nullptr)
+        FS::RefVNode(m_vnode);
 
     m_tty = other->m_tty;
     m_ttyStream = other->m_ttyStream;
+
+    m_cred = other->m_cred;
 
     other->m_mutex.Unlock();
     m_mutex.Unlock();
@@ -451,3 +480,11 @@ TTY* FileDescriptor::GetTTY(TTYStream* stream) {
     return m_tty;
 }
 
+void FileDescriptor::Ref() {
+    __atomic_fetch_add(&m_refCount, 1, __ATOMIC_ACQ_REL);
+}
+
+void FileDescriptor::Unref() {
+    if (__atomic_fetch_sub(&m_refCount, 1, __ATOMIC_ACQ_REL) == 1)
+        delete this;
+}

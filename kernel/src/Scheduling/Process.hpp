@@ -98,6 +98,7 @@ public:
     void SetFDManager(FileDescriptorManager* manager);
 
     FS::VNode* GetCWD();
+    FS::VNode* GetCWDRef();
     void SetCWD(FS::VNode* cwd);
 
     bool Fork(Process* other, uint64_t newMainReturn, CPU_Registers* regs);

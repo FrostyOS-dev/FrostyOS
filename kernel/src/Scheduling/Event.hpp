@@ -1,3 +1,20 @@
+/*
+Copyright (©) 2026  Frosty515
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 #ifndef _SCHED_EVENT_HPP
 #define _SCHED_EVENT_HPP
 
@@ -5,8 +22,17 @@
 #include <stddef.h>
 #include <spinlock.h>
 
-#define PROCESS_EXIT_EVENT 1
-#define POLLIN 2
+#define PROCESS_EXIT_EVENT 0x10000
+#define POLLIN 0x1
+#define POLLPRI 0x2
+#define POLLOUT 0x4
+#define POLLERR 0x8
+#define POLLHUP 0x10
+#define POLLNVAL 0x20
+#define POLLRDNORM 0x40
+#define POLLRDBAND 0x80
+#define POLLWRNORM 0x100
+#define POLLRDHUP 0x2000
 
 class Thread;
 class EventWaitQueue;

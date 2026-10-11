@@ -39,7 +39,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <arch/x86_64/Scheduling/TaskUtil.hpp>
 #endif
 
-Thread::Thread() : eventLock(SPINLOCK_DEFAULT_VALUE), eventWaitActive(false), activeEventNodes(nullptr), m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_OriginalStack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true, false, -1, 0), m_blockedSignals{}, m_pendingSignals{}, m_inSignalHandler(false), m_signalLock(SPINLOCK_DEFAULT_VALUE) {
+Thread::Thread() : isSleeping(false), eventLock(SPINLOCK_DEFAULT_VALUE), eventWaitActive(false), activeEventNodes(nullptr), blocked(false), m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_OriginalStack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_deleteProp(false, false, true, false, -1, 0), m_blockedSignals{}, m_pendingSignals{}, m_returnSignals{}, m_hasReturnSignalMask(false), m_inSignalHandler(false), m_signalLock(SPINLOCK_DEFAULT_VALUE) {
     sleepRemainingTime = 0;
     yieldCallback = {nullptr, nullptr};
     m_InSchedList = false;
@@ -47,7 +47,7 @@ Thread::Thread() : eventLock(SPINLOCK_DEFAULT_VALUE), eventWaitActive(false), ac
 
 }
 
-Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : eventLock(SPINLOCK_DEFAULT_VALUE), eventWaitActive(false), activeEventNodes(nullptr), m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_OriginalStack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_IsSleeping(false), m_deleteProp(false, false, true, false, -1, 0), m_blockedSignals{}, m_pendingSignals{}, m_inSignalHandler(false), m_signalLock(SPINLOCK_DEFAULT_VALUE) {
+Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : isSleeping(false), eventLock(SPINLOCK_DEFAULT_VALUE), eventWaitActive(false), activeEventNodes(nullptr), blocked(false), m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_OriginalStack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_deleteProp(false, false, true, false, -1, 0), m_blockedSignals{}, m_pendingSignals{}, m_returnSignals{}, m_hasReturnSignalMask(false), m_inSignalHandler(false), m_signalLock(SPINLOCK_DEFAULT_VALUE) {
     sleepRemainingTime = 0;
     yieldCallback = {nullptr, nullptr};
 
@@ -294,6 +294,7 @@ bool Thread::Fork(Thread* other, uint64_t newReturnValue, CPU_Registers* regs) {
 
     m_EntryPoint = other->m_EntryPoint;
     m_TimeRemaining = 0;
+    blocked = false;
     
     memcpy(&m_deleteProp, &other->m_deleteProp, sizeof(m_deleteProp));
 
@@ -321,58 +322,31 @@ int Thread::RaiseSignal(int signal, bool synchronous) {
     m_Parent->AcquireSignalLock();
     spinlock_acquire(&m_signalLock);
 
-    if (m_inSignalHandler && synchronous)
+    if (m_inSignalHandler && synchronous) {
+        spinlock_release(&m_signalLock);
+        m_Parent->ReleaseSignalLock();
         Thread::ExitCurrentThread(0x7F | (signal << 8), true, m_Parent->GetMainThread() == this, true);
+    }
 
-    sigset_t* set = &m_pendingSignals;
-    SIGNAL_SET(set, signal);
-
+    SIGNAL_SET(&m_pendingSignals, signal);
     sigaction_t* act = m_Parent->GetSignalAction(signal);
     void* addr = act->address;
-    bool notIgnored = addr != SIG_IGN && ((addr == SIG_DFL && g_signalDefaultActions[signal] != SIGACTION_IGN) || addr != SIG_DFL);
-
-    if (signal == SIGKILL || signal == SIGSTOP || (SIGNAL_GET(&m_blockedSignals, signal) == 0 && notIgnored)) {
-        // signal must be issued immediately
-        if (m_IsSleeping) {
-            m_IsSleeping = false;
-            sleepRemainingTime = 0;
-            Scheduler::AddExistingThread(this);
-        } else {
-            if (blockedFutex != nullptr)
-                blockedFutex->Remove(this, FutexWakeReason::Interrupted);
-
-            spinlock_acquire(&eventLock);
-            if (eventWaitActive) {
-                eventWaitActive = false;
-
-                EventWaitNode* node = activeEventNodes;
-                while (node != nullptr) {
-                    node->queue->RemoveListener(node);
-                    node = node->threadNext;
-                }
-
-                // Remove from sleepingThreads if waiting on a timeout
-                Scheduler::ProcessorState* procState = GetCPUInfo()->state;
-                if (procState != nullptr && sleepRemainingTime > 0 && sleepRemainingTime != UINT64_MAX) {
-                    procState->sleepingThreads.lock();
-                    procState->sleepingThreads.remove(this);
-                    procState->sleepingThreads.unlock();
-                }
-
-                spinlock_release(&eventLock);
-
-                sleepRemainingTime = 0;
-                Scheduler::AddExistingThread(this);
-            } else
-                spinlock_release(&eventLock);
-        }
-    } else if (!notIgnored) {
-        // ignored, doesn't need to be pending anymore
-        SIGNAL_CLEAR(set, signal);
-    }
+    bool notIgnored = addr != SIG_IGN && (addr != SIG_DFL || g_signalDefaultActions[signal] != SIGACTION_IGN);
+    bool wake = signal == SIGKILL || signal == SIGSTOP || (SIGNAL_GET(&m_blockedSignals, signal) == 0 && notIgnored);
+    if (!wake && !notIgnored)
+        SIGNAL_CLEAR(&m_pendingSignals, signal);
 
     spinlock_release(&m_signalLock);
     m_Parent->ReleaseSignalLock();
+
+    if (wake) {
+        if (blockedFutex != nullptr)
+            blockedFutex->Remove(this, FutexWakeReason::Interrupted);
+        spinlock_acquire(&eventLock);
+        WakeFromEventWait();
+        spinlock_release(&eventLock);
+    }
+    
     Processor::EnableInterrupts(state);
     return 0;
 }
@@ -439,7 +413,13 @@ int Thread::DispatchSignals(CPU_Registers* regs, CPU_ExtraContext* extra) {
     if (act == nullptr)
         return -EINVAL;
 
-    sigset_t oldBlocked = m_blockedSignals;
+    sigset_t oldBlocked;
+    if (m_hasReturnSignalMask) {
+        oldBlocked = m_returnSignals;
+        m_hasReturnSignalMask = false;
+    } else
+        oldBlocked = m_blockedSignals;
+
     sigset_t newBlocked = m_blockedSignals;
 
     // Apply action's specific mask to the thread while running the handler
@@ -569,6 +549,13 @@ void Thread::GetPendingSignals(sigset_t* set) {
     Processor::EnableInterrupts(state);
 }
 
+void Thread::SetReturnSignalMask(sigset_t *mask) {
+    spinlock_acquire(&m_signalLock);
+    memcpy(&m_returnSignals, mask, sizeof(sigset_t));
+    m_hasReturnSignalMask = true;
+    spinlock_release(&m_signalLock);
+}
+
 sigset_t& Thread::GetBlockedSignals() {
     return m_blockedSignals;
 }
@@ -619,6 +606,27 @@ bool Thread::HasPendingUnblockedSignals() {
     Processor::EnableInterrupts(state);
 
     return hasPending;
+}
+
+bool Thread::TryClaimWake() {
+    return __atomic_exchange_n(&blocked, false, __ATOMIC_ACQ_REL);
+}
+
+bool Thread::WakeFromEventWait() {
+    if (!eventWaitActive || !TryClaimWake())
+        return false;
+    eventWaitActive = false;
+    uint64_t rem = sleepRemainingTime;
+    if (rem > 0 && rem != UINT64_MAX) {
+        Scheduler::ProcessorState* ps = GetCPUInfo()->state;
+        ps->sleepingThreads.lock();
+        ps->sleepingThreads.remove(this);
+        ps->sleepingThreads.unlock();
+    }
+    sleepRemainingTime = 0;
+    yieldCallback = {};
+    Scheduler::AddExistingThread(this);
+    return true;
 }
 
 [[noreturn]] void Thread_ExitHelper(void* data) {

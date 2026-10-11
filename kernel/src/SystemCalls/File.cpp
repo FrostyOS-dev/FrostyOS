@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "File.hpp"
+#include "Signal.hpp"
 #include "SystemCall.hpp"
 
 #include <errno.h>
@@ -26,8 +27,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <fs/FileDescriptor.hpp>
 #include <fs/VFS.hpp>
 
+#include <HAL/Time.hpp>
+
 #include <Memory/VMM.hpp>
 
+#include <Scheduling/Event.hpp>
 #include <Scheduling/Process.hpp>
 
 int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
@@ -88,12 +92,14 @@ int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
         }
     }
 
+    delete[] realPath;
+
     vnode->Lock();
     FS::VType type = vnode->GetType();
     vnode->Unlock();
     if (type != FS::VType::REG && type != FS::VType::DIR) {
         FS::VFS_Close(vnode, proc->GetCred());
-        return -ENOSYS;
+        return -ENOTSUP;
     } else if (type != FS::VType::DIR && (flags & O_DIRECTORY) > 0) {
         FS::VFS_Close(vnode, proc->GetCred());
         return -ENOTDIR;
@@ -102,15 +108,12 @@ int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
     FileDescriptor* desc = new FileDescriptor(proc, type == FS::VType::REG ? FDType::File : FDType::Directory, vnode);
     if (desc == nullptr) {
         FS::VFS_Close(vnode, proc->GetCred());
-        delete[] realPath;
         return -ENOMEM;
     }
 
     rc = desc->Open(flags);
     if (rc < 0) {
         delete desc;
-        FS::VFS_Close(vnode, proc->GetCred());
-        delete[] realPath;
         return rc;
     }
 
@@ -118,10 +121,8 @@ int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
     if (fd < 0) {
         desc->Close();
         delete desc;
-        FS::VFS_Close(vnode, proc->GetCred());
     }
     
-    delete[] realPath;
     return fd;
 }
 
@@ -139,23 +140,10 @@ int sys_close(int fd) {
     if (!manager->Free(fd, &desc))
         return -EBADF;
 
-    if (!desc->isOpen())
-        return -EBADF; // somehow wasn't open?
-    
-    desc->Close();
+    if (desc->isOpen())
+        desc->Close();
 
-    if (desc->GetType() != FDType::File)
-        return ESUCCESS; // nothing more to do
-
-    FS::VNode* vnode = desc->GetVNode();
-    if (vnode == nullptr)
-        return -EBADF; // we don't try reopen the FD on errors during sys_close
-
-    int rc = FS::VFS_Close(vnode, proc->GetCred());
-    if (rc < 0)
-        return rc;
-
-    delete desc;
+    desc->Unref();
 
     return ESUCCESS;
 }
@@ -175,14 +163,19 @@ ssize_t sys_read(int fd, void* buf, size_t count) {
         return -EFAULT;
 
     FileDescriptor* desc = manager->Get(fd);
-    if (desc == nullptr || !desc->isOpen())
+    if (desc == nullptr || !desc->isOpen()) {
+        if (desc != nullptr)
+            desc->Unref();
         return -EBADF;
+    }
 
     uint8_t* kBuf = new uint8_t[count];
 
     size_t realCount = 0;
     int rc = desc->Read(kBuf, count, &realCount);
     ssize_t result = rc < 0 ? rc : realCount;
+
+    desc->Unref();
 
     UserWrite(buf, kBuf, realCount, proc, false);
     
@@ -201,12 +194,16 @@ ssize_t sys_write(int fd, const void* buf, size_t count) {
         return -ENOSYS;
 
     FileDescriptor* desc = manager->Get(fd);
-    if (desc == nullptr || !desc->isOpen())
+    if (desc == nullptr || !desc->isOpen()) {
+        if (desc != nullptr)
+            desc->Unref();
         return -EBADF;
+    }
 
     uint8_t* kBuf = new uint8_t[count];
 
     if (!UserRead(buf, kBuf, count, proc)) {
+        desc->Unref();
         delete[] kBuf;
         return -EFAULT;
     }
@@ -214,6 +211,8 @@ ssize_t sys_write(int fd, const void* buf, size_t count) {
     size_t realCount = 0;
     int rc = desc->Write(kBuf, count, &realCount);
     ssize_t result = rc < 0 ? rc : realCount;
+
+    desc->Unref();
     
     delete[] kBuf;
     return result;
@@ -230,8 +229,11 @@ off_t sys_seek(int fd, off_t offset, int whence) {
         return -ENOSYS;
 
     FileDescriptor* desc = manager->Get(fd);
-    if (desc == nullptr || !desc->isOpen())
+    if (desc == nullptr || !desc->isOpen()) {
+        if (desc != nullptr)
+            desc->Unref();
         return -EBADF;
+    }
 
     FDOffsetStart fdWhence;
     switch (whence) {
@@ -245,11 +247,13 @@ off_t sys_seek(int fd, off_t offset, int whence) {
         fdWhence = FDOffsetStart::END;
         break;
     default:
+        desc->Unref();
         return -EINVAL;
     }
 
     int64_t realOffset = 0;
     int rc = desc->Seek(offset, fdWhence, &realOffset);
+    desc->Unref();
     if (rc < 0)
         return rc;
 
@@ -264,10 +268,16 @@ int sys_isatty(int fd) {
         return -ENOSYS;
 
     FileDescriptor* desc = manager->Get(fd);
-    if (desc == nullptr || !desc->isOpen())
+    if (desc == nullptr || !desc->isOpen()) {
+        if (desc != nullptr)
+            desc->Unref();
         return -EBADF;
+    }
 
-    switch (desc->GetType()) {
+    FDType type = desc->GetType();
+    desc->Unref();
+
+    switch (type) {
     case FDType::TTY:
         return 0;
     default:
@@ -283,25 +293,33 @@ int sys_getdents(int fd, void* buf, size_t maxRead, size_t* bytesRead) {
         return -ENOSYS;
 
     FileDescriptor* desc = manager->Get(fd);
-    if (desc == nullptr || !desc->isOpen())
+    if (desc == nullptr || !desc->isOpen()) {
+        if (desc != nullptr)
+            desc->Unref();
         return -EBADF;
+    }
 
     size_t count = maxRead / sizeof(FS::Dentry);
-    if (count == 0)
+    if (count == 0) {
+        desc->Unref();
         return -EINVAL;
-
+    }
+    
     FS::Dentry* kBuf = new FS::Dentry[count];
-    if (kBuf == nullptr)
+    if (kBuf == nullptr) {
+        desc->Unref();
         return -ENOMEM;
+    }
 
     size_t realCount = 0;
     int rc = desc->GetDents(kBuf, count, &realCount);
+    desc->Unref();
     if (rc < 0) {
         delete[] kBuf;
         return rc;
     }
 
-    if (!UserWrite(buf, kBuf, sizeof(FS::Dentry) * count, proc))
+    if (!UserWrite(buf, kBuf, sizeof(FS::Dentry) * realCount, proc))
         rc = -EFAULT;
 
     realCount *= sizeof(FS::Dentry);
@@ -322,13 +340,16 @@ int sys_getcwd(char* buf, size_t size) {
     if (!vmm->ValidateWrite(buf, size))
         return -EFAULT;
 
-    FS::VNode* vnode = proc->GetCWD();
+    FS::VNode* vnode = proc->GetCWDRef();
 
     char* kBuf = new char[size];
-    if (kBuf == nullptr)
+    if (kBuf == nullptr) {
+        FS::UnrefVNode(vnode);
         return -ENOMEM;
+    }
 
     int rc = FS::VFS_BuildPath(vnode, kBuf, size, proc->GetCred());
+    FS::UnrefVNode(vnode);
     if (rc < 0) {
         delete[] kBuf;
         return rc;
@@ -375,19 +396,24 @@ int sys_symlinkat(int dirFD, const char* target, size_t targetLen, const char* l
 
     FS::VNode* dirVNode = nullptr;
     if (dirFD == AT_FDCWD)
-        dirVNode = proc->GetCWD();
+        dirVNode = proc->GetCWDRef();
     else {
         FileDescriptor* desc = manager->Get(dirFD);
         if (desc == nullptr || !desc->isOpen() || desc->GetType() != FDType::Directory) {
+            if (desc != nullptr)
+                desc->Unref();
             delete[] kTarget;
             delete[] kLinkPath;
             return -EBADF;
         }
 
         dirVNode = desc->GetVNode();
+        FS::RefVNode(dirVNode);
+        desc->Unref();
     }
 
     if (dirVNode == nullptr) {
+        FS::UnrefVNode(dirVNode);
         delete[] kTarget;
         delete[] kLinkPath;
         return -EINVAL;
@@ -395,6 +421,7 @@ int sys_symlinkat(int dirFD, const char* target, size_t targetLen, const char* l
 
     // Need to split the path
     if (kLinkPath[linkLen - 1] == '/') {
+        FS::UnrefVNode(dirVNode);
         delete[] kTarget;
         delete[] kLinkPath;
         return -EISDIR;
@@ -411,6 +438,7 @@ int sys_symlinkat(int dirFD, const char* target, size_t targetLen, const char* l
 
     int rc = FS::VFS_CreateSymlink(parent, name, kTarget, dirVNode, proc->GetCred());
 
+    FS::UnrefVNode(dirVNode);
     delete[] kTarget;
     delete[] kLinkPath;
 
@@ -431,19 +459,25 @@ int sys_chdir(const char* path, size_t pathLen) {
     if (kPath == nullptr)
         return -ENOMEM;
 
-    if (!UserRead(path, kPath, pathLen, proc))
+    if (!UserRead(path, kPath, pathLen, proc)) {
+        delete[] kPath;
         return -EFAULT;
+    }
 
     kPath[pathLen] = 0;
 
     FS::VNode* vnode = nullptr;
     FS::VFS* vfs = nullptr;
     int rc = FS::VFS_LookupPath(kPath, &vnode, &vfs, proc->GetCWD(), proc->GetCred());
-    
-    if (rc == 0)
-        proc->SetCWD(vnode);
-
     delete[] kPath;
+    
+    if (rc == 0) {
+        if (vnode->GetType() != FS::VType::DIR)
+            return -ENOTDIR;
+        FS::RefVNode(vnode);
+        FS::UnrefVNode(proc->GetCWD());
+        proc->SetCWD(vnode);
+    }
 
     return rc;
 }
@@ -456,16 +490,26 @@ int sys_fchdir(int fd) {
         return -ENOSYS;
 
     FileDescriptor* desc = manager->Get(fd);
-    if (desc == nullptr || !desc->isOpen())
+    if (desc == nullptr || !desc->isOpen()) {
+        if (desc != nullptr)
+            desc->Unref();
         return -EBADF;
+    }
 
-    if (desc->GetType() != FDType::Directory)
+    if (desc->GetType() != FDType::Directory) {
+        desc->Unref();
         return -ENOTDIR;
+    }
 
     FS::VNode* vnode = desc->GetVNode();
-    if (vnode == nullptr)
+    if (vnode == nullptr) {
+        desc->Unref();
         return -EBADF;
+    }
 
+    FS::RefVNode(vnode);
+    desc->Unref();
+    FS::UnrefVNode(proc->GetCWD());
     proc->SetCWD(vnode);
 
     return 0;
@@ -480,14 +524,20 @@ int sys_ioctl(int fd, size_t op, void* arg, int* result) {
         return ENOSYS;
 
     FileDescriptor* desc = manager->Get(fd);
-    if (desc == nullptr || !desc->isOpen())
+    if (desc == nullptr || !desc->isOpen()) {
+        if (desc != nullptr)
+            desc->Unref();
         return EBADF;
+    }
 
-    if (!vmm->ValidateWrite(result, sizeof(int)))
+    if (!vmm->ValidateWrite(result, sizeof(int))) {
+        desc->Unref();
         return EFAULT;
+    }
 
     int res = 0;
     int rc = desc->Ioctl(op, arg, &res, proc);
+    desc->Unref();
     if (rc < 0)
         rc = -rc; // ioctl always returns errors as a positive value
 
@@ -510,7 +560,7 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
         return -ENOENT;
 
     if ((flags & AT_EMPTY_PATH) == 0) {
-        char* kPath = new char[pathLen];
+        char* kPath = new char[pathLen + 1];
         if (!UserRead(path, kPath, pathLen, proc)) {
             delete[] kPath;
             return -EFAULT;
@@ -518,45 +568,63 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
 
         kPath[pathLen] = 0;
 
-        if (kPath[0] == '/')
+        if (kPath[0] == '/') {
             vnode = FS::g_rootVFS->GetRoot();
-        else if (fd == AT_FDCWD)
-            vnode = proc->GetCWD();
+            FS::RefVNode(vnode);
+        } else if (fd == AT_FDCWD)
+            vnode = proc->GetCWDRef();
         else {
             FileDescriptor* desc = manager->Get(fd);
             if (desc == nullptr || !desc->isOpen()) {
+                if (desc != nullptr)
+                    desc->Unref();
                 delete[] kPath;
                 return -EBADF;
             }
 
             if (desc->GetType() != FDType::Directory) {
+                desc->Unref();
                 delete[] kPath;
                 return -ENOTDIR;
             }
 
             vnode = desc->GetVNode();
+            FS::RefVNode(vnode);
+            desc->Unref();
             if (vnode == nullptr || vnode->GetType() != FS::VType::DIR) {
+                FS::UnrefVNode(vnode);
                 delete[] kPath;
                 return vnode == nullptr ? -EBADF : -ENOTDIR;
             }
         }
 
+        FS::VNode* newVNode;
         FS::VFS* fs;
-        int rc = FS::VFS_LookupPath(kPath, &vnode, &fs, vnode, proc->GetCred(), (flags & AT_SYMLINK_NOFOLLOW) == 0);
+        int rc = FS::VFS_LookupPath(kPath, &newVNode, &fs, vnode, proc->GetCred(), (flags & AT_SYMLINK_NOFOLLOW) == 0);
+        FS::UnrefVNode(vnode);
 
         delete[] kPath;
 
         if (rc < 0)
             return rc;
+        else {
+            FS::RefVNode(newVNode);
+            vnode = newVNode;
+        }
     } else {
         FileDescriptor* desc = manager->Get(fd);
-        if (desc == nullptr || !desc->isOpen() || (desc->GetType() != FDType::Directory && desc->GetType() != FDType::File && desc->GetType() != FDType::TTY))
+        if (desc == nullptr || !desc->isOpen() || (desc->GetType() != FDType::Directory && desc->GetType() != FDType::File && desc->GetType() != FDType::TTY)) {
+            if (desc != nullptr)
+                desc->Unref();
             return -EBADF;
+        }
 
         vnode = desc->GetVNode();
+        FS::RefVNode(vnode);
         if (vnode == nullptr) {
             if (desc->GetType() != FDType::TTY)
                 return -EBADF;
+            desc->Unref();
 
             Stat buf;
             memset(&buf, 0, sizeof(Stat));
@@ -570,7 +638,8 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
                 return -EFAULT;
 
             return ESUCCESS;
-        }
+        } else
+            desc->Unref();
     }
 
     Stat buf;
@@ -580,6 +649,8 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
     int rc = vnode->GetAttr(&attr);
     if (rc < 0)
         return rc;
+
+    FS::UnrefVNode(vnode);
 
     buf.dev = 0;
     buf.rdev = 0;
@@ -626,15 +697,19 @@ int sys_mkdirat(int dirFD, const char* path, size_t pathLen, mode_t mode) {
 
     FS::VNode* dirVNode = nullptr;
     if (dirFD == AT_FDCWD)
-        dirVNode = proc->GetCWD();
+        dirVNode = proc->GetCWDRef();
     else {
         FileDescriptor* desc = manager->Get(dirFD);
         if (desc == nullptr || !desc->isOpen() || desc->GetType() != FDType::Directory) {
+            if (desc != nullptr)
+                desc->Unref();
             delete[] kPath;
             return -EBADF;
         }
 
         dirVNode = desc->GetVNode();
+        FS::RefVNode(dirVNode);
+        desc->Unref();
     }
 
     if (dirVNode == nullptr) {
@@ -654,6 +729,7 @@ int sys_mkdirat(int dirFD, const char* path, size_t pathLen, mode_t mode) {
 
     FS::VNode* vnode = nullptr;
     int rc = FS::VFS_CreateDir(parent, name, dirVNode, cred, nullptr, &vnode);
+    FS::UnrefVNode(dirVNode);
 
     delete[] kPath;
 
@@ -662,10 +738,13 @@ int sys_mkdirat(int dirFD, const char* path, size_t pathLen, mode_t mode) {
 
     assert(vnode != nullptr);
 
+    FS::RefVNode(vnode);
+
     FS::VAttr attr{};
     vnode->Lock();
     rc = vnode->GetAttr(&attr);
     if (rc < 0) {
+        FS::UnrefVNode(vnode);
         vnode->Unlock();
         return rc;
     }
@@ -674,6 +753,189 @@ int sys_mkdirat(int dirFD, const char* path, size_t pathLen, mode_t mode) {
 
     rc = vnode->SetAttr(attr);
     vnode->Unlock();
+    FS::UnrefVNode(vnode);
+
+    return rc;
+}
+
+struct PollEntry {
+    EventWaitNode node;
+    FileDescriptor* desc;
+    size_t index;
+    uint32_t mask;
+};
+
+static int TimespecToMS(const timespec* ts, uint64_t* out) {
+    if (ts == nullptr) {
+        *out = UINT64_MAX;
+        return 0;
+    }
+
+    if (ts->tv_sec < 0 || ts->tv_nsec < 0 || ts->tv_nsec >= 1'000'000'000)
+        return -EINVAL;
+
+    uint64_t ms = (uint64_t)ts->tv_sec * 1000 + (ts->tv_nsec + 999'999) / 1'000'000;
+    *out = (ms >= UINT64_MAX / 2000) ? UINT64_MAX : ms;
+    return 0;
+}
+
+int doPoll(PollFD* fds, nfds_t nfds, const timespec* ts, Thread* thread) {
+    if (nfds > MAX_FD)
+        return -EINVAL;
+
+    Process* proc = thread->GetParent();
+    FileDescriptorManager* manager = proc->GetFDManager();
+    if (manager == nullptr)
+        return -ENOTSUP;
+
+    uint64_t timeoutMS;
+    if (int rc = TimespecToMS(ts, &timeoutMS); rc < 0)
+        return rc;
+
+    PollFD* kFDs = nullptr;
+    PollEntry* entries = nullptr;
+    EventWaitNode** nodePtrs = nullptr;
+
+    if (nfds > 0) {
+        kFDs = new PollFD[nfds];
+        entries = new PollEntry[nfds]();
+        nodePtrs = new EventWaitNode*[nfds];
+        if (kFDs == nullptr || entries == nullptr || nodePtrs == nullptr) {
+            if (kFDs != nullptr)
+                delete[] kFDs;
+            if (entries != nullptr)
+                delete[] entries;
+            if (nodePtrs != nullptr)
+                delete[] nodePtrs;
+            return -ENOMEM;
+        }
+        if (!UserRead(fds, kFDs, nfds * sizeof(PollFD), proc)) {
+            delete[] kFDs;
+            delete[] entries;
+            delete[] nodePtrs;
+            return -EFAULT;
+        }
+    }
+
+    size_t n = 0;
+    int nval = 0;
+
+    for (size_t i = 0; i < nfds; i++) {
+        kFDs[i].revents = 0;
+
+        if (kFDs[i].fd < 0)
+            continue; // ignore negative FDs
+
+        FileDescriptor* d = manager->Get(kFDs[i].fd);
+        if (d == nullptr) {
+            kFDs[i].revents = POLLNVAL;
+            nval++;
+            continue;
+        }
+
+        uint32_t events = (unsigned short)kFDs[i].events;
+        PollEntry& e = entries[n];
+        e.desc = d;
+        e.index = i;
+        e.mask = events | POLLERR | POLLHUP | POLLNVAL;
+        e.node.requestedEvents = e.mask;
+        e.node.queue = d->GetPollQueue(events);
+        nodePtrs[n++] = &e.node;
+    }
+
+    Event::RegisterWaitNodes(nodePtrs, n);
+
+    uint64_t deadline = (timeoutMS == UINT64_MAX) ? UINT64_MAX : HAL_GetNSTicks() / 1'000'000 + timeoutMS;
+    int result = 0;
+
+    while (true) {
+        for (size_t j = 0; j < n; j++)
+            entries[j].node.triggeredEvents = 0;
+
+        int ready = nval;
+        for (size_t j = 0; j < n; j++) {
+            PollFD& p = kFDs[entries[j].index];
+            uint32_t r = entries[j].desc->PollReady((unsigned short)p.events) & entries[j].mask;
+            p.revents = (short)r;
+            if (r != 0)
+                ready++;
+        }
+        if (ready > 0) {
+            result = ready;
+            break;
+        }
+
+        uint64_t remaining = UINT64_MAX;
+        if (deadline != UINT64_MAX) {
+            uint64_t now = HAL_GetNSTicks() / 1'000'000;
+            if (now >= deadline) {
+                result = 0;
+                break;
+            }
+            remaining = deadline - now;
+        }
+
+        int rc = Event::BlockOnWaitNodes(nodePtrs, n, remaining);
+        if (rc == -EINTR) {
+            result = -EINTR;
+            break;
+        }
+    }
+
+    Event::UnregisterWaitNodes(nodePtrs, n);
+    for (size_t j = 0; j < n; j++)
+        entries[j].desc->Unref();
+
+    if (nfds > 0 && result >= 0 && !UserWrite(fds, kFDs, nfds * sizeof(PollFD), proc))
+        result = -EFAULT;
+
+    delete[] kFDs;
+    delete[] entries;
+    delete[] nodePtrs;
+    return result;
+}
+
+int sys_poll(PollFD* fds, nfds_t nfds, int timeout) {
+    Thread* current = Thread::GetCurrentThread();
+    
+    timespec ts;
+    const timespec* p = nullptr;
+    if (timeout >= 0) {
+        ts = { timeout / 1000, (timeout % 1000) * 1000000};
+        p = &ts;
+    }
+    return doPoll(fds, nfds, p, current);
+}
+
+int sys_ppoll(PollFD* fds, nfds_t nfds, const timespec* ts, const sigset_t* mask) {
+    Thread* current = Thread::GetCurrentThread();
+    Process* proc = current->GetParent();
+
+    timespec kts;
+    sigset_t sigset;
+    sigset_t savedSet;
+
+    if (ts != nullptr) {
+        if (!UserRead(ts, &kts, sizeof(timespec), proc))
+            return -EFAULT;
+    }
+
+    if (mask != nullptr) {
+        if (!UserRead(mask, &sigset, sizeof(sigset), proc))
+            return -EFAULT;
+
+        SIGNAL_CLEAR(&sigset, SIGKILL);
+        SIGNAL_CLEAR(&sigset, SIGSTOP);
+        current->ChangeSignalMask(SIG_SETMASK, &sigset, &savedSet);
+    }
+
+    int rc = doPoll(fds, nfds, ts != nullptr ? &kts : nullptr, current);
+    if (mask != nullptr) {
+        if (rc == -EINTR)
+            current->SetReturnSignalMask(&savedSet);
+        else
+            current->ChangeSignalMask(SIG_SETMASK, &savedSet, nullptr);
+    }
 
     return rc;
 }

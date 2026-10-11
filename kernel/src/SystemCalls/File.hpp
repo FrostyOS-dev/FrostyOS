@@ -22,6 +22,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdint.h>
 #include <time.h>
 
+#include "Signal.hpp"
+
 typedef long ssize_t;
 typedef int gid_t;
 typedef int uid_t;
@@ -99,6 +101,14 @@ struct Stat {
 #define AT_EMPTY_PATH 0x1000
 #define AT_FDCWD -100
 
+struct PollFD {
+	int fd;
+	short events;
+	short revents;
+};
+
+typedef unsigned long nfds_t;
+
 // pathLen does NOT include null-termination
 int sys_open(const char* path, size_t pathLen, int flags, mode_t mode);
 int sys_close(int fd);
@@ -125,5 +135,8 @@ int sys_ioctl(int fd, size_t op, void* arg, int* result);
 int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags);
 
 int sys_mkdirat(int dirFD, const char* path, size_t pathLen, mode_t mode);
+
+int sys_poll(PollFD* fds, nfds_t nfds, int timeout);
+int sys_ppoll(PollFD* fds, nfds_t nfds, const timespec* ts, const sigset_t* mask);
 
 #endif /* _SYSCALL_FILE_HPP */

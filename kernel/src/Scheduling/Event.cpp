@@ -1,3 +1,20 @@
+/*
+Copyright (©) 2026  Frosty515
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 #include "Event.hpp"
 #include "Scheduler.hpp"
 #include "Thread.hpp"
@@ -66,22 +83,7 @@ void EventWaitQueue::Trigger(uint32_t events, void* data) {
             Thread* thread = current->thread;
             
             spinlock_acquire(&thread->eventLock);
-            if (thread->eventWaitActive) {
-                thread->eventWaitActive = false;
-
-                Scheduler::ProcessorState* procState = thread->GetCPUInfo()->state;
-                if (procState != nullptr && thread->sleepRemainingTime > 0 && thread->sleepRemainingTime != UINT64_MAX) {
-                    procState->sleepingThreads.lock();
-                    procState->sleepingThreads.remove(thread);
-                    procState->sleepingThreads.unlock();
-                }
-
-                thread->sleepRemainingTime = 0;
-                thread->yieldCallback = {};
-                
-                // Add the thread back to the scheduler run queue
-                Scheduler::AddExistingThread(thread);
-            }
+            thread->WakeFromEventWait();
             spinlock_release(&thread->eventLock);
         }
         current = current->next;
@@ -106,9 +108,12 @@ namespace Event {
 
             nodes[i]->threadNext = currentThread->activeEventNodes;
             currentThread->activeEventNodes = nodes[i];
+            spinlock_release(&currentThread->eventLock);
 
             if (nodes[i]->queue != nullptr)
                 nodes[i]->queue->AddListener(nodes[i]);
+
+            spinlock_acquire(&currentThread->eventLock);
         }
         spinlock_release(&currentThread->eventLock);
         Processor::EnableInterrupts(intState);
@@ -133,7 +138,14 @@ namespace Event {
             return triggeredCount;
         }
 
+        if (currentThread->HasPendingUnblockedSignals()) {
+            spinlock_release(&currentThread->eventLock);
+            Processor::EnableInterrupts(intState);
+            return -EINTR;
+        }
+
         currentThread->eventWaitActive = true;
+        __atomic_store_n(&currentThread->blocked, true, __ATOMIC_RELEASE);
 
         Scheduler::RemoveCurrentThread(true);
         currentThread->sleepRemainingTime = timeoutMS;
@@ -143,10 +155,8 @@ namespace Event {
             }, &currentThread->eventLock
         };
 
-        // spinlock_release(&currentThread->eventLock);
         Scheduler_SaveAndYield(currentThread);
 
-        intState = Processor::DisableInterrupts();
         spinlock_acquire(&currentThread->eventLock);
 
         currentThread->eventWaitActive = false;
@@ -174,14 +184,13 @@ namespace Event {
         Scheduler::ProcessorState* state = GetCurrentProcessorState();
         Thread* currentThread = state->currentThread;
 
-        spinlock_acquire(&currentThread->eventLock);
-        currentThread->eventWaitActive = false;
-
         for (size_t i = 0; i < count; i++) {
             if (nodes[i]->queue != nullptr)
-                nodes[i]->queue->RemoveListener(nodes[i]);
+            nodes[i]->queue->RemoveListener(nodes[i]);
         }
-
+    
+        spinlock_acquire(&currentThread->eventLock);
+        currentThread->eventWaitActive = false;
         currentThread->activeEventNodes = nullptr;
         spinlock_release(&currentThread->eventLock);
         Processor::EnableInterrupts(intState);

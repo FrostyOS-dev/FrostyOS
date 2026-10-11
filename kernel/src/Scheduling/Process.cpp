@@ -124,8 +124,10 @@ bool Process::Create(bool initAlloc) {
         FS::VNode* vnode;
         FS::VFS* fs;
         int rc = FS::VFS_LookupPath("/", &vnode, &fs, nullptr, m_cred);
-        if (rc == 0) // not having a cwd isn't fatal
+        if (rc == 0) { // not having a cwd isn't fatal
+            FS::RefVNode(vnode);
             m_cwd = vnode;
+        }
     }
     return true;
 }
@@ -274,6 +276,12 @@ void Process::SetFDManager(FileDescriptorManager* manager) {
 
 FS::VNode* Process::GetCWD() {
     return m_cwd;
+}
+
+FS::VNode* Process::GetCWDRef() {
+    FS::VNode* vnode = m_cwd;
+    FS::RefVNode(vnode);
+    return vnode;
 }
 
 void Process::SetCWD(FS::VNode* cwd) {

@@ -130,6 +130,8 @@ public:
     void ChangeSignalMask(int how, sigset_t* newSet, sigset_t* oldSet);
     void GetPendingSignals(sigset_t* set);
 
+    void SetReturnSignalMask(sigset_t* mask);
+
     sigset_t& GetBlockedSignals();
     sigset_t& GetPendingSignals();
 
@@ -138,7 +140,12 @@ public:
 
     bool HasPendingUnblockedSignals();
 
+    bool TryClaimWake();
+
+    bool WakeFromEventWait();
+
     uint64_t sleepRemainingTime;
+    bool isSleeping;
     YieldCallback yieldCallback;
 
     FutexWaitQueue* blockedFutex = nullptr;
@@ -147,6 +154,8 @@ public:
     spinlock_t eventLock;
     bool eventWaitActive;
     EventWaitNode* activeEventNodes;
+
+    bool blocked;
 
 private:
     ThreadEntryPoint m_EntryPoint;
@@ -164,7 +173,6 @@ private:
 
     bool m_InSchedList;
     bool m_InProcList;
-    bool m_IsSleeping;
 
     struct {
         bool deleteThis;
@@ -177,6 +185,8 @@ private:
 
     sigset_t m_blockedSignals;
     sigset_t m_pendingSignals;
+    sigset_t m_returnSignals;
+    bool m_hasReturnSignalMask;
     bool m_inSignalHandler;
     spinlock_t m_signalLock;
 };

@@ -164,20 +164,18 @@ namespace FS {
         }
 
         m_vfsMounted = nullptr;
-        m_refCount = 1;
-
-        m_refCount++;
+        m_refCount = 1; // FS's reference
 
         if (parent != nullptr) {
             DevTempFSVNode* fsVNode = static_cast<DevTempFSVNode*>(parent);
             fsVNode->m_children.lock();
             fsVNode->m_children.insert(this);
             fsVNode->m_children.unlock();
+            RefVNode(this);
+            RefVNode(m_parent);
         }
 
         m_parent = parent;
-        if (parent != nullptr)
-            parent->GetRefCount()++;
 
         return ESUCCESS;
     }

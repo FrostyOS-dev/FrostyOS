@@ -106,6 +106,9 @@ public:
 
     void SetTermiosCallback(termiosCallback callback, void* data);
 
+    EventWaitQueue* GetPollQueue(TTYStream s);
+    uint32_t PollReady(TTYStream s, uint32_t events);
+
     static bool CanRead(TTYStream stream);
     static bool CanWrite(TTYStream stream);
 

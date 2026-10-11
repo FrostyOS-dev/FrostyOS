@@ -38,13 +38,15 @@ int sys_clockget(int clock, timespec* time) {
         t.tv_sec = HAL_GetUnixEpochTime();
         if (t.tv_sec == INT64_MAX)
             return -ENOSYS;
-        t.tv_nsec = t.tv_sec * 1'000'000'000;
+        t.tv_nsec = 0;
         break;
     case CLOCK_MONOTONIC:
-    case CLOCK_BOOTTIME:
-        t.tv_nsec = HAL_GetNSTicks();
-        t.tv_sec = t.tv_nsec / 1'000'000'000;
+    case CLOCK_BOOTTIME: {
+        uint64_t ns = HAL_GetNSTicks();
+        t.tv_nsec = ns % 1'000'000'000;
+        t.tv_sec = ns / 1'000'000'000;
         break;
+    }
     default:
         return -ENOSYS;
     }
