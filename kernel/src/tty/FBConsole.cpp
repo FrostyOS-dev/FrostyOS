@@ -29,11 +29,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <HAL/drivers/Video/FBVideo/FBDisplay.hpp>
 #include <HAL/drivers/Video/FBVideo/FBVideoDevice.hpp>
 
-FBConsole::FBConsole() : m_display(nullptr), m_frameBuffer(nullptr), m_bg(), m_fg(), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_buffer(nullptr) {
+FBConsole::FBConsole() : m_display(nullptr), m_frameBuffer(nullptr), m_bg(), m_fg(), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_buffer(nullptr), m_wrapPending(false), m_scrollTop(0), m_scrollBottom(0) {
 
 }
 
-FBConsole::FBConsole(Video::FBDisplay* display, Colour bg, Colour fg) : m_display(display), m_frameBuffer(nullptr), m_bg(bg), m_fg(fg), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_buffer(nullptr) {
+FBConsole::FBConsole(Video::FBDisplay* display, Colour bg, Colour fg) : m_display(display), m_frameBuffer(nullptr), m_bg(bg), m_fg(fg), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_buffer(nullptr), m_wrapPending(false), m_scrollTop(0), m_scrollBottom(0) {
     if (m_display != nullptr)
         m_frameBuffer = m_display->GetFrameBuffer();
 }
@@ -50,6 +50,8 @@ int FBConsole::Init() {
 
     m_numberOfRows = m_frameBuffer->height / CHAR_HEIGHT;
     m_numberOfColumns = m_frameBuffer->width / CHAR_WIDTH;
+
+    ResetScrollRegion();
 
     m_cursorX = 0;
     m_cursorY = 0;
@@ -142,71 +144,170 @@ void FBConsole::PrintChar(char c) {
         break;
     case '\r':
         m_cursorX = 0;
+        m_wrapPending = false;
         break;
     case '\t': {
-        uint64_t col = m_cursorX / CHAR_WIDTH;
-        uint64_t next = (col + 8) & ~UINT64_C(7);
+        if (m_numberOfColumns == 0)
+            break;
+        uint64_t next = (CursorCol() + 8) & ~UINT64_C(7);
         if (next >= m_numberOfColumns)
             next = m_numberOfColumns - 1;
         m_cursorX = next * CHAR_WIDTH;
+        m_wrapPending = false;
         break;
     }
     case '\f':
         BlankCells(0, m_numberOfColumns * m_numberOfRows);
         m_cursorX = 0;
         m_cursorY = 0;
+        m_wrapPending = false;
         break;
     default:
-        if (c >= ' ' && c < 0x7F) {
-            SetCell((m_cursorY / CHAR_HEIGHT) * m_numberOfColumns + (m_cursorX / CHAR_WIDTH), c);
-            m_cursorX += CHAR_WIDTH;
-            if (m_cursorX >= (m_numberOfColumns * CHAR_WIDTH))
+        if (c >= ' ' && c < 0x7F && m_numberOfColumns > 0 && m_numberOfRows > 0) {
+            if (m_wrapPending)
                 NewLine();
+
+            SetCell(CursorRow() * m_numberOfColumns + CursorCol(), c);
+
+            if (CursorCol() + 1 >= m_numberOfColumns) // Deferred wrap
+                m_wrapPending = true;
+            else
+                m_cursorX += CHAR_WIDTH;
         }
         break;
     }
 }
 
 void FBConsole::Backspace() {
+    if (m_wrapPending) {
+        m_wrapPending = false;
+        return;
+    }
+
     if (m_cursorX == 0) {
         if (m_cursorY > 0) {
             m_cursorY -= CHAR_HEIGHT;
             m_cursorX = (m_numberOfColumns - 1) * CHAR_WIDTH;
         }
-    }
-    else
+    } else
         m_cursorX -= CHAR_WIDTH;
-
-    // SetCell((m_cursorY / CHAR_HEIGHT) * m_numberOfColumns + (m_cursorX / CHAR_WIDTH), ' ');
 }
 
 void FBConsole::NewLine() {
     m_cursorX = 0;
-    m_cursorY += CHAR_HEIGHT;
+    LineFeed();
+}
 
-    if (m_cursorY >= (m_numberOfRows * CHAR_HEIGHT))
-        Scroll(1);
+void FBConsole::LineFeed() {
+    m_wrapPending = false;
+    uint64_t row = CursorRow();
+    if (row == m_scrollBottom)
+        ScrollRows(m_scrollTop, m_scrollBottom, 1, true);
+    else if (row + 1 < m_numberOfRows)
+        m_cursorY = (row + 1) * CHAR_HEIGHT;
+}
+
+void FBConsole::ReverseLineFeed() {
+    m_wrapPending = false;
+    uint64_t row = CursorRow();
+    if (row == m_scrollTop)
+        ScrollRows(m_scrollTop, m_scrollBottom, 1, false);
+    else if (row > 0)
+        m_cursorY = (row - 1) * CHAR_HEIGHT;
 }
 
 void FBConsole::Scroll(uint64_t n) {
-    m_cursorY -= n * CHAR_HEIGHT;
-    if (m_buffer == nullptr)
+    ScrollRows(m_scrollTop, m_scrollBottom, n, true);
+}
+
+void FBConsole::ScrollDown(uint64_t n) {
+    ScrollRows(m_scrollTop, m_scrollBottom, n, false);
+}
+
+bool FBConsole::SetScrollRegion(uint64_t top, uint64_t bottom) {
+    if (m_numberOfRows == 0)
+        return false;
+    if (bottom >= m_numberOfRows)
+        bottom = m_numberOfRows - 1;
+    if (top >= bottom)
+        return false; // must be at least 2 rows
+    m_scrollTop = top;
+    m_scrollBottom = bottom;
+    return true;
+}
+
+void FBConsole::InsertLines(uint64_t n) {
+    uint64_t row = CursorRow();
+    if (row < m_scrollTop || row > m_scrollBottom)
         return;
-    size_t keep = (m_cursorY / CHAR_HEIGHT) * m_numberOfColumns;
-    memmove(m_buffer, m_buffer + n * m_numberOfColumns, keep * sizeof(FBConsoleCell));
-    for (size_t i = 0; i < keep; i++)
-        m_buffer[i].dirty = true;
-    BlankCells(keep, n * m_numberOfColumns);
+    ScrollRows(row, m_scrollBottom, n, false);
+    m_cursorX = 0;
+    m_wrapPending = false;
+}
+
+void FBConsole::DeleteLines(uint64_t n) {
+    uint64_t row = CursorRow();
+    if (row < m_scrollTop || row > m_scrollBottom)
+        return;
+    ScrollRows(row, m_scrollBottom, n, true);
+    m_cursorX = 0;
+    m_wrapPending = false;
+}
+
+void FBConsole::InsertChars(uint64_t n) {
+    if (m_buffer == nullptr || m_numberOfColumns == 0 || m_numberOfRows == 0)
+        return;
+    m_wrapPending = false;
+
+    uint64_t cols = m_numberOfColumns;
+    uint64_t col = CursorCol();
+    uint64_t row = CursorRow();
+    FBConsoleCell* line = m_buffer + row * cols;
+
+    n = MIN(n, cols - col);
+    memmove(line + col + n, line + col, (cols - col - n) * sizeof(FBConsoleCell));
+    for (uint64_t i = col + n; i < cols; i++)
+        line[i].dirty = true;
+    BlankCells(row * cols + col, n);
+}
+
+void FBConsole::DeleteChars(uint64_t n) {
+    if (m_buffer == nullptr || m_numberOfColumns == 0 || m_numberOfRows == 0)
+        return;
+    m_wrapPending = false;
+
+    uint64_t cols = m_numberOfColumns;
+    uint64_t col = CursorCol();
+    uint64_t row = CursorRow();
+    FBConsoleCell* line = m_buffer + row * cols;
+
+    n = MIN(n, cols - col);
+    uint64_t moved = cols - col - n;
+    memmove(line + col, line + col + n, moved * sizeof(FBConsoleCell));
+    for (uint64_t i = col; i < col + moved; i++)
+        line[i].dirty = true;
+    BlankCells(row * cols + cols - n, n);
+}
+
+void FBConsole::EraseChars(uint64_t n) {
+    if (m_buffer == nullptr || m_numberOfColumns == 0 || m_numberOfRows == 0)
+        return;
+    m_wrapPending = false;
+
+    uint64_t col = CursorCol();
+    n = MIN(n, m_numberOfColumns - col);
+    BlankCells(CursorRow() * m_numberOfColumns + col, n);
 }
 
 void FBConsole::SetCursor(uint64_t x, uint64_t y) {
     if (m_numberOfColumns > 0 && m_numberOfRows > 0) {
-        x = MIN(x, (m_numberOfColumns - 1) * CHAR_HEIGHT);
-        y = MIN(y, (m_numberOfRows - 1) * CHAR_WIDTH);
+        x = MIN(x, (m_numberOfColumns - 1) * CHAR_WIDTH);
+        y = MIN(y, (m_numberOfRows - 1) * CHAR_HEIGHT);
     }
 
     m_cursorX = x;
     m_cursorY = y;
+    m_wrapPending = false;
 }
 
 void FBConsole::GetCursor(uint64_t& x, uint64_t& y) {
@@ -271,6 +372,7 @@ void FBConsole::SetBuffer(FBConsoleCell* buf, size_t rows, size_t columns) {
     m_numberOfRows = MIN(rows, m_numberOfRows);
     m_numberOfColumns = MIN(columns, m_numberOfColumns);
     BlankCells(0, m_numberOfRows * m_numberOfColumns);
+    ResetScrollRegion();
 }
 
 void FBConsole::CreateBuffer() {
@@ -279,6 +381,7 @@ void FBConsole::CreateBuffer() {
 
     m_buffer = new FBConsoleCell[m_numberOfRows * m_numberOfColumns];
     BlankCells(0, m_numberOfRows * m_numberOfColumns);
+    ResetScrollRegion();
 }
 
 void FBConsole::EraseInLine(int mode) {
@@ -341,6 +444,43 @@ void FBConsole::SetCell(size_t i, char c) {
 void FBConsole::BlankCells(size_t start, size_t count) {
     for (size_t i = 0; i < count; i++)
         SetCell(start + i, ' ');
+}
+
+void FBConsole::ScrollRows(uint64_t top, uint64_t bottom, uint64_t n, bool up) {
+    if (m_buffer == nullptr || n == 0 || m_numberOfColumns == 0 || bottom >= m_numberOfRows || top > bottom)
+        return;
+
+    uint64_t cols = m_numberOfColumns;
+    uint64_t height = bottom - top + 1;
+    if (n > height)
+        n = height;
+    uint64_t moved = height - n;
+    FBConsoleCell* base = m_buffer + top * cols;
+
+    if (up) {
+        memmove(base, base + n * cols, moved * cols * sizeof(FBConsoleCell));
+        for (uint64_t i = 0; i < moved * cols; i++)
+            base[i].dirty = true;
+        BlankCells((top + moved) * cols, n * cols);
+    } else {
+        memmove(base + n * cols, base, moved * cols * sizeof(FBConsoleCell));
+        for (uint64_t i = n * cols; i < height * cols; i++)
+            base[i].dirty = true;
+        BlankCells(top * cols, n * cols);
+    }
+}
+
+void FBConsole::ResetScrollRegion() {
+    m_scrollTop = 0;
+    m_scrollBottom = m_numberOfRows > 0 ? m_numberOfRows - 1 : 0;
+}
+
+uint64_t FBConsole::CursorRow() const {
+    return m_numberOfRows > 0 ? MIN(m_cursorY / CHAR_HEIGHT, m_numberOfRows - 1) : 0;
+}
+
+uint64_t FBConsole::CursorCol() const {
+    return m_numberOfColumns > 0 ? MIN(m_cursorX / CHAR_WIDTH, m_numberOfColumns - 1) : 0;
 }
 
 

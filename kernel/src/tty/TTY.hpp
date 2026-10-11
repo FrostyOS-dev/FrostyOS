@@ -116,6 +116,8 @@ protected:
     bool EraseBufferedChar(); // remove last char of the pending line and erase its echo
     uint64_t GetOutputColumn();
 
+    bool TakePendingEOF();
+
     TTYBackend* m_inputBackend;
     TTYBackend* m_outputBackend;
     TTYBackend* m_debugBackend;
@@ -127,6 +129,7 @@ protected:
     char m_internalBuffer[TTY_INTERNAL_BUFFER_SIZE];
     uint8_t m_internalWidths[TTY_INTERNAL_BUFFER_SIZE];
     uint64_t m_internalBufferOffset;
+    uint32_t m_eofPending;
 
     // interrupt-safe SPMC ringbuffer
     RingBuffer<char, TTY_READ_BUFFER_SIZE> m_readBuffer;

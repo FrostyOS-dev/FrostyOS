@@ -59,7 +59,17 @@ public:
     void Backspace();
     void NewLine();
 
+    void LineFeed();
+    void ReverseLineFeed();
     void Scroll(uint64_t n);
+    void ScrollDown(uint64_t n);
+    bool SetScrollRegion(uint64_t top, uint64_t bottom);
+
+    void InsertLines(uint64_t n);
+    void DeleteLines(uint64_t n);
+    void InsertChars(uint64_t n);
+    void DeleteChars(uint64_t n);
+    void EraseChars(uint64_t n);
 
     void SetCursor(uint64_t x, uint64_t y);
     void GetCursor(uint64_t& x, uint64_t& y);
@@ -86,6 +96,11 @@ private:
     void SetCell(size_t index, char c);
     void BlankCells(size_t start, size_t count);
 
+    void ScrollRows(uint64_t top, uint64_t bottom, uint64_t n, bool up);
+    void ResetScrollRegion();
+    uint64_t CursorRow() const;
+    uint64_t CursorCol() const;
+
     Video::FBDisplay* m_display;
     FrameBuffer* m_frameBuffer;
     Colour m_bg;
@@ -97,9 +112,9 @@ private:
     uint64_t m_numberOfColumns;
 
     FBConsoleCell* m_buffer;
-    // uint64_t m_oldCursorX;
-    // uint64_t m_oldCursorY;
-    // bool m_fullFlush;
+    bool m_wrapPending;
+    uint64_t m_scrollTop;
+    uint64_t m_scrollBottom;
 };
 
 extern FBConsole* g_KFBConsole;

@@ -52,11 +52,11 @@ static inline bool IsSpecialChar(char c, char special) {
     return special != '\0' && c == special;
 }
 
-TTY::TTY() : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termios(), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_internalBufferOffset(0), m_type(TTYType::Invalid) {
+TTY::TTY() : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termios(), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_internalBufferOffset(0), m_eofPending(0), m_type(TTYType::Invalid) {
     
 }
 
-TTY::TTY(TTYType type) : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termios(), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_internalBufferOffset(0), m_type(type) {
+TTY::TTY(TTYType type) : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termios(), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_internalBufferOffset(0), m_eofPending(0), m_type(type) {
 
 }
 
@@ -101,12 +101,16 @@ int TTY::Read(char* buf, size_t size, size_t* realCount) {
     // time is in 1/10 of a second, we want milliseconds, use UINT64_MAX to sleep indefinitely
     size_t timeMS = (time == 0) ? UINT64_MAX : (time * 100);
     size_t readCount = 0;
+    bool canonical = (m_termios.c_lflag & ICANON) > 0;
 
     while (readCount < min && readCount < size) {
         while (readCount < size && m_readBuffer.pop(buf[readCount]))
             readCount++;
 
         if (readCount >= min || readCount >= size)
+            break;
+
+        if (canonical && readCount == 0 && TakePendingEOF())
             break;
 
         EventWaitNode waitNode;
@@ -117,7 +121,7 @@ int TTY::Read(char* buf, size_t size, size_t* realCount) {
 
         // Wait for the event
         int rc = Event::WaitOnEvents(nodes, 1, timeMS);
-        if (rc < 0 && rc != ETIMEDOUT) {
+        if (rc < 0 && rc != -ETIMEDOUT) {
             if (readCount > 0)
                 break;
             return rc;
@@ -194,9 +198,11 @@ void TTY::HandleInput(char c) {
         }
         
         bool flush = false;
-        if (IsSpecialChar(c, m_termios.c_cc[VEOF])) // EOF
+        bool eofOnEmpty = false;
+        if (IsSpecialChar(c, m_termios.c_cc[VEOF])) { // EOF
             flush = true;
-        else {
+            eofOnEmpty = (m_internalBufferOffset == 0);
+        } else {
             uint8_t width = EchoChar(c);
             m_internalBuffer[m_internalBufferOffset] = c;
             m_internalWidths[m_internalBufferOffset] = width;
@@ -213,6 +219,9 @@ void TTY::HandleInput(char c) {
             memset(m_internalBuffer, 0, m_internalBufferOffset);
             memset(m_internalWidths, 0, m_internalBufferOffset);
             m_internalBufferOffset = 0;
+
+            if (eofOnEmpty)
+                __atomic_fetch_add(&m_eofPending, 1, __ATOMIC_RELEASE);
 
             m_inputWaitQueue.Trigger(POLLIN);
         }
@@ -256,9 +265,12 @@ TTYBackend* TTY::GetDebugBackend() const {
 }
 
 void TTY::Seek(uint64_t pos) {
-    m_inputBackend->Seek(pos);
-    m_outputBackend->Seek(pos);
-    m_debugBackend->Seek(pos);
+    if (m_inputBackend != nullptr)
+        m_inputBackend->Seek(pos);
+    if (m_outputBackend != nullptr)
+        m_outputBackend->Seek(pos);
+    if (m_debugBackend != nullptr)
+        m_debugBackend->Seek(pos);
 }
 
 uint64_t TTY::GetMaxSeek() const {
@@ -294,15 +306,17 @@ int TTY::Ioctl(uint64_t op, void* arg, int* result, Process* currentProc) {
     case TCGETS:
         if (!UserWrite(arg, &m_termios, sizeof(termios_t), currentProc))
             return EFAULT;
+        *result = 0;
         return 0;
     case TCSETS: {
         if (!UserRead(arg, &m_termios, sizeof(termios_t), currentProc))
-            return EFAULT;
+            return EFAULT; // TODO: validate termios
 
         int rc = 0;
         if (m_termiosCallback != nullptr)
             rc = m_termiosCallback(m_termiosCallbackData, &m_termios);
 
+        *result = 0;
         return rc;
     }
     case TIOCSCTTY:
@@ -324,19 +338,23 @@ int TTY::GetSize(winsize_t* size) {
 }
 
 void TTY::FlushOutput() {
-    m_outputBackend->Flush();
+    if (m_outputBackend != nullptr)
+        m_outputBackend->Flush();
 }
 
 void TTY::Lock(TTYStream stream) const {
     switch (stream) {
     case TTYStream::IN:
-        m_inputBackend->Lock();
+        if (m_inputBackend != nullptr)
+            m_inputBackend->Lock();
         break;
     case TTYStream::OUT:
-        m_outputBackend->Lock();
+        if (m_outputBackend != nullptr)
+            m_outputBackend->Lock();
         break;
     case TTYStream::DEBUG:
-        m_debugBackend->Lock();
+        if (m_debugBackend != nullptr)
+            m_debugBackend->Lock();
         break;
     default:
         break;
@@ -346,13 +364,16 @@ void TTY::Lock(TTYStream stream) const {
 void TTY::Unlock(TTYStream stream) const {
     switch (stream) {
     case TTYStream::IN:
-        m_inputBackend->Unlock();
+        if (m_inputBackend != nullptr)
+            m_inputBackend->Unlock();
         break;
     case TTYStream::OUT:
-        m_outputBackend->Unlock();
+        if (m_outputBackend != nullptr)
+            m_outputBackend->Unlock();
         break;
     case TTYStream::DEBUG:
-        m_debugBackend->Unlock();
+        if (m_debugBackend != nullptr)
+            m_debugBackend->Unlock();
         break;
     default:
         break;
@@ -360,9 +381,12 @@ void TTY::Unlock(TTYStream stream) const {
 }
 
 void TTY::ForceUnlockAll() const {
-    m_inputBackend->ForceUnlock();
-    m_outputBackend->ForceUnlock();
-    m_debugBackend->ForceUnlock();
+    if (m_inputBackend != nullptr)
+        m_inputBackend->ForceUnlock();
+    if (m_outputBackend != nullptr)
+        m_outputBackend->ForceUnlock();
+    if (m_debugBackend != nullptr)
+        m_debugBackend->ForceUnlock();
 }
 
 void TTY::EnableDebugMirroring() {
@@ -488,6 +512,15 @@ uint64_t TTY::GetOutputColumn() {
     return x;
 }
 
+bool TTY::TakePendingEOF() {
+    uint32_t n = __atomic_load_n(&m_eofPending, __ATOMIC_ACQUIRE);
+    while (n > 0) {
+        if (__atomic_compare_exchange_n(&m_eofPending, &n, n - 1, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+            return true;
+    }
+    return false;
+}
+
 static Colour& GetANSI256Colour(uint8_t index) {
     static Colour s_ansiColours[256];
     static bool s_initialized = false;
@@ -542,12 +575,12 @@ static inline uint8_t ClampColour(int v) {
     return v < 0 ? 0 : (v > 255 ? 255 : static_cast<uint8_t>(v));
 }
 
-GraphicalTTY::GraphicalTTY() : TTY(TTYType::Graphical), m_console(nullptr) {
+GraphicalTTY::GraphicalTTY() : TTY(TTYType::Graphical), m_savedX(0), m_savedY(0), m_console(nullptr) {
     ResetEscapeState();
     ResetAttributes();
 }
 
-GraphicalTTY::GraphicalTTY(FBConsole* console) : TTY(TTYType::Graphical), m_console(console) {
+GraphicalTTY::GraphicalTTY(FBConsole* console) : TTY(TTYType::Graphical), m_savedX(0), m_savedY(0), m_console(console) {
     ResetEscapeState();
     ResetAttributes();
 }
@@ -674,7 +707,7 @@ void GraphicalTTY::ProcessChar(char c) {
             break;
         case '\n':
         case '\v':
-            m_console->NewLine();
+            m_console->LineFeed();
             break;
         case '\f':
             m_console->ClearScreen();
@@ -717,6 +750,18 @@ void GraphicalTTY::ProcessChar(char c) {
             ApplyAttributes();
             m_console->EraseInDisplay(2);
             m_console->SetCursor(0, 0);
+            es.state = EscState::Ground;
+            break;
+        case 'D':
+            m_console->LineFeed();
+            es.state= EscState::Ground;
+            break;
+        case 'E':
+            m_console->NewLine();
+            es.state = EscState::Ground;
+            break;
+        case 'M':
+            m_console->ReverseLineFeed();
             es.state = EscState::Ground;
             break;
         case '\x1b': // double escape, maintain current state
@@ -797,7 +842,7 @@ void GraphicalTTY::ExecuteCSI(char final) {
     uint64_t x, y;
     m_console->GetCursor(x, y);
     uint64_t col = MIN(x / CHAR_WIDTH, cols - 1);
-    uint64_t row = MIN(y / CHAR_WIDTH, rows - 1);
+    uint64_t row = MIN(y / CHAR_HEIGHT, rows - 1);
     uint64_t n = CSIParam(params, count, 0, 1);
     int mode = (count > 0) ? params[0] : 0;
     bool move = true;
@@ -824,6 +869,18 @@ void GraphicalTTY::ExecuteCSI(char final) {
     case 'J': m_console->EraseInDisplay(mode); move = false; break;
     case 'K': m_console->EraseInLine(mode); move = false; break;
     case 'm': HandleSGR(); move = false; break;
+    case 'L': m_console->InsertLines(n); move = false; break;
+    case 'M': m_console->DeleteLines(n); move = false; break;
+    case '@': m_console->InsertChars(n); move = false; break;
+    case 'P': m_console->DeleteChars(n); move = false; break;
+    case 'X': m_console->EraseChars(n); move = false; break;
+    case 'S': m_console->Scroll(n); move = false; break;
+    case 'T': m_console->ScrollDown(n); move = false; break;
+    case 'r':
+        if (m_console->SetScrollRegion(n - 1, CSIParam(params, count, 1, static_cast<int>(rows)) - 1))
+            m_console->SetCursor(0, 0);
+        move = false;
+        break;
     default: move = false; break;
     }
 
