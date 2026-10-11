@@ -12,7 +12,7 @@ prepare() {
 }
 
 configure() {
-    CFLAGS="-g -fcommon" ${source_dir}/configure --host=x86_64-frostyos --prefix=/data --without-bash-malloc --disable-nls --disable-readline bash_cv_getcwd_malloc=yes gl_cv_func_getcwd_path_max=yes
+    CFLAGS="-g -fcommon" ${source_dir}/configure --host=x86_64-frostyos --prefix=/data --without-bash-malloc --disable-nls bash_cv_getcwd_malloc=yes gl_cv_func_getcwd_path_max=yes
 }
 
 build() {
