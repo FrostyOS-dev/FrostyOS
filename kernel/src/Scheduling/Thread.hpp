@@ -120,6 +120,7 @@ public:
     bool ShouldRemoveProc() const;
     bool PendingDelete() const;
     int64_t GetIntState() const;
+    uint64_t GetExitCode() const;
 
     bool Fork(Thread* other, uint64_t newReturnValue, CPU_Registers* regs);
 

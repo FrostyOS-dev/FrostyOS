@@ -651,10 +651,13 @@ namespace Scheduler {
                     break;
 
                 Process* proc = thread->GetParent(); 
-                if (proc != nullptr)
+                if (proc != nullptr) {
+                    if (thread == proc->GetMainThread())
+                        proc->SetExitStatus(thread->GetExitCode());
                     proc->RemoveThread(thread);
-                if (proc != nullptr && proc->GetMode() == ProcessMode::USER)
-                    GetCurrentProcessor()->DestroyExtraContext(thread->GetExtraContext());
+                    if (proc->GetMode() == ProcessMode::USER)
+                        GetCurrentProcessor()->DestroyExtraContext(thread->GetExtraContext());
+                }
                 thread->Delete();
 
                 bool shouldDeleteParent = thread->ShouldDeleteParent();
@@ -667,7 +670,6 @@ namespace Scheduler {
 
                     if (shouldRemoveProc) {
                         proc->SetState(ProcessState::ZOMBIE);
-                        // status should already be set
 
                         Process* parent = Scheduler::GetProcess(proc->GetPPID());
                         if (parent != nullptr) {

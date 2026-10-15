@@ -273,6 +273,10 @@ int64_t Thread::GetIntState() const {
     return m_deleteProp.intState;
 }
 
+uint64_t Thread::GetExitCode() const {
+    return m_deleteProp.exitCode;
+}
+
 bool Thread::Fork(Thread* other, uint64_t newReturnValue, CPU_Registers* regs) {
     // start with the stacks, then copy everything else
     if (m_Parent == nullptr)
