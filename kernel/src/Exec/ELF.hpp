@@ -20,6 +20,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
+#include <fs/VFS.hpp>
+
+#include <Scheduling/Process.hpp>
+
 #define EI_MAG0 0
 #define EI_MAG1 1
 #define EI_MAG2 2
@@ -144,8 +148,8 @@ struct auxv64list_t {
 
 class Process;
 
-int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv64list_t* auxv64, char** interp);
+int LoadELFFile(const char* path, void* base, Process* proc, const Credential& cred, FS::VNode* cwd, void** entry, auxv64list_t* auxv64, char** interp, FS::VAttr* execAttr);
 
-int CreateELFProcess(const char* path, Process* parent, char** argv, char** env, bool noStart = false, Process** newProc = nullptr);
+int CreateELFProcess(const char* path, Process* parent, char** argv, char** env, bool noStart = false, Process** newProc = nullptr, const Credential* callerCred = nullptr, FS::VNode* cwd = nullptr);
 
 #endif /* _ELF_HPP */

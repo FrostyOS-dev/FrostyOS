@@ -99,6 +99,8 @@ private:
     uint64_t m_refCount;
 
     Credential m_cred;
+    bool m_canRead;
+    bool m_canWrite;
 };
 
 #endif /* _FILE_DESCRIPTOR_HPP */

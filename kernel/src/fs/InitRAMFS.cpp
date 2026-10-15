@@ -121,7 +121,7 @@ int LoadInitRAMFS(void* data, size_t size) {
 
             FS::VNode* vnode = nullptr;
             FS::VFS* vfs = nullptr;
-            rc = FS::VFS_LookupPath(header->fileName, &vnode, &vfs, cwd, cred);
+            rc = FS::VFS_LookupPath(header->fileName, &vnode, &vfs, cwd, cred, false);
             if (rc < 0)
                 break;
 

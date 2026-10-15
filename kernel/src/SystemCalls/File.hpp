@@ -55,7 +55,7 @@ struct Stat {
 
 #define O_PATH 010000000
 
-#define O_ACCMODE (03 | O_PATH)
+#define O_ACCMODE  03
 #define O_RDONLY   00
 #define O_WRONLY   01
 #define O_RDWR     02
@@ -107,6 +107,11 @@ struct PollFD {
 	short revents;
 };
 
+struct UGIDs {
+    uid_t owner;
+    gid_t group;
+};
+
 typedef unsigned long nfds_t;
 
 // pathLen does NOT include null-termination
@@ -138,5 +143,8 @@ int sys_mkdirat(int dirFD, const char* path, size_t pathLen, mode_t mode);
 
 int sys_poll(PollFD* fds, nfds_t nfds, int timeout);
 int sys_ppoll(PollFD* fds, nfds_t nfds, const timespec* ts, const sigset_t* mask);
+
+int sys_fchmodat(int fd, const char* path, size_t pathLen, mode_t mode, int flags);
+int sys_fchownat(int fd, const char* path, size_t pathLen, UGIDs ids, int flags);
 
 #endif /* _SYSCALL_FILE_HPP */

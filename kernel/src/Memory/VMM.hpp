@@ -149,6 +149,7 @@ namespace VMM {
 
         bool HandlePageFault(PageFaultCode code, uint64_t virtAddr);
 
+        bool PrepareAccess(const void* addr, size_t size, bool write, bool user = true);
         bool ValidateRead(const void* addr, size_t size, bool user = true);
         bool ValidateWrite(const void* addr, size_t size, bool user = true);
         bool CopyStringFromUser(char* kernelDst, const void* userSrc, size_t maxSize, size_t* outSize, bool user = true);
@@ -163,6 +164,9 @@ namespace VMM {
     private:
         MapEntry* SplitMapEntry(MapEntry* entry, uint64_t newPageCount); // split a map entry so that entry has a page count of newPageCount, returns the new upper part
         bool Internal_FreePages(void* virtAddr, uint64_t totalCount, bool multipleRegions, bool lock); // lock controls whether the mapEntries should be locked, and if the vmRegionAllocator should be locked
+
+        bool ValidateAccess(const void* addr, size_t size, Protection need, bool user);
+        bool PageIsReady(uint64_t virt, bool write);
 
         // UVM fields
         PageMapper* m_pageMapper;

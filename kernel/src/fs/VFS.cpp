@@ -30,6 +30,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Memory/VMM.hpp>
 
+#include <Scheduling/Process.hpp>
+
+#include <SystemCalls/File.hpp>
 #include <SystemCalls/Memory.hpp>
 
 #define LINK_MAX 64
@@ -39,6 +42,38 @@ namespace FS {
     VFS* g_rootVFS = nullptr;
     VFS* g_VFSList = nullptr;
     Mutex g_listLock;
+
+    static bool CheckPermission(const VAttr& a, int want, const Credential& c) {
+        want &= 7;
+
+        if (c.euid == 0) // root bypasses r/w, but needs at least one x bit execute a non-directory
+            return !((want & ACCESS_X) > 0 && a.type != VType::DIR && (a.mode & 0111) == 0);
+
+        int granted;
+        if (c.euid == a.uid)
+            granted = (a.mode >> 6) & 7;
+        else if (c.egid == a.gid)
+            granted = (a.mode >> 3) & 7;
+        else
+            granted = a.mode & 7;
+
+        return (want & ~granted) == 0;
+    }
+
+    static int CheckCreate(VNode* dir, const Credential& cred) {
+        if (dir->GetType() != VType::DIR)
+            return -ENOTDIR;
+        return dir->Access(ACCESS_W | ACCESS_X, cred);
+    }
+
+    static void InheritFromParent(VAttr& attr, VNode* parent) {
+        VAttr p;
+        if (parent->GetAttr(&p) < 0 || (p.mode & S_ISGID) == 0)
+            return;
+        attr.gid = p.gid;
+        if (attr.type == VType::DIR)
+            attr.mode |= S_ISGID;
+    }
 
     VFS::VFS() : m_next(nullptr), m_nodeCovered(nullptr), m_root(nullptr), m_flags(0) {
 
@@ -79,6 +114,13 @@ namespace FS {
 
     VNode::~VNode() {
 
+    }
+
+    int VNode::Access(int mode, const Credential& cred) {
+        Lock();
+        VAttr snapshot = m_attr;
+        Unlock();
+        return CheckPermission(snapshot, mode, cred) ? ESUCCESS : -EACCES;
     }
 
     VFS* VNode::GetVFS() {
@@ -164,6 +206,9 @@ namespace FS {
         if (path == nullptr)
             return -EINVAL;
 
+        if (cred.euid != 0)
+            return -EACCES;
+
         VNode* vnode = nullptr;
         VFS* parentVFS = nullptr;
         int rc = VFS_LookupPath(path, &vnode, &parentVFS, cwd, cred);
@@ -192,6 +237,8 @@ namespace FS {
             break;
         }
         default:
+            UnrefVNode(vnode);
+            vnode->Unlock();
             return -EINVAL;
         }
 
@@ -199,6 +246,7 @@ namespace FS {
         rc = vfs->Mount(vnode, flags, backing, cred);
         UnrefVNode(vnode); // Mount should increase the refcount, so the temporary increase can be removed
         if (rc < 0) {
+            vfs->Unlock();
             vnode->Unlock();
             delete vfs;
             return rc;
@@ -221,137 +269,121 @@ namespace FS {
         if (path == nullptr || vnode == nullptr || vfs == nullptr)
             return -EINVAL;
 
-        VFS* currentVFS = g_rootVFS;
-        VNode* currentVNode = g_rootVFS->GetRoot();
-        VNode* parentDir = nullptr;
+        if (g_rootVFS == nullptr || g_rootVFS->GetRoot() == nullptr)
+            return -ENOSYS;
+
+        size_t pathLen = strlen(path);
+        if (pathLen > PATH_MAX)
+            return -ENAMETOOLONG;
+
         char pathBuffer[PATH_MAX + 1];
-        strcpy(pathBuffer, path);
+        memcpy(pathBuffer, path, pathLen + 1);
 
-        char const* currentPath = pathBuffer;
-
-        if (currentPath[0] != '/') {
+        VNode* current;
+        if (pathBuffer[0] == '/')
+            current = g_rootVFS->GetRoot();
+        else {
             if (cwd == nullptr)
                 return -EINVAL;
-            if (VFS* mounted = cwd->GetMountedVFS(); mounted != nullptr) {
-                currentVFS = mounted;
-                currentVNode = currentVFS->GetRoot();
-            } else {
-                currentVFS = cwd->GetVFS();
-                currentVNode = cwd;
-            }
-        } else if (currentPath[0] == '/')
-            currentPath = &pathBuffer[1];
-
-        if (currentPath[0] == '\0') {
-            *vfs = currentVFS;
-            *vnode = currentVNode;
-            return ESUCCESS;
+            current = cwd;
         }
 
+        const char* rest = pathBuffer;
         int symlinkDepth = 0;
+        bool mustBeDir = false;
 
-        char const* next = strchr(currentPath, '/');
         while (true) {
-            if (currentVFS == nullptr || currentVNode == nullptr)
-                return -ENOSYS;
-            if (VFS* mounted = currentVNode->GetMountedVFS(); mounted != nullptr) {
-                currentVFS = mounted;
-                currentVNode = currentVFS->GetRoot();
-            }
-            if (currentPath[0] == '/')
-                currentPath++;
-            if (currentPath[0] == '\0')
+            while (*rest == '/')
+                rest++;
+            if (*rest == '\0')
                 break;
 
-            if (currentVNode->GetType() == VType::LNK && (next == nullptr && followSymlink)) {
-                symlinkDepth++;
-                if (symlinkDepth > LINK_MAX)
-                    return -ELOOP;
+            size_t len = 0;
+            while (rest[len] != '\0' && rest[len] != '/')
+                len++;
+            if (len > NAME_MAX)
+                return -ENAMETOOLONG;
 
-                char target[NAME_MAX + 1];
-                int rc = currentVNode->ReadLink(target, sizeof(target), cred);
-                if (rc < 0)
-                    return rc;
+            const char* after = rest + len;
+            while (*after == '/')
+                after++;
 
-                const char* remainder = currentPath; // Unparsed remainder
-                size_t targetLen = strlen(target);
-                size_t remainderLen = strlen(remainder);
+            bool last = (*after == '\0');
+            bool trailingSlash = last && rest[len] == '/';
+            mustBeDir = trailingSlash;
 
-                bool addSlash = (remainderLen > 0 && targetLen > 0 && target[targetLen - 1] != '/');
-                size_t prefixLen = targetLen + (addSlash ? 1 : 0);
+            if (current->GetType() != VType::DIR)
+                return -ENOTDIR;
+            if (int rc = current->Access(ACCESS_X, cred); rc < 0)
+                return rc;
 
-                if (prefixLen + remainderLen > PATH_MAX)
-                    return -ENAMETOOLONG;
-
-                // Shift the unparsed remainder to its new position
-                memmove(pathBuffer + prefixLen, remainder, remainderLen + 1);
-
-                memcpy(pathBuffer, target, targetLen);
-                if (addSlash)
-                    pathBuffer[targetLen] = '/';
-                
-                currentPath = pathBuffer;
-
-                if (currentPath[0] == '/') {
-                    // Absolute symlink, revert to root
-                    currentVFS = g_rootVFS;
-                    currentVNode = g_rootVFS->GetRoot();
-                    currentPath++; // Skip leading slash
-                } else // Relative symlink
-                    currentVNode = parentDir;
-
-                // Recalculate 'next' for the newly injected path and restart loop
-                next = strchr(currentPath, '/');
+            if (len == 1 && rest[0] == '.') {
+                rest = after;
                 continue;
             }
 
-            size_t len = next == nullptr ? strlen(currentPath) : (size_t)(next - currentPath);
-            if (len == 2 && strncmp(currentPath, "..", 2) == 0) {
-                if (currentVNode->GetType() != VType::DIR)
-                    return -ENOTDIR;
-
-                VNode* parent = currentVNode->GetParent();
-                if (parent == nullptr) { // must be the root of a VFS
-                    parent = currentVFS->GetCoveredVNode();
-                    if (parent == nullptr)
-                        return -ENOENT; // must be at the root, can't go up any higher
-                    currentVFS = parent->GetVFS();
+            if (len == 2 && rest[0] == '.' && rest[1] == '.') {
+                if (current == current->GetVFS()->GetRoot()) {
+                    VNode* covered = current->GetVFS()->GetCoveredVNode();
+                    if (covered == nullptr) { // global root: can't go any higher up
+                        rest = after;
+                        continue;
+                    }
+                    current = covered;
                 }
+                VNode* parent = current->GetParent();
+                if (parent == nullptr)
+                    return -ENOENT;
+                current = parent;
+                rest = after;
+                continue;
+            }
 
-                parentDir = parent->GetParent();
-                currentVNode = parent;
-            } else if (!(len == 1 && currentPath[0] == '.')) {
-                if (currentVNode->GetType() != VType::DIR)
-                    return -ENOTDIR;
+            VNode* next = nullptr;
+            if (int rc = current->Lookup(rest, len, &next, cred); rc < 0)
+                return rc;
 
-                VNode* nextVNode = nullptr;
-                int rc = currentVNode->Lookup(currentPath, len, &nextVNode, cred);
-                if (rc < 0)
+            while (VFS* mounted = next->GetMountedVFS())
+                next = mounted->GetRoot();
+
+            bool follow = !last || followSymlink || trailingSlash;
+            if (next->GetType() == VType::LNK && follow) {
+                if (++symlinkDepth > LINK_MAX)
+                    return -ELOOP;
+
+                char target[PATH_MAX + 1] = {};
+                if (int rc = next->ReadLink(target, PATH_MAX, cred); rc < 0)
                     return rc;
 
-                parentDir = currentVNode;
-                currentVNode = nextVNode;
+                size_t targetLen = strlen(target);
+                if (targetLen == 0)
+                    return -ENOENT;
+
+                size_t remLen = strlen(after);
+                size_t prefixLen = targetLen + (remLen > 0 ? 1 : 0);
+                if (prefixLen + remLen > PATH_MAX)
+                    return -ENAMETOOLONG;
+
+                memmove(pathBuffer + prefixLen, after, remLen + 1);
+                memcpy(pathBuffer, target, targetLen);
+                if (remLen > 0)
+                    pathBuffer[targetLen] = '/';
+
+                rest = pathBuffer;
+                if (target[0] == '/')
+                    current = g_rootVFS->GetRoot();
+                continue;
             }
 
-            if (next == nullptr) {
-                currentVFS = currentVNode->GetVFS();
-                break;
-            }
-
-            currentPath = next;
-            if (currentPath[0] == '/')
-                currentPath++;
-            next = strchr(currentPath, '/');
+            current = next;
+            rest = after;
         }
 
-        if (VFS* mounted = currentVNode->GetMountedVFS(); mounted != nullptr) {
-            currentVFS = mounted;
-            currentVNode = currentVFS->GetRoot();
-        }
+        if (mustBeDir && current->GetType() != VType::DIR)
+            return -ENOTDIR;
 
-        *vnode = currentVNode;
-        *vfs = currentVFS;
-
+        *vnode = current;
+        *vfs = current->GetVFS();
         return ESUCCESS;
     }
 
@@ -365,6 +397,24 @@ namespace FS {
         if (rc < 0)
             return rc;
 
+        rc = CheckCreate(parent, cred);
+        if (rc < 0)
+            return rc;
+
+        size_t nameLen = strlen(name);
+        if (nameLen > NAME_MAX)
+            return -ENAMETOOLONG;
+
+        if ((nameLen == 1 && name[0] == '.') || (nameLen == 2 && name[0] == '.' && name[1] == '.'))
+            return -EEXIST;
+
+        VNode* temp;
+        parent->Lock();
+        if (parent->Lookup(name, nameLen, &temp, cred) == 0) {
+            parent->Unlock();
+            return -EEXIST;
+        }
+
         bool createdVNode = false;
 
         if (vnode == nullptr) {
@@ -376,21 +426,22 @@ namespace FS {
                 vnode = new DevTempFSVNode(vfs, nullptr);
                 break;
             default:
+                parent->Unlock();
                 return -ENOSYS;
             }
             createdVNode = true;
         }
 
-        size_t nameLen = strlen(name);
-        if (nameLen > NAME_MAX) {
-            if (createdVNode)
-                delete vnode;
-            return -ENAMETOOLONG;
+        if (vnode == nullptr) {
+            parent->Unlock();
+            return -ENOMEM;
         }
 
         time_t time = HAL_GetUnixEpochTime();
         VAttr attr = {VType::DIR, DEFAULT_DIR_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
+        InheritFromParent(attr, parent);
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
+        parent->Unlock();
         if (rc < 0) {
             if (createdVNode)
                 delete vnode;
@@ -413,6 +464,24 @@ namespace FS {
         if (rc < 0)
             return rc;
 
+        rc = CheckCreate(parent, cred);
+        if (rc < 0)
+            return rc;
+
+        size_t nameLen = strlen(name);
+        if (nameLen > NAME_MAX)
+            return -ENAMETOOLONG;
+
+        if ((nameLen == 1 && name[0] == '.') || (nameLen == 2 && name[0] == '.' && name[1] == '.'))
+            return -EEXIST;
+
+        VNode* temp;
+        parent->Lock();
+        if (parent->Lookup(name, nameLen, &temp, cred) == 0) {
+            parent->Unlock();
+            return -EEXIST;
+        }
+
         bool createdVNode = false;
 
         if (vnode == nullptr) {
@@ -424,21 +493,22 @@ namespace FS {
                 vnode = new DevTempFSVNode(vfs, nullptr);
                 break;
             default:
+                parent->Unlock();
                 return -ENOSYS;
             }
             createdVNode = true;
         }
 
-        size_t nameLen = strlen(name);
-        if (nameLen > NAME_MAX) {
-            if (createdVNode)
-                delete vnode;
-            return -ENAMETOOLONG;
+        if (vnode == nullptr) {
+            parent->Unlock();
+            return -ENOMEM;
         }
-        
+
         time_t time = HAL_GetUnixEpochTime();
         VAttr attr = {VType::REG, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
+        InheritFromParent(attr, parent);
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
+        parent->Unlock();
         if (rc < 0) {
             if (createdVNode)
                 delete vnode;
@@ -451,40 +521,6 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int VFS_Open(const char* path, VNode** out, VNode* cwd, const Credential& cred) {
-        if (path == nullptr || out == nullptr)
-            return -EINVAL;
-
-        VNode* vnode = nullptr;
-        VFS* vfs = nullptr;
-        int rc = VFS_LookupPath(path, &vnode, &vfs, cwd, cred);
-        if (rc < 0)
-            return rc;
-
-        vnode->Lock();
-        rc = vnode->Open(0, cred);
-        vnode->Unlock();
-        if (rc < 0)
-            return rc;
-
-        RefVNode(vnode);
-
-        *out = vnode;
-        return ESUCCESS;
-    }
-
-    int VFS_Close(VNode* vnode, const Credential& cred) {
-        if (vnode == nullptr)
-            return -EINVAL;
-
-        vnode->Lock();
-        int rc = vnode->Close(0, cred);
-        vnode->Unlock();
-        if (rc >= 0)
-            UnrefVNode(vnode);
-        return rc;
-    }
-
     int VFS_CreateSymlink(const char* path, const char* name, const char* dest, VNode* cwd, const Credential& cred, VNode* vnode, VNode** outVNode) {
         if (path == nullptr || name == nullptr)
             return -EINVAL;
@@ -494,6 +530,24 @@ namespace FS {
         int rc = VFS_LookupPath(path, &parent, &vfs, cwd, cred);
         if (rc < 0)
             return rc;
+
+        rc = CheckCreate(parent, cred);
+        if (rc < 0)
+            return rc;
+
+        size_t nameLen = strlen(name);
+        if (nameLen > NAME_MAX)
+            return -ENAMETOOLONG;
+
+        if ((nameLen == 1 && name[0] == '.') || (nameLen == 2 && name[0] == '.' && name[1] == '.'))
+            return -EEXIST;
+
+        VNode* temp;
+        parent->Lock();
+        if (parent->Lookup(name, nameLen, &temp, cred) == 0) {
+            parent->Unlock();
+            return -EEXIST;
+        }
 
         bool createdVNode = false;
 
@@ -506,24 +560,22 @@ namespace FS {
                 vnode = new DevTempFSVNode(vfs, nullptr);
                 break;
             default:
+                parent->Unlock();
                 return -ENOSYS;
             }
             createdVNode = true;
         }
 
-        if (vnode == nullptr)
+        if (vnode == nullptr) {
+            parent->Unlock();
             return -ENOMEM;
-
-        size_t nameLen = strlen(name);
-        if (nameLen > NAME_MAX) {
-            if (createdVNode)
-                delete vnode;
-            return -ENAMETOOLONG;
         }
-        
+
         time_t time = HAL_GetUnixEpochTime();
         VAttr attr = {VType::LNK, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
+        InheritFromParent(attr, parent);
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
+        parent->Unlock();
         if (rc < 0) {
             if (createdVNode)
                 delete vnode;
@@ -541,6 +593,92 @@ namespace FS {
             *outVNode = vnode;
 
         return ESUCCESS;
+    }
+
+    int VFS_Open(const char* path, int flags, VNode** out, VNode* cwd, const Credential& cred) {
+        if (path == nullptr || out == nullptr)
+            return -EINVAL;
+
+        VNode* vnode = nullptr;
+        VFS* vfs = nullptr;
+        int rc = VFS_LookupPath(path, &vnode, &vfs, cwd, cred);
+        if (rc < 0)
+            return rc;
+
+        int want = 0;
+        switch (flags & O_ACCMODE) {
+        case O_RDONLY:
+            want = ACCESS_R;
+            break;
+        case O_WRONLY:
+            want = ACCESS_W;
+            break;
+        case O_RDWR:
+            want = ACCESS_R | ACCESS_W;
+            break;
+        default:
+            return -EINVAL;
+        }
+        if ((flags & O_TRUNC) > 0)
+            want |= ACCESS_W;
+
+        if (vnode->GetType() == VType::DIR && (want & ACCESS_W) > 0)
+            return -EISDIR;
+
+        rc = vnode->Access(want, cred);
+        if (rc < 0)
+            return rc;
+
+        vnode->Lock();
+        rc = vnode->Open(flags, cred);
+        vnode->Unlock();
+        if (rc < 0)
+            return rc;
+
+        RefVNode(vnode);
+
+        *out = vnode;
+        return ESUCCESS;
+    }
+
+    int VFS_OpenExec(const char* path, VNode** out, VAttr* outAttr, VNode* cwd, const Credential& cred) {
+        if (path == nullptr || out == nullptr)
+            return -EINVAL;
+
+        VNode* vnode = nullptr;
+        VFS* vfs = nullptr;
+        int rc = VFS_LookupPath(path, &vnode, &vfs, cwd, cred);
+        if (rc < 0)
+            return rc;
+
+        vnode->Lock();
+        VAttr attr;
+        rc = vnode->GetAttr(&attr);
+        if (rc >= 0 && (attr.type != VType::REG || !CheckPermission(attr, ACCESS_X, cred)))
+            rc = -EACCES;
+        if (rc >= 0)
+            rc = vnode->Open(O_RDONLY, cred); // kernel does the reading, caller only needs execute
+        vnode->Unlock();
+        if (rc < 0)
+            return rc;
+
+        RefVNode(vnode);
+        *out = vnode;
+        if (outAttr != nullptr)
+            *outAttr = attr;
+        return ESUCCESS;
+    }
+
+    int VFS_Close(VNode* vnode, const Credential& cred) {
+        if (vnode == nullptr)
+            return -EINVAL;
+
+        vnode->Lock();
+        int rc = vnode->Close(0, cred);
+        vnode->Unlock();
+        if (rc >= 0)
+            UnrefVNode(vnode);
+        return rc;
     }
 
     int VFS_MapFile(void* hint, size_t length, VMM::Protection prot, int flags, bool user, VNode* vnode, uint64_t offset, void** addr, VMM::VMM* vmm, const Credential& cred) {
@@ -629,6 +767,103 @@ namespace FS {
         return ESUCCESS;
     }
 
+    static bool InGroup(gid_t gid, const Credential& c) {
+        return gid == c.egid; // future proofing for suplementary groups
+    }
+
+    int VFS_Chmod(VNode* vnode, mode_t mode, const Credential& cred) {
+        if (vnode == nullptr)
+            return -EINVAL;
+
+        vnode->Lock();
+
+        VAttr attr;
+        int rc = vnode->GetAttr(&attr);
+        if (rc < 0) {
+            vnode->Unlock();
+            return rc;
+        }
+
+        if (cred.euid != 0 && cred.euid != attr.uid) {
+            vnode->Unlock();
+            return -EPERM;
+        }
+
+        uint16_t newMode = mode & S_PERMMASK;
+        if (cred.euid != 0 && !InGroup(attr.gid, cred))
+            newMode &= (uint16_t)~S_ISGID;
+
+        attr.mode = newMode;
+        attr.ctime.tv_sec = HAL_GetUnixEpochTime();
+        attr.ctime.tv_nsec = 0;
+
+        rc = vnode->SetAttr(attr);
+        vnode->Unlock();
+        return rc;
+    }
+
+    int VFS_Chown(VNode* vnode, uid_t uid, gid_t gid, const Credential& cred) {
+        if (vnode == nullptr)
+            return -EINVAL;
+
+        vnode->Lock();
+
+        VAttr attr;
+        int rc = vnode->GetAttr(&attr);
+        if (rc < 0) {
+            vnode->Unlock();
+            return rc;
+        }
+
+        if (cred.euid != 0) {
+            bool owner = cred.euid == attr.uid;
+            if (uid != -1 && (!owner || uid != attr.uid)) {
+                vnode->Unlock();
+                return -EPERM;
+            }
+            if (gid != -1 && (!owner || (gid != attr.gid && !InGroup(gid, cred)))) {
+                vnode->Unlock();
+                return -EPERM;
+            }
+        }
+
+        if (uid != -1)
+            attr.uid = uid;
+        if (gid != -1)
+            attr.gid = gid;
+
+        if (attr.type != VType::DIR) {
+            attr.mode &= (uint16_t)~S_ISUID;
+            if ((attr.mode & 0010) > 0)
+                attr.mode &= (uint16_t)~S_ISGID;
+        }
+
+        attr.ctime.tv_sec = HAL_GetUnixEpochTime();
+        attr.ctime.tv_nsec = 0;
+
+        rc = vnode->SetAttr(attr);
+        vnode->Unlock();
+        return rc;
+    }
+
+    void VFS_ClearSetID(VNode* vnode, const Credential& cred) {
+        if (vnode == nullptr || cred.euid == 0)
+            return;
+
+        VAttr attr;
+        if (vnode->GetAttr(&attr) < 0)
+            return;
+
+        uint16_t kill = attr.mode & (S_ISUID | S_ISGID);
+        if (kill == 0)
+            return;
+
+        attr.mode &= (uint16_t)~kill;
+        attr.ctime.tv_sec = HAL_GetUnixEpochTime();
+        attr.ctime.tv_nsec = 0;
+        vnode->SetAttr(attr);
+    }
+
     uint8_t VFS_GetPosixType(VType type) {
         switch (type) {
 #define TYPE_CASE(v, p) \
@@ -648,6 +883,4 @@ namespace FS {
         }
         return DT_UNKNOWN;
     }
-
-
 }

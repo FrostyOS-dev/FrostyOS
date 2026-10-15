@@ -37,8 +37,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define ROOT_DIR_MODE 0755
 
 
-// TODO: Check cred & flags
-
 namespace FS {
 
     TempFS::TempFS() : m_pager() {
@@ -108,137 +106,52 @@ namespace FS {
     }
 
     int TempFSVNode::Read(void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, const Credential& cred) {
-        if (offset >= m_attr.size) {
-            *bytesRead = 0;
+        *bytesRead = 0;
+        if (offset >= m_attr.size)
             return ESUCCESS;
-        }
-
-        if (offset + size > m_attr.size)
+        if (size > m_attr.size - offset)
             size = m_attr.size - offset;
 
-        size_t read = 0;
-        while (read < size) {
-            if (offset + read >= m_attr.size)
-                break;
-            uint64_t blockNum = (offset + read) >> PAGE_SIZE_SHIFT;
-            uint64_t blockOffset = (offset + read) % PAGE_SIZE;
-            AVLTree::wAVLTreeNode* node = m_blocks.FindNodeOrLower(blockNum);
-            if (node == nullptr || node->key + reinterpret_cast<Block*>(node->value)->pages <= blockNum) {
-                // we are in the range of the file, this block just doesn't exist
-                AVLTree::wAVLTreeNode* nextNode = m_blocks.FindNodeOrHigher(blockNum);
-                if (nextNode == nullptr || nextNode->key >= offset + size) {
-                    // just allocate a node from blockNum to end of requested region to read
-                    Block* block = CreateBlock(blockNum, DIV_ROUNDUP(size - read, PAGE_SIZE));
-                    if (block == nullptr) {
-                        *bytesRead = read;
-                        return -ENOMEM;
-                    }
-
-                    memcpy((void*)((uint64_t)out + read), (void*)((uint64_t)block->addr + blockOffset), size - read);
-                    read = size;
-                    break;
-                } else {
-                    // need to allocate a block to fill the gap
-                    Block* block = CreateBlock(blockNum, nextNode->key - blockNum);
-                    if (block == nullptr) {
-                        *bytesRead = read;
-                        return -ENOMEM;
-                    }
-
-                    memcpy((void*)((uint64_t)out + read), (void*)((uint64_t)block->addr + blockOffset), block->pages * PAGE_SIZE);
-                    read += block->pages * PAGE_SIZE;
-
-                    block = reinterpret_cast<Block*>(nextNode->value);
-                    uint64_t readSize = MIN(size - read, block->pages * PAGE_SIZE);
-                    memcpy((void*)((uint64_t)out + read), block->addr, readSize);
-                    read += readSize;
-
-                    if (read == size)
-                        break;
-                    else
-                        continue;
-                }
-            }
-            uint64_t actualBlockNum = node->key;
-            Block* block = reinterpret_cast<Block*>(node->value);
-
-            uint64_t readSize = MIN(size - read, (block->pages - (blockNum - actualBlockNum)) * PAGE_SIZE);
-            memcpy((void*)((uint64_t)out + read), (void*)((uint64_t)block->addr + (blockNum - actualBlockNum) * PAGE_SIZE + blockOffset), readSize);
-            read += readSize;
+        size_t done = 0;
+        while (done < size) {
+            uint64_t pos = offset + done;
+            uint64_t pageOff = pos % PAGE_SIZE;
+            size_t chunk = MIN((uint64_t)(size - done), (uint64_t)PAGE_SIZE - pageOff);
+            void* page = GetPageAddr(pos >> PAGE_SIZE_SHIFT, false);
+            if (page != nullptr)
+                memcpy((uint8_t*)out + done, (uint8_t*)page + pageOff, chunk);
+            else
+                memset((uint8_t*)out + done, 0, chunk); // hole
+            done += chunk;
         }
-        
-        
-        *bytesRead = read;
+        *bytesRead = done;
         return ESUCCESS;
     }
 
     int TempFSVNode::Write(const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, const Credential& cred) {
-        size_t written = 0;
-        while (written < size) {
-            uint64_t blockNum = (offset + written) >> PAGE_SIZE_SHIFT;
-            uint64_t blockOffset = (offset + written) % PAGE_SIZE;
-            if (offset + written >= m_attr.blocks) {
-                Block* block = CreateBlock(blockNum, DIV_ROUNDUP(size - written, PAGE_SIZE));
-                if (block == nullptr) {
-                    *bytesWritten = written;
-                    return -ENOMEM;
-                }
+        *bytesWritten = 0;
+        if (offset + size < offset)
+            return -EFBIG;
 
-                memcpy((void*)((uint64_t)block->addr + blockOffset), (void*)((uint64_t)in + written), size - written);
-                m_attr.size += size - written;
-                m_attr.blocks += ALIGN_UP(size - written, PAGE_SIZE);
-                written = size;
+        int rc = ESUCCESS;
+        size_t done = 0;
+        while (done < size) {
+            uint64_t pos = offset + done;
+            uint64_t pageOff = pos % PAGE_SIZE;
+            size_t chunk = MIN((uint64_t)(size - done), (uint64_t)PAGE_SIZE - pageOff);
+            void* page = GetPageAddr(pos >> PAGE_SIZE_SHIFT, true);
+            if (page == nullptr) {
+                rc = -ENOMEM;
                 break;
             }
-
-            AVLTree::wAVLTreeNode* node = m_blocks.FindNodeOrLower(blockNum);
-            if (node == nullptr || node->key + reinterpret_cast<Block*>(node->value)->pages <= blockNum) {
-                // we are in the range of the file, this block just doesn't exist
-                AVLTree::wAVLTreeNode* nextNode = m_blocks.FindNodeOrHigher(blockNum);
-                if (nextNode == nullptr || nextNode->key >= offset + size) {
-                    // just allocate a node from blockNum to end of requested region to read
-                    Block* block = CreateBlock(blockNum, DIV_ROUNDUP(size - written, PAGE_SIZE));
-                    if (block == nullptr) {
-                        *bytesWritten = written;
-                        return -ENOMEM;
-                    }
-
-                    memcpy((void*)((uint64_t)block->addr + blockOffset), (void*)((uint64_t)in + written), size - written - blockOffset);
-                    written = size;
-                    break;
-                } else {
-                    // need to allocate a block to fill the gap
-                    Block* block = CreateBlock(blockNum, nextNode->key - blockNum);
-                    if (block == nullptr) {
-                        *bytesWritten = written;
-                        return -ENOMEM;
-                    }
-
-                    memcpy((void*)((uint64_t)block->addr + blockOffset), (void*)((uint64_t)in + written), block->pages * PAGE_SIZE - blockOffset);
-                    written += block->pages * PAGE_SIZE;
-
-                    block = reinterpret_cast<Block*>(nextNode->value);
-                    uint64_t writeSize = MIN(size - written, block->pages * PAGE_SIZE);
-                    memcpy(block->addr, (void*)((uint64_t)in + written), writeSize);
-                    written += writeSize;
-
-                    if (written == size)
-                        break;
-                    else
-                        continue;
-                }
-            }
-            uint64_t actualBlockNum = node->key;
-            Block* block = reinterpret_cast<Block*>(node->value);
-
-            uint64_t writeSize = MIN(size - written, (block->pages - (blockNum - actualBlockNum)) * PAGE_SIZE);
-            memcpy((void*)((uint64_t)block->addr + (blockNum - actualBlockNum) * PAGE_SIZE + blockOffset), (void*)((uint64_t)in + written), writeSize - blockOffset);
-            written += writeSize;
+            memcpy((uint8_t*)page + pageOff, (const uint8_t*)in + done, chunk);
+            done += chunk;
         }
-        
-        
-        *bytesWritten = written;
-        return ESUCCESS;
+
+        if (offset + done > m_attr.size)
+            m_attr.size = offset + done;
+        *bytesWritten = done;
+        return rc;
     }
 
     int TempFSVNode::Lookup(const char* name, size_t nameLen, VNode** out, const Credential& cred) {
@@ -358,10 +271,6 @@ namespace FS {
         return 0;
     }
 
-    int TempFSVNode::Access() {
-        return -ENOSYS;
-    }
-
     int TempFSVNode::Link() {
         return -ENOSYS;
     }
@@ -435,23 +344,31 @@ namespace FS {
     }
 
     void* TempFSVNode::GetAddr(uint64_t offset) {
-        AVLTree::wAVLTreeNode* node = m_blocks.FindNodeOrLower(offset);
-        if (node == nullptr || node->value == 0)
-            return nullptr;
-        Block* block = reinterpret_cast<Block*>(node->value);
-        if (offset >= node->key + block->pages * PAGE_SIZE)
-            return nullptr;
-        return (void*)((uint64_t)block->addr + (offset - node->key));
+        void* addr = GetPageAddr(offset >> PAGE_SIZE_SHIFT, false);
+        return addr == nullptr ? nullptr : (void*)((uint64_t)addr + offset % PAGE_SIZE);
     }
 
     VMM::Protection TempFSVNode::GetDefaultProt() const {
         return m_defaultProt;
     }
+    
+    void* TempFSVNode::GetPageAddr(uint64_t pageIndex, bool create) {
+        AVLTree::wAVLTreeNode* node = m_blocks.FindNodeOrLower(pageIndex);
+        if (node != nullptr) {
+            Block* b = reinterpret_cast<Block*>(node->value);
+            if (pageIndex < node->key + b->pages)
+                return (void*)((uint64_t)b->addr + (pageIndex - node->key) * PAGE_SIZE);
+        }
+        if (!create)
+            return nullptr;
+        Block* b = CreateBlock(pageIndex, 1);
+        return b != nullptr ? b->addr : nullptr;
+    }
 
     TempFSVNode::Block* TempFSVNode::CreateBlock(uint64_t offset, uint64_t pages) {
         Block* block = new Block;
         block->pages = pages;
-        block->addr = VMM::g_KVMM->AllocMemObjAnonPages(pages, this, offset, VMM::DEFAULT_KALLOC_FLAGS, &m_memObj, static_cast<TempFS*>(m_vfs)->GetPager());
+        block->addr = VMM::g_KVMM->AllocMemObjAnonPages(pages, this, offset << PAGE_SIZE_SHIFT, VMM::DEFAULT_KALLOC_FLAGS, &m_memObj, static_cast<TempFS*>(m_vfs)->GetPager());
         if (block->addr == nullptr) {
             delete block;
             return nullptr;
@@ -459,6 +376,7 @@ namespace FS {
 
         m_defaultProt = VMM::Protection::READ_WRITE;
         m_blocks.Insert(offset, block);
+        m_attr.blocks += pages * PAGE_SIZE;
         return block;
     }
 

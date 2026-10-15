@@ -40,6 +40,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define DT_SOCK 12
 #define DT_WHT 14
 
+#define ACCESS_X 1
+#define ACCESS_W 2
+#define ACCESS_R 4
+
+#define S_PERMMASK 07777
+
 typedef int gid_t;
 typedef int uid_t;
 typedef unsigned int mode_t;
@@ -140,7 +146,7 @@ namespace FS {
         virtual int GetAttr(VAttr* out) = 0;
         virtual int SetAttr(const VAttr& attr) = 0;
         virtual int GetDents(Dentry* buffer, size_t count, uint64_t offset, size_t* readCount) = 0;
-        virtual int Access() = 0;
+        virtual int Access(int mode, const Credential& cred); // callers must not have the vnode lock held
         virtual int Link() = 0;
         virtual int Unlink() = 0;
         virtual int Symlink(const char* path, size_t pathLen, const Credential& cred) = 0;
@@ -188,15 +194,21 @@ namespace FS {
 
     int VFS_CreateDir(const char* path, const char* name, VNode* cwd, const Credential& cred, VNode* vnode = nullptr, VNode** outVNode = nullptr);
     int VFS_CreateFile(const char* path, const char* name, VNode* cwd, const Credential& cred, VNode* vnode = nullptr, VNode** outVNode = nullptr);
-    int VFS_Open(const char* path, VNode** out, VNode* cwd, const Credential& cred);
-    int VFS_Close(VNode* vnode, const Credential& cred);
-
     int VFS_CreateSymlink(const char* path, const char* name, const char* dest, VNode* cwd, const Credential& cred, VNode* vnode = nullptr, VNode** outVNode = nullptr);
+
+    int VFS_Open(const char* path, int flags, VNode** out, VNode* cwd, const Credential& cred);
+    int VFS_OpenExec(const char* path, VNode** out, VAttr* outAttr, VNode* cwd, const Credential& cred);
+    int VFS_Close(VNode* vnode, const Credential& cred);
 
     // Map a vnode into memory. Flags are assumed to be pre-validated.
     int VFS_MapFile(void* hint, size_t length, VMM::Protection prot, int flags, bool user, VNode* vnode, uint64_t offset, void** addr, VMM::VMM* vmm, const Credential& cred);
 
     int VFS_BuildPath(VNode* vnode, char* buf, size_t size, const Credential& cred);
+
+    int VFS_Chmod(VNode* vnode, mode_t mode, const Credential& cred);
+    int VFS_Chown(VNode* vnode, uid_t uid, gid_t gid, const Credential& cred);
+
+    void VFS_ClearSetID(VNode* vnode, const Credential& cred); // caller must hold vnode's lock
 
     uint8_t VFS_GetPosixType(VType type);
 

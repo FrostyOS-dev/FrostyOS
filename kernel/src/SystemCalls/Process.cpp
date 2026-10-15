@@ -108,6 +108,44 @@ int sys_getresgid(GIDs* gids) {
     return ESUCCESS;
 }
 
+static int SetRes(int* r, int* e, int* s, int nr, int ne, int ns, bool privileged) {
+    if (nr < -1 || ne < -1 || ns < -1)
+        return -EINVAL;
+    auto allowed = [&](int v) { return v == -1 || v == *r || v == *e || v == *s; };
+    if (!privileged && (!allowed(nr) || !allowed(ne) || !allowed(ns)))
+        return -EPERM;
+    if (nr != -1) *r = nr;
+    if (ne != -1) *e = ne;
+    if (ns != -1) *s = ns;
+    return ESUCCESS;
+}
+
+int sys_setresuid(UIDs* uids) {
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+    UIDs kUIDs{};
+    if (!UserRead(uids, &kUIDs, sizeof(UIDs), proc))
+        return -EFAULT;
+
+    Credential c = proc->GetCred();
+    int rc = SetRes(&c.uid, &c.euid, &c.suid, kUIDs.ruid, kUIDs.euid, kUIDs.suid, c.euid == 0);
+    if (rc == ESUCCESS)
+        proc->SetCred(c);
+    return rc;
+}
+
+int sys_setresgid(GIDs* gids) {
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+    GIDs kGIDs{};
+    if (!UserRead(gids, &kGIDs, sizeof(GIDs), proc))
+        return -EFAULT;
+
+    Credential c = proc->GetCred();
+    int rc = SetRes(&c.gid, &c.egid, &c.sgid, kGIDs.rgid, kGIDs.egid, kGIDs.sgid, c.euid == 0);
+    if (rc == ESUCCESS)
+        proc->SetCred(c);
+    return rc;
+}
+
 pid_t sys_fork(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, CPU_Registers* state) {
     Thread* current = Thread::GetCurrentThread();
     Process* currentProc = current->GetParent();
@@ -292,7 +330,8 @@ int sys_exec(const char* path, char* const argv[], char* const env[]) {
         return rc;
     }
 
-    rc = CreateELFProcess(kPath, parent, kArgv, kEnv, true, &newProc);
+    Credential callerCred = currentProc->GetCred();
+    rc = CreateELFProcess(kPath, parent, kArgv, kEnv, true, &newProc, &callerCred, currentProc->GetCWD());
 
     delete kPath;
     CleanupArgEnv(argc, argc, kArgv, envc, envc, kEnv);
@@ -303,7 +342,6 @@ int sys_exec(const char* path, char* const argv[], char* const env[]) {
     newProc->SetPID(currentProc->GetPID());
     newProc->SetPPID(parentPID);
     newProc->SetCWD(currentProc->GetCWD());
-    newProc->SetCred(currentProc->GetCred());
 
     FileDescriptorManager* FDManager = newProc->GetFDManager();
     FDManager->Delete();
@@ -353,8 +391,8 @@ long sys_waitpid(pid_t pid, int* wstatus, int options) {
             Event::UnregisterWaitNodes(&nodePtr, 1);
 
             if (wstatus != nullptr) {
-                int status = zombieChild->GetExitStatus();
-                if (!UserWrite(wstatus,  &status, sizeof(int), currentProcess, true)) {
+                int status = zombieChild->GetExitStatus() << 8;
+                if (!UserWrite(wstatus, &status, sizeof(int), currentProcess)) {
                     Scheduler::g_Processes.unlock();
                     return -EFAULT;
                 }

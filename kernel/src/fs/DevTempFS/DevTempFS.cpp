@@ -230,10 +230,6 @@ namespace FS {
         return 0;
     }
 
-    int DevTempFSVNode::Access() {
-        return -ENOSYS;
-    }
-
     int DevTempFSVNode::Link() {
         return -ENOSYS;
     }

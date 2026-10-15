@@ -186,7 +186,7 @@ int x86_64_SetupSignalFrame(Process* proc, x86_64_Registers* regs, x86_64_ExtraC
     processor->SaveExtraContext(extra);
     memcpy(reinterpret_cast<void*>((reinterpret_cast<uint64_t>(frame) + sizeof(x86_64_SignalFrame))), extra->SIMDSaveRegion, SIMDSize);
 
-    if (!UserWrite(reinterpret_cast<void*>(rsp), frame, sizeof(x86_64_SignalFrame) + SIMDSize, proc, false))
+    if (!UserWrite(reinterpret_cast<void*>(rsp), frame, sizeof(x86_64_SignalFrame) + SIMDSize, proc))
         return -EFAULT;
 
     return ESUCCESS;

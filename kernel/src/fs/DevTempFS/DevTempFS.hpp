@@ -58,7 +58,6 @@ namespace FS {
         virtual int GetAttr(VAttr* out) override;
         virtual int SetAttr(const VAttr& attr) override;
         virtual int GetDents(Dentry* buffer, size_t count, uint64_t offset, size_t* readCount) override;
-        virtual int Access() override;
         virtual int Link() override;
         virtual int Unlink() override;
         virtual int Symlink(const char* path, size_t pathLen, const Credential& cred) override;

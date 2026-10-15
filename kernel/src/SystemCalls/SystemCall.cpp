@@ -56,17 +56,17 @@ bool UserRead(const void* userBuf, void* kBuf, size_t size, Process* currentProc
     if (userBuf == nullptr || kBuf == nullptr || size == 0 || currentProc == nullptr)
         return false;
     VMM::VMM* vmm = currentProc->GetVMM();
-    if (!vmm->ValidateRead(userBuf, size))
+    if (!vmm->PrepareAccess(userBuf, size, false))
         return false;
     memcpy(kBuf, userBuf, size);
     return true;
 }
 
-bool UserWrite(void* userBuf, const void* kBuf, size_t size, Process* currentProc, bool validate) {
+bool UserWrite(void* userBuf, const void* kBuf, size_t size, Process* currentProc) {
     if (userBuf == nullptr || kBuf == nullptr || size == 0 || currentProc == nullptr)
         return false;
     VMM::VMM* vmm = currentProc->GetVMM();
-    if (validate && !vmm->ValidateWrite(userBuf, size))
+    if (!vmm->PrepareAccess(userBuf, size, true))
         return false;
     memcpy(userBuf, kBuf, size);
     return true;

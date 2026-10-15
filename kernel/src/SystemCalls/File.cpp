@@ -35,6 +35,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Scheduling/Process.hpp>
 
 int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
+    if (pathLen == 0)
+        return -ENOENT;
+
     Thread* current = Thread::GetCurrentThread();
     Process* proc = current->GetParent();
     FileDescriptorManager* manager = proc->GetFDManager();
@@ -55,7 +58,7 @@ int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
     FS::VNode* cwd = proc->GetCWD();
 
     FS::VNode* vnode = nullptr;
-    int rc = FS::VFS_Open(realPath, &vnode, cwd, proc->GetCred());
+    int rc = FS::VFS_Open(realPath, flags, &vnode, cwd, proc->GetCred());
     if (rc < 0) {
         if (rc == -ENOENT && (flags & O_CREAT) > 0) {
             if (realPath[pathLen - 1] == '/') {
@@ -72,31 +75,55 @@ int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
                 name++;
             }
             
-            rc = FS::VFS_CreateFile(parent, name, cwd, proc->GetCred());
-            if (rc < 0) {
-                delete[] realPath;
-                return rc;
+            bool open = false;
+            rc = FS::VFS_CreateFile(parent, name, cwd, proc->GetCred(), nullptr, &vnode);
+            if ((flags & O_EXCL) == 0 && rc == -EEXIST) {
+                rc = FS::VFS_Open(realPath, flags, &vnode, cwd, proc->GetCred());
+                open = true;
             }
 
-            if (name != realPath)
-                name[-1] = '/';
-
-            rc = FS::VFS_Open(realPath, &vnode, cwd, proc->GetCred());
-            if (rc < 0) {
+            if (rc < 0 || vnode == nullptr) {
                 delete[] realPath;
-                return rc;
+                return rc < 0 ? rc : -ENOTSUP;
+            }
+
+            if (!open) {
+                if (name != realPath)
+                    name[-1] = '/';
+
+                vnode->Lock();
+                FS::VAttr attr;
+                rc = vnode->GetAttr(&attr);
+                if (rc >= 0) {
+                    attr.mode = mode & S_PERMMASK;
+                    if (const Credential& cred = proc->GetCred(); cred.euid != 0 && attr.gid != cred.egid)
+                        attr.mode &= (uint16_t)~S_ISGID;
+                    rc = vnode->SetAttr(attr);
+                }
+
+                if (rc >= 0)
+                    rc = vnode->Open(flags, proc->GetCred());
+                vnode->Unlock();
+                if (rc < 0) {
+                    delete[] realPath;
+                    return rc;
+                }
+
+                FS::RefVNode(vnode);
             }
         } else {
             delete[] realPath;
             return rc;
         }
+    } else if (rc == 0 && (flags & O_CREAT) > 0 && (flags & O_EXCL) > 0) {
+        FS::VFS_Close(vnode, proc->GetCred());
+        delete[] realPath;
+        return -EEXIST;
     }
 
     delete[] realPath;
 
-    vnode->Lock();
     FS::VType type = vnode->GetType();
-    vnode->Unlock();
     if (type != FS::VType::REG && type != FS::VType::DIR) {
         FS::VFS_Close(vnode, proc->GetCred());
         return -ENOTSUP;
@@ -177,7 +204,7 @@ ssize_t sys_read(int fd, void* buf, size_t count) {
 
     desc->Unref();
 
-    UserWrite(buf, kBuf, realCount, proc, false);
+    UserWrite(buf, kBuf, realCount, proc);
     
     delete[] kBuf;
     return result;
@@ -355,7 +382,7 @@ int sys_getcwd(char* buf, size_t size) {
         return rc;
     }
 
-    bool ret = UserWrite(buf, kBuf, size, proc, false);
+    bool ret = UserWrite(buf, kBuf, size, proc);
 
     delete[] kBuf;
 
@@ -474,6 +501,9 @@ int sys_chdir(const char* path, size_t pathLen) {
     if (rc == 0) {
         if (vnode->GetType() != FS::VType::DIR)
             return -ENOTDIR;
+        rc = vnode->Access(ACCESS_X, proc->GetCred());
+        if (rc < 0)
+            return rc;
         FS::RefVNode(vnode);
         FS::UnrefVNode(proc->GetCWD());
         proc->SetCWD(vnode);
@@ -505,6 +535,11 @@ int sys_fchdir(int fd) {
     if (vnode == nullptr) {
         desc->Unref();
         return -EBADF;
+    }
+
+    if (int rc = vnode->Access(ACCESS_X, proc->GetCred()); rc < 0) {
+        desc->Unref();
+        return rc;
     }
 
     FS::RefVNode(vnode);
@@ -547,6 +582,87 @@ int sys_ioctl(int fd, size_t op, void* arg, int* result) {
     return rc;
 }
 
+static int ResolveVNodeAt(Process* proc, int fd, const char* path, size_t pathLen, int flags, FS::VNode** out) {
+    FileDescriptorManager* manager = proc->GetFDManager();
+    if (manager == nullptr)
+        return -ENOSYS;
+
+    if ((flags & AT_EMPTY_PATH) > 0 && pathLen == 0) {
+        FS::VNode* v = nullptr;
+        if (fd == AT_FDCWD)
+            v = proc->GetCWDRef();
+        else {
+            FileDescriptor* desc = manager->Get(fd);
+            if (desc == nullptr || !desc->isOpen()) {
+                if (desc != nullptr)
+                    desc->Unref();
+                return -EBADF;
+            }
+            v = desc->GetVNode();
+            if (v == nullptr) { // TTY
+                desc->Unref();
+                return -ENOTSUP;
+            }
+            FS::RefVNode(v);
+            desc->Unref();
+        }
+        if (v == nullptr)
+            return -EBADF;
+        *out = v;
+        return ESUCCESS;
+    }
+
+    if (path == nullptr || pathLen == 0)
+        return -ENOENT;
+    if (pathLen > PATH_MAX)
+        return -ENAMETOOLONG;
+
+    char* kPath = new char[pathLen + 1];
+    if (kPath == nullptr)
+        return -ENOMEM;
+
+    if (!UserRead(path, kPath, pathLen, proc)) {
+        delete[] kPath;
+        return -EFAULT;
+    }
+    kPath[pathLen] = 0;
+
+    FS::VNode* base = nullptr;
+    if (kPath[0] != '/') {
+        if (fd == AT_FDCWD)
+            base = proc->GetCWDRef();
+        else {
+            FileDescriptor* desc = manager->Get(fd);
+            if (desc == nullptr || !desc->isOpen() || desc->GetType() != FDType::Directory) {
+                bool notDir = desc != nullptr && desc->isOpen();
+                if (desc != nullptr)
+                    desc->Unref();
+                delete[] kPath;
+                return notDir ? -ENOTDIR : -EBADF;
+            }
+            base = desc->GetVNode();
+            FS::RefVNode(base);
+            desc->Unref();
+        }
+        if (base == nullptr) {
+            delete[] kPath;
+            return -EBADF;
+        }
+    }
+
+    FS::VNode* found = nullptr;
+    FS::VFS* fs = nullptr;
+    int rc = FS::VFS_LookupPath(kPath, &found, &fs, base, proc->GetCred(), (flags & AT_SYMLINK_NOFOLLOW) == 0);
+    FS::UnrefVNode(base);
+    delete[] kPath;
+    if (rc < 0)
+        return rc;
+
+    FS::RefVNode(found);
+    *out = found;
+    return ESUCCESS;
+}
+
 int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags) {
     Thread* current = Thread::GetCurrentThread();
     Process* proc = current->GetParent();
@@ -555,98 +671,43 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
         return -ENOSYS;
 
     FS::VNode* vnode = nullptr;
-
-    if ((flags & AT_EMPTY_PATH) == 0 && (path == nullptr || pathLen == 0))
-        return -ENOENT;
-
-    if ((flags & AT_EMPTY_PATH) == 0) {
-        char* kPath = new char[pathLen + 1];
-        if (!UserRead(path, kPath, pathLen, proc)) {
-            delete[] kPath;
-            return -EFAULT;
-        }
-
-        kPath[pathLen] = 0;
-
-        if (kPath[0] == '/') {
-            vnode = FS::g_rootVFS->GetRoot();
-            FS::RefVNode(vnode);
-        } else if (fd == AT_FDCWD)
-            vnode = proc->GetCWDRef();
-        else {
-            FileDescriptor* desc = manager->Get(fd);
-            if (desc == nullptr || !desc->isOpen()) {
-                if (desc != nullptr)
-                    desc->Unref();
-                delete[] kPath;
-                return -EBADF;
-            }
-
-            if (desc->GetType() != FDType::Directory) {
-                desc->Unref();
-                delete[] kPath;
-                return -ENOTDIR;
-            }
-
-            vnode = desc->GetVNode();
-            FS::RefVNode(vnode);
-            desc->Unref();
-            if (vnode == nullptr || vnode->GetType() != FS::VType::DIR) {
-                FS::UnrefVNode(vnode);
-                delete[] kPath;
-                return vnode == nullptr ? -EBADF : -ENOTDIR;
-            }
-        }
-
-        FS::VNode* newVNode;
-        FS::VFS* fs;
-        int rc = FS::VFS_LookupPath(kPath, &newVNode, &fs, vnode, proc->GetCred(), (flags & AT_SYMLINK_NOFOLLOW) == 0);
-        FS::UnrefVNode(vnode);
-
-        delete[] kPath;
-
-        if (rc < 0)
-            return rc;
-        else {
-            FS::RefVNode(newVNode);
-            vnode = newVNode;
-        }
-    } else {
+    int rc = ResolveVNodeAt(proc, fd, path, pathLen, flags, &vnode);
+    if (rc == -ENOTSUP && fd != AT_FDCWD) { // TTY
         FileDescriptor* desc = manager->Get(fd);
-        if (desc == nullptr || !desc->isOpen() || (desc->GetType() != FDType::Directory && desc->GetType() != FDType::File && desc->GetType() != FDType::TTY)) {
+        if (desc == nullptr || !desc->isOpen() || desc->GetType() != FDType::TTY) {
             if (desc != nullptr)
                 desc->Unref();
             return -EBADF;
         }
 
-        vnode = desc->GetVNode();
-        FS::RefVNode(vnode);
-        if (vnode == nullptr) {
-            if (desc->GetType() != FDType::TTY)
-                return -EBADF;
-            desc->Unref();
+        if (desc->GetVNode() != nullptr)
+            return rc;
 
-            Stat buf;
-            memset(&buf, 0, sizeof(Stat));
+        if (desc->GetType() != FDType::TTY)
+            return -EBADF;
+        desc->Unref();
 
-            // dev, rdev, ino, nlink, uid, gid, atime, mtime, ctime, size, blocks are all 0
+        Stat buf;
+        memset(&buf, 0, sizeof(Stat));
 
-            buf.mode = 0600 | ((FS::VFS_GetPosixType(FS::VType::CHR) & 0xF) << 12);
-            buf.blksize = TTY_INTERNAL_BUFFER_SIZE;
+        // dev, rdev, ino, nlink, uid, gid, atime, mtime, ctime, size, blocks are all 0
 
-            if (!UserWrite(stat, &buf, sizeof(Stat), proc))
-                return -EFAULT;
+        buf.mode = 0600 | ((FS::VFS_GetPosixType(FS::VType::CHR) & 0xF) << 12);
+        buf.blksize = TTY_INTERNAL_BUFFER_SIZE;
 
-            return ESUCCESS;
-        } else
-            desc->Unref();
+        if (!UserWrite(stat, &buf, sizeof(Stat), proc))
+            return -EFAULT;
+
+        return ESUCCESS;
     }
+    if (rc < 0)
+        return rc;
 
     Stat buf;
     memset(&buf, 0, sizeof(Stat));
 
     FS::VAttr attr;
-    int rc = vnode->GetAttr(&attr);
+    rc = vnode->GetAttr(&attr);
     if (rc < 0)
         return rc;
 
@@ -749,7 +810,7 @@ int sys_mkdirat(int dirFD, const char* path, size_t pathLen, mode_t mode) {
         return rc;
     }
 
-    attr.mode = mode;
+    attr.mode = (mode & (0777 | S_ISVTX)) | (attr.mode & S_ISGID);
 
     rc = vnode->SetAttr(attr);
     vnode->Unlock();
@@ -937,5 +998,42 @@ int sys_ppoll(PollFD* fds, nfds_t nfds, const timespec* ts, const sigset_t* mask
             current->ChangeSignalMask(SIG_SETMASK, &savedSet, nullptr);
     }
 
+    return rc;
+}
+
+int sys_fchmodat(int fd, const char* path, size_t pathLen, mode_t mode, int flags) {
+    if ((flags & ~(AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW)) != 0)
+        return -EINVAL;
+
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+
+    FS::VNode* vnode = nullptr;
+    int rc = ResolveVNodeAt(proc, fd, path, pathLen, flags, &vnode);
+    if (rc < 0)
+        return rc;
+
+    if ((flags & AT_SYMLINK_NOFOLLOW) > 0 && vnode->GetType() == FS::VType::LNK)
+        rc = -ENOTSUP;
+    else
+        rc = FS::VFS_Chmod(vnode, mode, proc->GetCred());
+
+    FS::UnrefVNode(vnode);
+    return rc;
+}
+
+int sys_fchownat(int fd, const char* path, size_t pathLen, UGIDs ids, int flags) {
+    if ((flags & ~(AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW)) != 0)
+        return -EINVAL;
+
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+
+    FS::VNode* vnode = nullptr;
+    int rc = ResolveVNodeAt(proc, fd, path, pathLen, flags, &vnode);
+    if (rc < 0)
+        return rc;
+
+    rc = FS::VFS_Chown(vnode, ids.owner, ids.group, proc->GetCred());
+
+    FS::UnrefVNode(vnode);
     return rc;
 }

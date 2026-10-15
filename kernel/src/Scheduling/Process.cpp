@@ -35,6 +35,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Memory/VMM.hpp>
 #include <Memory/VMRegionAllocator.hpp>
 
+#include <SystemCalls/File.hpp>
 #include <SystemCalls/Signal.hpp>
 
 #include <tty/TTYBackend.hpp>
@@ -115,7 +116,7 @@ bool Process::Create(bool initAlloc) {
             Delete();
             return false;
         }
-        if (in->Open(0) < 0 || out->Open(0) < 0 || err->Open(0) < 0 || debug->Open(0) < 0) {
+        if (in->Open(O_RDONLY) < 0 || out->Open(O_WRONLY) < 0 || err->Open(O_WRONLY) < 0 || debug->Open(O_WRONLY) < 0) {
             Delete();
             return false;
         }

@@ -31,6 +31,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Scheduling/Process.hpp>
 
+#include <SystemCalls/File.hpp>
 #include <SystemCalls/Memory.hpp>
 
 #define STACK_TOP_BUFFER 8
@@ -47,12 +48,14 @@ int ReadExact(FS::VNode* vnode, void* buf, size_t size, size_t offset, Credentia
     return 0;
 }
 
-int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv64list_t* auxv64, char** interp) {
-    const Credential& cred = proc->GetCred();
+int LoadELFFile(const char* path, void* base, Process* proc, const Credential& cred, FS::VNode* cwd, void** entry, auxv64list_t* auxv64, char** interp, FS::VAttr* execAttr) {
     FS::VNode* vnode = nullptr;
-    int rc = FS::VFS_Open(path, &vnode, nullptr, cred);
+    FS::VAttr fileAttr;
+    int rc = FS::VFS_OpenExec(path, &vnode, &fileAttr, cwd, cred);
     if (rc < 0)
         return rc;
+    if (execAttr != nullptr)
+        *execAttr = fileAttr;
 
     vnode->Lock();
 
@@ -253,7 +256,13 @@ int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv6
     }
 
     if (hasInterp) {
-        char* buf = (char*)kmalloc(interpPhdr.p_filesz);
+        if (interpPhdr.p_filesz == 0 || interpPhdr.p_filesz > PATH_MAX) {
+            vnode->Unlock();
+            FS::VFS_Close(vnode, cred);
+            return -ENOEXEC;
+        }
+
+        char* buf = new char[interpPhdr.p_filesz + 1];
         if (buf == nullptr) {
             vnode->Unlock();
             FS::VFS_Close(vnode, cred);
@@ -261,11 +270,12 @@ int LoadELFFile(const char* path, void* base, Process* proc, void** entry, auxv6
         }
         rc = ReadExact(vnode, buf, interpPhdr.p_filesz, interpPhdr.p_offset, cred);
         if (rc < 0) {
-            delete buf;
+            delete[] buf;
             vnode->Unlock();
             FS::VFS_Close(vnode, cred);
             return rc;
         }
+        buf[interpPhdr.p_filesz] = 0;
         *interp = buf;
     }
 
@@ -341,7 +351,19 @@ void* PrepareELFStack(void* stackTop, auxv64list_t* auxv64, char** argv, char** 
     return argcPoint;
 }
 
-int CreateELFProcess(const char* path, Process* parent, char** argv, char** env, bool noStart, Process** newProc) {
+static Credential ComputeExecCred(const Credential& old, const FS::VAttr& file, bool* secure) {
+    Credential c = old;
+    if ((file.mode & S_ISUID) > 0)
+        c.euid = file.uid;
+    if ((file.mode & S_ISGID) > 0 && (file.mode & 0010) > 0)
+        c.egid = file.gid;
+    c.suid = c.euid; // saved ids always become a copy of the effective ids after exec
+    c.sgid = c.egid;
+    *secure = c.uid != c.euid || c.gid != c.egid;
+    return c;
+}
+
+int CreateELFProcess(const char* path, Process* parent, char** argv, char** env, bool noStart, Process** newProc, const Credential* callerCred, FS::VNode* cwd) {
     Process* proc = new Process(ProcessMode::USER, nullptr, 15);
     if (!proc->Create()) {
         delete proc;
@@ -370,7 +392,10 @@ int CreateELFProcess(const char* path, Process* parent, char** argv, char** env,
 
     char* interp = nullptr;
     void* entry = nullptr;
-    int rc = LoadELFFile(path, nullptr, proc, &entry, &auxv64, &interp);
+
+    Credential loadCred = callerCred != nullptr ? *callerCred : proc->GetCred();
+    FS::VAttr execAttr;
+    int rc = LoadELFFile(path, nullptr, proc, loadCred, cwd, &entry, &auxv64, &interp, &execAttr);
     if (rc < 0) {
         g_KPageMapper->SwapToThis();
         proc->Delete();
@@ -382,14 +407,21 @@ int CreateELFProcess(const char* path, Process* parent, char** argv, char** env,
         auxv64list_t interpauxv64;
         memset(&interpauxv64, 0, sizeof(auxv64list_t));
         char* interpinterp = nullptr;
-        rc = LoadELFFile(interp, INTERP_BASE, proc, &entry, &interpauxv64, &interpinterp);
+        rc = LoadELFFile(interp, INTERP_BASE, proc, loadCred, cwd, &entry, &interpauxv64, &interpinterp, nullptr);
         if (rc < 0 || interpinterp != nullptr) {
+            delete[] interpinterp;
             g_KPageMapper->SwapToThis();
             proc->Delete();
             delete proc;
             return interpinterp == nullptr ? rc : -ENOEXEC;
         }
-        delete interp;
+        delete[] interp;
+    }
+
+    if (callerCred != nullptr) {
+        bool secure = false;
+        proc->SetCred(ComputeExecCred(*callerCred, execAttr, &secure));
+        auxv64.secure.a_val = secure ? 1 : 0;
     }
 
     if (!proc->CreateMainThread({(void (*)(void*))entry, nullptr})) {

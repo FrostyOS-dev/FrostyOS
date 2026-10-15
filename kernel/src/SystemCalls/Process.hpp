@@ -50,6 +50,9 @@ pid_t sys_gettid();
 int sys_getresuid(UIDs* uids);
 int sys_getresgid(GIDs* gid);
 
+int sys_setresuid(UIDs* uids);
+int sys_setresgid(GIDs* gids);
+
 pid_t sys_fork(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, CPU_Registers* state);
 
 int sys_exec(const char* path, char* const argv[], char* const env[]);
