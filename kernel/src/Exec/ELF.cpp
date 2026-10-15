@@ -43,7 +43,7 @@ int ReadExact(FS::VNode* vnode, void* buf, size_t size, size_t offset, Credentia
     size_t bytesRead = 0;
     int rc = vnode->Read(buf, size, 0, offset, &bytesRead, cred);
     if (rc < 0 || bytesRead != size)
-        return rc == 0 ? -EINVAL : rc;
+        return rc == 0 ? -ENOEXEC : rc;
     return 0;
 }
 
