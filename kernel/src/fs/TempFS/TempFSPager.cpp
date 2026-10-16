@@ -48,16 +48,13 @@ namespace FS {
         (void)write;
         if ((offset >> PAGE_SIZE_SHIFT) + 1 > obj->size)
             return false;
-        TempFSVNode* vnode = static_cast<TempFSVNode*>(obj->pagerData);
-        if (vnode == nullptr)
-            return false;
         VMM::Page* page = obj->pages.Find(offset);
         if (page == nullptr) {
             page = static_cast<VMM::Page*>(kcalloc_vmm(1, sizeof(VMM::Page)));
             if (page == nullptr)
                 return false;
             page->physAddr = (uint64_t)AllocatePage();
-            page->protection = vnode->GetDefaultProt();
+            page->protection = VMM::Protection::READ_WRITE;
             obj->pages.Insert(offset, page);
         }
         *outPage = page;

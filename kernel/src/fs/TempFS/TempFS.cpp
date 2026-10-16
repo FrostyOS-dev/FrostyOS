@@ -49,7 +49,7 @@ namespace FS {
 
     int TempFS::Mount(VNode* nodeCovered, int flags, void* backing, const Credential& cred) {
         time_t time = HAL_GetUnixEpochTime();
-        VAttr attr = {VType::DIR, ROOT_DIR_MODE, cred.euid, cred.egid, FSType::TempFS, -1, 0, 0, PAGE_SIZE, {time, 0}, {time, 0}, {time, 0}, 0};
+        VAttr attr = {VType::DIR, ROOT_DIR_MODE, cred.euid, cred.egid, FSType::TempFS, GetInodeNum(), 2, 0, PAGE_SIZE, {time, 0}, {time, 0}, {time, 0}, 0};
 
         TempFSVNode* root = new TempFSVNode(this);
         int rc = root->Create(nullptr, nullptr, 0, &attr, cred);
@@ -89,7 +89,7 @@ namespace FS {
     }
 
     
-    TempFSVNode::TempFSVNode(VFS* vfs) : VNode(vfs), m_name(nullptr), m_nameLen(0), m_memObj(nullptr), m_blocks(), m_children() {
+    TempFSVNode::TempFSVNode(VFS* vfs) : VNode(vfs), m_name(nullptr), m_nameLen(0), m_linkDest(nullptr), m_linkLen(0), m_memObj(nullptr), m_defaultProt(VMM::Protection::READ_WRITE), m_blocks(), m_children() {
 
     }
 
@@ -205,18 +205,16 @@ namespace FS {
         }
 
         m_vfsMounted = nullptr;
-        m_refCount = 1; // FS's reference
+        m_refCount = 1; // directory entry's reference
+        m_parent = parent;
 
         if (parent != nullptr) {
             TempFSVNode* fsVNode = static_cast<TempFSVNode*>(parent);
             fsVNode->m_children.lock();
             fsVNode->m_children.insert(this);
             fsVNode->m_children.unlock();
-            RefVNode(this); // parent's reference
-            RefVNode(m_parent);
+            RefVNode(parent);
         }
-
-        m_parent = parent;
 
         return ESUCCESS;
     }

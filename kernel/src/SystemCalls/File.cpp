@@ -714,14 +714,15 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
     Stat buf;
     memset(&buf, 0, sizeof(Stat));
 
+    dev_t devNum = vnode->GetVFS()->GetDevNum();
+
     FS::VAttr attr;
     rc = vnode->GetAttr(&attr);
+    FS::UnrefVNode(vnode);
     if (rc < 0)
         return rc;
 
-    FS::UnrefVNode(vnode);
-
-    buf.dev = 0;
+    buf.dev = devNum;
     buf.rdev = 0;
     buf.ino = attr.inode;
     buf.nlink = attr.nlinks;

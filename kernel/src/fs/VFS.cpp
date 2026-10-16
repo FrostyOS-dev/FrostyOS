@@ -43,6 +43,12 @@ namespace FS {
     VFS* g_VFSList = nullptr;
     Mutex g_listLock;
 
+    dev_t g_NextDevNum = 1;
+
+    static dev_t GetDevNum() {
+        return __atomic_fetch_add(&g_NextDevNum, 1, __ATOMIC_RELAXED);
+    }
+
     static bool CheckPermission(const VAttr& a, int want, const Credential& c) {
         want &= 7;
 
@@ -75,7 +81,7 @@ namespace FS {
             attr.mode |= S_ISGID;
     }
 
-    VFS::VFS() : m_next(nullptr), m_nodeCovered(nullptr), m_root(nullptr), m_flags(0) {
+    VFS::VFS() : m_next(nullptr), m_nodeCovered(nullptr), m_root(nullptr), m_flags(0), m_nextInodeNum(1), m_devNum(0) {
 
     }
 
@@ -97,6 +103,18 @@ namespace FS {
 
     VNode* VFS::GetRoot() {
         return m_root;
+    }
+
+    ino_t VFS::GetInodeNum() {
+        return __atomic_fetch_add(&m_nextInodeNum, 1, __ATOMIC_RELAXED);
+    }
+
+    dev_t VFS::GetDevNum() const {
+        return m_devNum;
+    }
+
+    void VFS::SetDevNum(dev_t dev) {
+        m_devNum = dev;
     }
 
     void VFS::Lock() {
@@ -185,12 +203,15 @@ namespace FS {
         switch (type) {
         case FSType::TempFS: {
             root = new TempFS();
+            if (root == nullptr)
+                return -ENOMEM;
             break;
         }
         default:
             return -EINVAL;
         }
 
+        root->SetDevNum(GetDevNum());
         int rc = root->Mount(nullptr, flags, backing, cred);
         if (rc < 0) {
             delete root;
@@ -216,13 +237,12 @@ namespace FS {
             return rc;
 
         vnode->Lock();
-        RefVNode(vnode); // prevent the vnode from being deleted
 
         VAttr attr;
         rc = vnode->GetAttr(&attr);
         if (rc < 0 || attr.type != VType::DIR || vnode->HasChildren()) {
-            UnrefVNode(vnode);
             vnode->Unlock();
+            UnrefVNode(vnode);
             return rc < 0 ? rc : (attr.type != VType::DIR ? -ENOTDIR : -ENOTEMPTY);
         }
 
@@ -237,17 +257,24 @@ namespace FS {
             break;
         }
         default:
-            UnrefVNode(vnode);
             vnode->Unlock();
+            UnrefVNode(vnode);
             return -EINVAL;
         }
 
+        if (vfs == nullptr) {
+            vnode->Unlock();
+            UnrefVNode(vnode);
+            return -ENOMEM;
+        }
+
+        vfs->SetDevNum(GetDevNum());
         vfs->Lock();
         rc = vfs->Mount(vnode, flags, backing, cred);
-        UnrefVNode(vnode); // Mount should increase the refcount, so the temporary increase can be removed
         if (rc < 0) {
             vfs->Unlock();
             vnode->Unlock();
+            UnrefVNode(vnode);
             delete vfs;
             return rc;
         }
@@ -438,7 +465,7 @@ namespace FS {
         }
 
         time_t time = HAL_GetUnixEpochTime();
-        VAttr attr = {VType::DIR, DEFAULT_DIR_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
+        VAttr attr = {VType::DIR, DEFAULT_DIR_MODE, cred.euid, cred.egid, vfs->GetType(), vfs->GetInodeNum(), 2, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
         InheritFromParent(attr, parent);
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
         parent->Unlock();
@@ -505,7 +532,7 @@ namespace FS {
         }
 
         time_t time = HAL_GetUnixEpochTime();
-        VAttr attr = {VType::REG, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
+        VAttr attr = {VType::REG, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), vfs->GetInodeNum(), 1, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
         InheritFromParent(attr, parent);
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
         parent->Unlock();
@@ -572,17 +599,18 @@ namespace FS {
         }
 
         time_t time = HAL_GetUnixEpochTime();
-        VAttr attr = {VType::LNK, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), -1, 0, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
+        VAttr attr = {VType::LNK, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), vfs->GetInodeNum(), 1, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
         InheritFromParent(attr, parent);
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
-        parent->Unlock();
         if (rc < 0) {
+            parent->Unlock();
             if (createdVNode)
                 delete vnode;
             return rc;
         }
-
+    
         rc = vnode->Symlink(dest, strlen(dest), cred);
+        parent->Unlock();
         if (rc < 0) {
             if (createdVNode)
                 delete vnode; // TODO: maybe more cleanup is required??

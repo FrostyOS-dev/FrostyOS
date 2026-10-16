@@ -121,6 +121,11 @@ namespace FS {
         virtual VNode* GetRoot();
         virtual FSType GetType() = 0;
 
+        ino_t GetInodeNum();
+
+        dev_t GetDevNum() const;
+        void SetDevNum(dev_t dev);
+
         virtual void Lock();
         virtual void Unlock();
 
@@ -129,7 +134,9 @@ namespace FS {
         Mutex m_lock;
         VNode* m_nodeCovered;
         VNode* m_root;
-        int m_flags; // TODO
+        int m_flags;
+        ino_t m_nextInodeNum;
+        dev_t m_devNum;
     };
 
     class VNode {
