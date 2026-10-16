@@ -47,7 +47,8 @@ Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), 
 }
 
 Process::~Process() {
-
+    if (m_cwd != nullptr)
+        FS::UnrefVNode(m_cwd);
 }
 
 bool Process::Start(bool insert) {
@@ -125,10 +126,8 @@ bool Process::Create(bool initAlloc) {
         FS::VNode* vnode;
         FS::VFS* fs;
         int rc = FS::VFS_LookupPath("/", &vnode, &fs, nullptr, m_cred);
-        if (rc == 0) { // not having a cwd isn't fatal
-            FS::RefVNode(vnode);
+        if (rc == 0) // not having a cwd isn't fatal
             m_cwd = vnode;
-        }
     }
     return true;
 }
@@ -150,6 +149,10 @@ void Process::Delete() {
         m_FDManager->Delete();
         delete m_FDManager;
         m_FDManager = nullptr;
+    }
+    if (m_cwd != nullptr) {
+        FS::UnrefVNode(m_cwd);
+        m_cwd = nullptr;
     }
 }
 
