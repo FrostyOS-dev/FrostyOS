@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -17,6 +17,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <icxxabi.h>
 #include <spinlock.h>
+
+#include <HAL/HAL.hpp>
 
 #ifdef __cplusplus
 extern "C" {
@@ -65,7 +67,7 @@ void __cxa_finalize(void* f) {
 }
 
 void __cxa_pure_virtual() {
-
+    PANIC("__cxa_pure_virtual called!");
 }
 
 #ifdef __cplusplus
