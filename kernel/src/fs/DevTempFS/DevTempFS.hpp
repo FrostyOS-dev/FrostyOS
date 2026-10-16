@@ -59,7 +59,7 @@ namespace FS {
         virtual int SetAttr(const VAttr& attr) override;
         virtual int GetDents(Dentry* buffer, size_t count, uint64_t offset, size_t* readCount) override;
         virtual int Link() override;
-        virtual int Unlink() override;
+        virtual int Unlink(VNode* child, const Credential& cred) override;
         virtual int Symlink(const char* path, size_t pathLen, const Credential& cred) override;
         virtual int ReadLink(char* buffer, size_t size, const Credential& cred) override;
         virtual int Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, const Credential& cred) override;

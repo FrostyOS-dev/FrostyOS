@@ -232,8 +232,8 @@ namespace FS {
         return -ENOSYS;
     }
 
-    int DevTempFSVNode::Unlink() {
-        return -ENOSYS;
+    int DevTempFSVNode::Unlink(VNode* child, const Credential& cred) {
+        return -EPERM; // unsupported
     }
 
     int DevTempFSVNode::Symlink(const char* path, size_t pathLen, const Credential& cred) {

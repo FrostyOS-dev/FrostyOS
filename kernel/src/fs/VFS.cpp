@@ -45,6 +45,21 @@ namespace FS {
 
     dev_t g_NextDevNum = 1;
 
+    static Mutex g_nsLock;
+
+    struct VNodeRef {
+        VNode* node;
+        explicit VNodeRef(VNode* n) : node(n) {}
+        ~VNodeRef() { UnrefVNode(node); }
+        VNodeRef(const VNodeRef&) = delete;
+        VNodeRef& operator=(const VNodeRef&) = delete;
+    };
+
+    struct NSLockGuard {
+        NSLockGuard() { g_nsLock.Lock(); }
+        ~NSLockGuard() { g_nsLock.Unlock(); }
+    };
+
     static dev_t GetDevNum() {
         return __atomic_fetch_add(&g_NextDevNum, 1, __ATOMIC_RELAXED);
     }
@@ -126,7 +141,7 @@ namespace FS {
     }
 
 
-    VNode::VNode(VFS* vfs) : m_attr{VType::BAD, 0, 0, 0, FSType::Invalid, -1, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0}, m_lock(), m_refCount(0), m_vfs(vfs), m_vfsMounted(nullptr), m_parent(nullptr) {
+    VNode::VNode(VFS* vfs) : m_attr{VType::BAD, 0, 0, 0, FSType::Invalid, -1, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0}, m_lock(), m_refCount(0), m_vfs(vfs), m_vfsMounted(nullptr), m_parent(nullptr), m_unlinked(false) {
 
     }
 
@@ -139,6 +154,14 @@ namespace FS {
         VAttr snapshot = m_attr;
         Unlock();
         return CheckPermission(snapshot, mode, cred) ? ESUCCESS : -EACCES;
+    }
+
+    bool VNode::IsUnlinked() {
+        return m_unlinked;
+    }
+
+    void VNode::SetUnlinked(bool unlinked) {
+        m_unlinked = unlinked;
     }
 
     VFS* VNode::GetVFS() {
@@ -189,7 +212,11 @@ namespace FS {
 
     // Decrement refCount of a VNode, and delete it if refCount is 0.
     void UnrefVNode(VNode* node) {
-        if (node != nullptr && __atomic_sub_fetch(&node->GetRefCount(), 1, __ATOMIC_ACQ_REL) == 0)
+        if (node == nullptr)
+            return;
+        uint64_t n = __atomic_sub_fetch(&node->GetRefCount(), 1, __ATOMIC_ACQ_REL);
+        assert(n != UINT64_MAX && "vnode refcount underflow");
+        if (n == 0)
             delete node;
     }
 
@@ -292,7 +319,7 @@ namespace FS {
         return 0;
     }
 
-    int VFS_LookupPath(const char* path, VNode** vnode, VFS** vfs, VNode* cwd, const Credential& cred, bool followSymlink) {
+    static int LookupPathLocked(const char* path, VNode** vnode, VFS** vfs, VNode* cwd, const Credential& cred, bool followSymlink) {
         if (path == nullptr || vnode == nullptr || vfs == nullptr)
             return -EINVAL;
 
@@ -414,6 +441,15 @@ namespace FS {
         return ESUCCESS;
     }
 
+    int VFS_LookupPath(const char *path, VNode** vnode, VFS** vfs, VNode* cwd, const Credential& cred, bool followSymlink) {
+        g_nsLock.Lock();
+        int rc = LookupPathLocked(path, vnode, vfs, cwd, cred, followSymlink);
+        if (rc == ESUCCESS)
+            RefVNode(*vnode);
+        g_nsLock.Unlock();
+        return rc;
+    }
+
     int VFS_CreateDir(const char* path, const char* name, VNode* cwd, const Credential& cred, VNode* vnode, VNode** outVNode) {
         if (path == nullptr || name == nullptr)
             return -EINVAL;
@@ -423,6 +459,8 @@ namespace FS {
         int rc = VFS_LookupPath(path, &parent, &vfs, cwd, cred);
         if (rc < 0)
             return rc;
+
+        VNodeRef parentRef(parent);
 
         rc = CheckCreate(parent, cred);
         if (rc < 0)
@@ -437,6 +475,11 @@ namespace FS {
 
         VNode* temp;
         parent->Lock();
+        if (parent->IsUnlinked()) {
+            parent->Unlock();
+            return -ENOENT;
+        }
+
         if (parent->Lookup(name, nameLen, &temp, cred) == 0) {
             parent->Unlock();
             return -EEXIST;
@@ -491,6 +534,8 @@ namespace FS {
         if (rc < 0)
             return rc;
 
+        VNodeRef parentRef(parent);
+
         rc = CheckCreate(parent, cred);
         if (rc < 0)
             return rc;
@@ -504,6 +549,11 @@ namespace FS {
 
         VNode* temp;
         parent->Lock();
+        if (parent->IsUnlinked()) {
+            parent->Unlock();
+            return -ENOENT;
+        }
+
         if (parent->Lookup(name, nameLen, &temp, cred) == 0) {
             parent->Unlock();
             return -EEXIST;
@@ -558,6 +608,8 @@ namespace FS {
         if (rc < 0)
             return rc;
 
+        VNodeRef parentRef(parent);
+
         rc = CheckCreate(parent, cred);
         if (rc < 0)
             return rc;
@@ -571,6 +623,11 @@ namespace FS {
 
         VNode* temp;
         parent->Lock();
+        if (parent->IsUnlinked()) {
+            parent->Unlock();
+            return -ENOENT;
+        }
+
         if (parent->Lookup(name, nameLen, &temp, cred) == 0) {
             parent->Unlock();
             return -EEXIST;
@@ -633,6 +690,8 @@ namespace FS {
         if (rc < 0)
             return rc;
 
+        VNodeRef ref(vnode);
+
         int want = 0;
         switch (flags & O_ACCMODE) {
         case O_RDONLY:
@@ -678,6 +737,8 @@ namespace FS {
         int rc = VFS_LookupPath(path, &vnode, &vfs, cwd, cred);
         if (rc < 0)
             return rc;
+
+        VNodeRef ref(vnode);
 
         vnode->Lock();
         VAttr attr;
@@ -738,6 +799,10 @@ namespace FS {
     int VFS_BuildPath(VNode* vnode, char* buf, size_t size, const Credential& cred) {
         if (vnode == nullptr || buf == nullptr || size == 0)
             return -EINVAL;
+
+        NSLockGuard ns;
+        if (vnode->IsUnlinked())
+            return -ENOENT;
 
         if (g_rootVFS == nullptr || g_rootVFS->GetRoot() == nullptr)
             return -ENOSYS;
@@ -890,6 +955,97 @@ namespace FS {
         attr.ctime.tv_sec = HAL_GetUnixEpochTime();
         attr.ctime.tv_nsec = 0;
         vnode->SetAttr(attr);
+    }
+
+    static int UnlinkLocked(VNode* parent, const char* name, size_t nameLen, bool removeDir, bool trailingSlash, const Credential& cred, VNode** outChild) {
+        if (parent->IsUnlinked())
+            return -ENOENT;
+
+        VNode* child = nullptr;
+        int rc = parent->Lookup(name, nameLen, &child, cred);
+        if (rc < 0)
+            return rc;
+
+        if (child->GetMountedVFS() != nullptr)
+            return -EBUSY;
+
+        VAttr pattr;
+        parent->GetAttr(&pattr);
+
+        child->Lock();
+        VAttr cattr;
+        child->GetAttr(&cattr);
+
+        if (cattr.type == VType::DIR) {
+            if (!removeDir) {
+                child->Unlock();
+                return -EISDIR;
+            }
+        } else if (removeDir || trailingSlash) {
+            child->Unlock();
+            return -ENOTDIR;
+        }
+
+        if ((pattr.mode & S_ISVTX) > 0 && cred.euid != 0 && cred.euid != cattr.uid && cred.euid != pattr.uid) {
+            child->Unlock();
+            return -EPERM;
+        }
+
+        if (cattr.type == VType::DIR && child->HasChildren()) {
+            child->Unlock();
+            return -ENOTEMPTY;
+        }
+
+        RefVNode(child);
+        child->SetUnlinked(true);
+        rc = parent->Unlink(child, cred);
+        if (rc < 0) {
+            child->SetUnlinked(false);
+            child->Unlock();
+            UnrefVNode(child);
+            return rc;
+        }
+        child->Unlock();
+        *outChild = child;
+        return ESUCCESS;
+    }
+
+    int VFS_Unlink(const char* path, const char* name, VNode* cwd, const Credential& cred, bool removeDir, bool trailingSlash) {
+        if (path == nullptr || name == nullptr)
+            return -EINVAL;
+
+        size_t nameLen = strlen(name);
+        if (nameLen == 0)
+            return -ENOENT;
+        if (nameLen > NAME_MAX)
+            return -ENAMETOOLONG;
+        if (nameLen == 1 && name[0] == '.')
+            return removeDir ? -EINVAL : -EISDIR;
+        if (nameLen == 2 && name[0] == '.' && name[1] == '.')
+            return removeDir ? -ENOTEMPTY : -EISDIR;
+
+        VNode* parent = nullptr;
+        VFS* vfs = nullptr;
+        int rc = VFS_LookupPath(path, &parent, &vfs, cwd, cred);
+        if (rc < 0)
+            return rc;
+        VNodeRef parentRef(parent);
+
+        rc = CheckCreate(parent, cred);
+        if (rc < 0)
+            return rc;
+
+        VNode* removed = nullptr;
+        g_nsLock.Lock();
+        parent->Lock();
+        rc = UnlinkLocked(parent, name, nameLen, removeDir, trailingSlash, cred, &removed);
+        parent->Unlock();
+        g_nsLock.Unlock();
+        if (rc < 0)
+            return rc;
+
+        UnrefVNode(removed);
+        return ESUCCESS;
     }
 
     uint8_t VFS_GetPosixType(VType type) {

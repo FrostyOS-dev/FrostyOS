@@ -94,7 +94,16 @@ namespace FS {
     }
 
     TempFSVNode::~TempFSVNode() {
-
+        assert(m_children.getCount() == 0 && "directory freed while it still has children");
+        m_blocks.forEach([&](uint64_t, Block* block) -> bool {
+            VMM::g_KVMM->FreePages(block->addr);
+            delete block;
+            return true;
+        });
+        m_blocks.Clear();
+        delete[] m_name;
+        delete[] m_linkDest;
+        UnrefVNode(m_parent);
     }
 
     int TempFSVNode::Open(int flags, const Credential& cred) {
@@ -273,8 +282,18 @@ namespace FS {
         return -ENOSYS;
     }
 
-    int TempFSVNode::Unlink() {
-        return -ENOSYS;
+    int TempFSVNode::Unlink(VNode* child, const Credential& cred) {
+        TempFSVNode* node = static_cast<TempFSVNode*>(child);
+        if (node == nullptr || node->m_parent != this)
+            return -ENOENT;
+
+        m_children.lock();
+        m_children.remove(node);
+        m_children.unlock();
+
+        node->m_attr.nlinks = 0;
+        UnrefVNode(node);
+        return ESUCCESS;
     }
 
     int TempFSVNode::Symlink(const char* path, size_t pathLen, const Credential& cred) {

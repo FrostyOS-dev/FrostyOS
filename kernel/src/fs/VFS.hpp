@@ -155,7 +155,7 @@ namespace FS {
         virtual int GetDents(Dentry* buffer, size_t count, uint64_t offset, size_t* readCount) = 0;
         virtual int Access(int mode, const Credential& cred); // callers must not have the vnode lock held
         virtual int Link() = 0;
-        virtual int Unlink() = 0;
+        virtual int Unlink(VNode* child, const Credential& cred) = 0;
         virtual int Symlink(const char* path, size_t pathLen, const Credential& cred) = 0;
         virtual int ReadLink(char* buffer, size_t size, const Credential& cred) = 0;
         virtual int Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, const Credential& cred) = 0;
@@ -165,6 +165,9 @@ namespace FS {
         virtual int GetName(char* buf, size_t size, size_t* realSize) = 0;
         virtual int Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) = 0; // returns 0 on success, positive value on fail
         virtual bool HasChildren() = 0;
+
+        virtual bool IsUnlinked();
+        virtual void SetUnlinked(bool unlinked);
 
         virtual VFS* GetVFS();
         virtual VFS* GetMountedVFS();
@@ -187,6 +190,7 @@ namespace FS {
         VFS* m_vfs; // Parent VFS
         VFS* m_vfsMounted; // VFS that is mounted here
         VNode* m_parent;
+        bool m_unlinked;
     };
 
     void RefVNode(VNode* node); // Increment refCount of a VNode
@@ -216,6 +220,8 @@ namespace FS {
     int VFS_Chown(VNode* vnode, uid_t uid, gid_t gid, const Credential& cred);
 
     void VFS_ClearSetID(VNode* vnode, const Credential& cred); // caller must hold vnode's lock
+
+    int VFS_Unlink(const char* path, const char* name, VNode* cwd, const Credential& cred, bool removeDir, bool trailingSlash);
 
     uint8_t VFS_GetPosixType(VType type);
 

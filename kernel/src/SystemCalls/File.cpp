@@ -1040,3 +1040,67 @@ int sys_fchownat(int fd, const char* path, size_t pathLen, UGIDs ids, int flags)
     FS::UnrefVNode(vnode);
     return rc;
 }
+
+int sys_unlinkat(int dirFD, const char* path, size_t pathLen, int flags) {
+    if ((flags & ~AT_REMOVEDIR) != 0)
+        return -EINVAL;
+    if (path == nullptr)
+        return -EFAULT;
+    if (pathLen == 0)
+        return -ENOENT;
+    if (pathLen > PATH_MAX)
+        return -ENAMETOOLONG;
+
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+    FileDescriptorManager* manager = proc->GetFDManager();
+    if (manager == nullptr)
+        return -ENOSYS;
+
+    bool removeDir = (flags & AT_REMOVEDIR) > 0;
+
+    char* kPath = new char[pathLen + 1];
+    if (kPath == nullptr)
+        return -ENOMEM;
+    if (!UserRead(path, kPath, pathLen, proc)) {
+        delete[] kPath;
+        return -EFAULT;
+    }
+    kPath[pathLen] = 0;
+
+    size_t len = pathLen;
+    bool trailing = false;
+    while (len > 1 && kPath[len - 1] == '/') {
+        kPath[--len] = 0;
+        trailing = true;
+    }
+    if (len == 1 && kPath[0] == '/') {
+        delete[] kPath;
+        return removeDir ? -EBUSY : -EISDIR;
+    }
+
+    FS::VNode* dirVNode = nullptr;
+    if (dirFD == AT_FDCWD)
+        dirVNode = proc->GetCWDRef();
+    else if (kPath[0] != '/') {
+        FileDescriptor* desc = manager->Get(dirFD);
+        if (desc == nullptr || !desc->isOpen() || desc->GetType() != FDType::Directory) {
+            bool notDir = desc != nullptr && desc->isOpen();
+            if (desc != nullptr)
+                desc->Unref();
+            delete[] kPath;
+            return notDir ? -ENOTDIR : -EBADF;
+        }
+        dirVNode = desc->GetVNode();
+        FS::RefVNode(dirVNode);
+        desc->Unref();
+    }
+
+    const char* parent;
+    const char* name;
+    SplitPath(kPath, &parent, &name);
+    int rc = FS::VFS_Unlink(parent, name, dirVNode, proc->GetCred(), removeDir, trailing);
+
+    FS::UnrefVNode(dirVNode);
+    delete[] kPath;
+    return rc;
+}

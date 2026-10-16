@@ -100,6 +100,7 @@ struct Stat {
 #define AT_SYMLINK_NOFOLLOW 0x100
 #define AT_EMPTY_PATH 0x1000
 #define AT_FDCWD -100
+#define AT_REMOVEDIR 0x200
 
 struct PollFD {
 	int fd;
@@ -146,5 +147,7 @@ int sys_ppoll(PollFD* fds, nfds_t nfds, const timespec* ts, const sigset_t* mask
 
 int sys_fchmodat(int fd, const char* path, size_t pathLen, mode_t mode, int flags);
 int sys_fchownat(int fd, const char* path, size_t pathLen, UGIDs ids, int flags);
+
+int sys_unlinkat(int dirFD, const char* path, size_t pathLen, int flags);
 
 #endif /* _SYSCALL_FILE_HPP */
