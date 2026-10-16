@@ -34,7 +34,7 @@ bool UserReadAtomic32(const uint32_t* userBuf, uint32_t* kBuf, Process* currentP
 
 #define ENUMERATE_SYSTEM_CALLS(SC) \
     SC(EXIT, exit) \
-    SC(OPEN, open) \
+    SC(OPENAT, openat) \
     SC(CLOSE, close) \
     SC(READ, read) \
     SC(WRITE, write) \

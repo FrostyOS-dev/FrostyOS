@@ -116,7 +116,7 @@ struct UGIDs {
 typedef unsigned long nfds_t;
 
 // pathLen does NOT include null-termination
-int sys_open(const char* path, size_t pathLen, int flags, mode_t mode);
+int sys_openat(int dirFD, const char* path, size_t pathLen, int flags, mode_t mode);
 int sys_close(int fd);
 
 ssize_t sys_read(int fd, void* buf, size_t count);

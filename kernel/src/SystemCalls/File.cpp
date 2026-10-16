@@ -49,7 +49,7 @@ static void SplitPath(char* path, const char** parent, const char** name) {
     }
 }
 
-int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
+int sys_openat(int dirFD, const char* path, size_t pathLen, int flags, mode_t mode) {
     if (pathLen == 0)
         return -ENOENT;
 
@@ -70,14 +70,35 @@ int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
 
     realPath[pathLen] = 0;
 
-    FS::VNode* cwd = proc->GetCWD();
+    FS::VNode* dirVNode = nullptr;
+    if (dirFD == AT_FDCWD)
+        dirVNode = proc->GetCWDRef();
+    else {
+        FileDescriptor* desc = manager->Get(dirFD);
+        if (desc == nullptr || !desc->isOpen() || desc->GetType() != FDType::Directory) {
+            if (desc != nullptr)
+                desc->Unref();
+            delete[] realPath;
+            return -EBADF;
+        }
+
+        dirVNode = desc->GetVNode();
+        FS::RefVNode(dirVNode);
+        desc->Unref();
+    }
+
+    if (dirVNode == nullptr) {
+        delete[] realPath;
+        return -EINVAL;
+    }
 
     FS::VNode* vnode = nullptr;
-    int rc = FS::VFS_Open(realPath, flags, &vnode, cwd, proc->GetCred());
+    int rc = FS::VFS_Open(realPath, flags, &vnode, dirVNode, proc->GetCred());
     if (rc < 0) {
         if (rc == -ENOENT && (flags & O_CREAT) > 0) {
             if (realPath[pathLen - 1] == '/') {
                 delete[] realPath;
+                FS::UnrefVNode(dirVNode);
                 return -EISDIR;
             }
             const char* parent;
@@ -85,13 +106,15 @@ int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
             SplitPath(realPath, &parent, &name);
             
             bool open = false;
-            rc = FS::VFS_CreateFile(parent, name, cwd, proc->GetCred(), nullptr, &vnode);
+            rc = FS::VFS_CreateFile(parent, name, dirVNode, proc->GetCred(), nullptr, &vnode);
             if ((flags & O_EXCL) == 0 && rc == -EEXIST) {
                 if (parent == realPath)
                     ((char*)name)[-1] = '/';
-                rc = FS::VFS_Open(realPath, flags, &vnode, cwd, proc->GetCred());
+                rc = FS::VFS_Open(realPath, flags, &vnode, dirVNode, proc->GetCred());
                 open = true;
             }
+
+            FS::UnrefVNode(dirVNode);
 
             if (rc < 0 || vnode == nullptr) {
                 delete[] realPath;
@@ -120,13 +143,17 @@ int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
                 FS::RefVNode(vnode);
             }
         } else {
+            FS::UnrefVNode(dirVNode);
             delete[] realPath;
             return rc;
         }
-    } else if (rc == 0 && (flags & O_CREAT) > 0 && (flags & O_EXCL) > 0) {
-        FS::VFS_Close(vnode, proc->GetCred());
-        delete[] realPath;
-        return -EEXIST;
+    } else {
+        FS::UnrefVNode(dirVNode);
+        if (rc == 0 && (flags & O_CREAT) > 0 && (flags & O_EXCL) > 0) {
+            FS::VFS_Close(vnode, proc->GetCred());
+            delete[] realPath;
+            return -EEXIST;
+        }
     }
 
     delete[] realPath;
