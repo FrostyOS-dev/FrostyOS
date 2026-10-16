@@ -501,12 +501,15 @@ int sys_chdir(const char* path, size_t pathLen) {
     delete[] kPath;
     
     if (rc == 0) {
-        if (vnode->GetType() != FS::VType::DIR)
+        if (vnode->GetType() != FS::VType::DIR) {
+            FS::UnrefVNode(vnode);
             return -ENOTDIR;
+        }
         rc = vnode->Access(ACCESS_X, proc->GetCred());
-        if (rc < 0)
+        if (rc < 0) {
+            FS::UnrefVNode(vnode);
             return rc;
-        FS::RefVNode(vnode);
+        }
         FS::UnrefVNode(proc->GetCWD());
         proc->SetCWD(vnode);
     }
@@ -660,7 +663,6 @@ static int ResolveVNodeAt(Process* proc, int fd, const char* path, size_t pathLe
     if (rc < 0)
         return rc;
 
-    FS::RefVNode(found);
     *out = found;
     return ESUCCESS;
 }
@@ -682,11 +684,15 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
             return -EBADF;
         }
 
-        if (desc->GetVNode() != nullptr)
+        if (desc->GetVNode() != nullptr) {
+            desc->Unref();
             return rc;
+        }
 
-        if (desc->GetType() != FDType::TTY)
+        if (desc->GetType() != FDType::TTY) {
+            desc->Unref();
             return -EBADF;
+        }
         desc->Unref();
 
         Stat buf;
