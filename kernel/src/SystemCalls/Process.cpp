@@ -24,6 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Exec/ELF.hpp>
 
 #include <fs/FDManager.hpp>
+#include <fs/VFS.hpp>
 
 #include <Memory/PageMapper.hpp>
 #include <Memory/VMM.hpp>
@@ -169,7 +170,7 @@ pid_t sys_fork(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, CPU_Registers* 
 
     proc->SetFDManager(FDManager);
     proc->SetCred(currentProc->GetCred());
-    proc->SetCWD(currentProc->GetCWD());
+    proc->SetCWD(currentProc->GetCWDRef());
 
     if (!proc->Create(false)) {
         FDManager->Delete();
@@ -341,7 +342,8 @@ int sys_exec(const char* path, char* const argv[], char* const env[]) {
 
     newProc->SetPID(currentProc->GetPID());
     newProc->SetPPID(parentPID);
-    newProc->SetCWD(currentProc->GetCWD());
+    FS::UnrefVNode(newProc->GetCWD());
+    newProc->SetCWD(currentProc->GetCWDRef());
 
     FileDescriptorManager* FDManager = newProc->GetFDManager();
     FDManager->Delete();
