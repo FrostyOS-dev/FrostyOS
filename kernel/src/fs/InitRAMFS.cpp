@@ -94,6 +94,7 @@ int LoadInitRAMFS(void* data, size_t size) {
             rc = vnode->GetAttr(&attr);
             if (rc < 0) {
                 vnode->Unlock();
+                FS::UnrefVNode(vnode);
                 break;
             }
 
@@ -106,12 +107,14 @@ int LoadInitRAMFS(void* data, size_t size) {
             rc = vnode->SetAttr(attr);
             if (rc < 0) {
                 vnode->Unlock();
+                FS::UnrefVNode(vnode);
                 break;
             }
 
             uint64_t bytes = 0;
             rc = vnode->Write((void*)((uint64_t)header + 512), itemSize, 0, 0, &bytes, cred);
             vnode->Unlock();
+            FS::UnrefVNode(vnode);
             break;
         }
         case '2': { // Symlink
@@ -130,6 +133,7 @@ int LoadInitRAMFS(void* data, size_t size) {
             rc = vnode->GetAttr(&attr);
             if (rc < 0) {
                 vnode->Unlock();
+                FS::UnrefVNode(vnode);
                 break;
             }
 
@@ -141,6 +145,7 @@ int LoadInitRAMFS(void* data, size_t size) {
             attr.ctime.tv_sec = mtime;
             rc = vnode->SetAttr(attr);
             vnode->Unlock();
+            FS::UnrefVNode(vnode);
             break;
         }
         case '5': { // Folder
@@ -159,6 +164,7 @@ int LoadInitRAMFS(void* data, size_t size) {
             rc = vnode->GetAttr(&attr);
             if (rc < 0) {
                 vnode->Unlock();
+                FS::UnrefVNode(vnode);
                 break;
             }
 
@@ -170,6 +176,7 @@ int LoadInitRAMFS(void* data, size_t size) {
             attr.ctime.tv_sec = mtime;
             rc = vnode->SetAttr(attr);
             vnode->Unlock();
+            FS::UnrefVNode(vnode);
             break;
         }
         default:
