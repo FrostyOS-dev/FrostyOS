@@ -243,6 +243,7 @@ namespace LinkedList {
         ~RearInsertLinkedList() {
             for (uint64_t i = 0; i < m_count; i++)
                 remove((uint64_t)0);
+            m_count = 0;
         }
 
         void insert(const T* obj) {
@@ -332,16 +333,28 @@ namespace LinkedList {
         }
 
         void remove(uint64_t index) {
-            deleteNode(m_start, (uint64_t)get(index), m_vmm, m_usePool);
-            m_count--;
+            T* obj = get(index);
+            if (obj != nullptr)
+                remove(obj);
         }
 
         void remove(const T* obj) {
-            deleteNode(m_start, (uint64_t)obj, m_vmm, m_usePool);
+            Node* node = findNode(m_start, (uint64_t)obj);
+            if (node == nullptr)
+                return;
+            if (node == m_end)
+                m_end = node->previous;
+            deleteNode(m_start, node, m_vmm, m_usePool);
             m_count--;
+            if (m_count == 0) {
+                m_start = nullptr;
+                m_end = nullptr;
+            }
         }
 
         void Enumerate(FunctionRef<bool(T* obj)> func) const {
+            if (m_start == nullptr)
+                return;
             Node* temp = m_start;
             for (uint64_t i = 0; i < m_count; i++) {
                 if (!func((T*)(temp->data)))
@@ -351,6 +364,8 @@ namespace LinkedList {
         }
 
         void Enumerate(FunctionRef<bool(T* obj, void* data)> func, void* data = nullptr) const {
+            if (m_start == nullptr)
+                return;
             Node* temp = m_start;
             for (uint64_t i = 0; i < m_count; i++) {
                 if (!func((T*)(temp->data), data))
@@ -360,7 +375,7 @@ namespace LinkedList {
         }
 
         void Enumerate(FunctionRef<bool(T* obj, uint64_t index)> func, uint64_t start = 0) const {
-            if (start >= m_count)
+            if (m_start == nullptr || start >= m_count)
                 return;
             Node* temp = m_start;
             for (uint64_t i = 0; i < start; i++)
@@ -373,7 +388,7 @@ namespace LinkedList {
         }
 
         void Enumerate(FunctionRef<bool(T* obj, uint64_t index, void* data)> func, uint64_t start = 0, void* data = nullptr) const {
-            if (start >= m_count)
+            if (m_start == nullptr || start >= m_count)
                 return;
             Node* temp = m_start;
             for (uint64_t i = 0; i < start; i++)
@@ -386,6 +401,8 @@ namespace LinkedList {
         }
 
         void EnumerateReverse(FunctionRef<bool(T* obj)> func) const {
+            if (m_end == nullptr)
+                return;
             Node* temp = m_end;
             for (uint64_t i = 0; i < m_count; i++) {
                 // if (temp == nullptr)
@@ -396,6 +413,8 @@ namespace LinkedList {
         }
 
         void EnumerateReverse(FunctionRef<bool(T* obj, uint64_t index)> func, uint64_t start = 0) const {
+            if (m_end == nullptr)
+                return;
             Node* temp = m_end;
             for (uint64_t i = 0; i < start; i++) {
                 // if (temp == nullptr)
@@ -413,6 +432,8 @@ namespace LinkedList {
 
         // Enumerate with possibility of deleting current node. func return 0 to continue, 1 to quit, 2 to delete current node, 3 to delete current node and exit
         void EnumerateDelete(IteratorDecision (*func)(T* obj, void* data, uint64_t index), void* data = nullptr, uint64_t start = 0) {
+            if (m_start == nullptr)
+                return;
             Node* temp = m_start;
             for (uint64_t i = 0; i < start; i++) {
                 temp = temp->next;
