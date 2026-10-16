@@ -34,6 +34,21 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Scheduling/Event.hpp>
 #include <Scheduling/Process.hpp>
 
+static void SplitPath(char* path, const char** parent, const char** name) {
+    char* slash = strrchr(path, '/');
+    if (slash == nullptr) {
+        *parent = "";
+        *name = path;
+    } else if (slash == path) {
+        *parent = "/";
+        *name = path + 1;
+    } else {
+        *slash = 0;
+        *parent = path;
+        *name = slash + 1;
+    }
+}
+
 int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
     if (pathLen == 0)
         return -ENOENT;
@@ -65,19 +80,15 @@ int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
                 delete[] realPath;
                 return -EISDIR;
             }
-            char* parent = realPath;
-            char* name = strrchr(realPath, '/');
-            if (name == nullptr) {
-                name = realPath;
-                parent = (char*)"";
-            } else {
-                name[0] = 0;
-                name++;
-            }
+            const char* parent;
+            const char* name;
+            SplitPath(realPath, &parent, &name);
             
             bool open = false;
             rc = FS::VFS_CreateFile(parent, name, cwd, proc->GetCred(), nullptr, &vnode);
             if ((flags & O_EXCL) == 0 && rc == -EEXIST) {
+                if (parent == realPath)
+                    ((char*)name)[-1] = '/';
                 rc = FS::VFS_Open(realPath, flags, &vnode, cwd, proc->GetCred());
                 open = true;
             }
@@ -88,9 +99,6 @@ int sys_open(const char* path, size_t pathLen, int flags, mode_t mode) {
             }
 
             if (!open) {
-                if (name != realPath)
-                    name[-1] = '/';
-
                 vnode->Lock();
                 FS::VAttr attr;
                 rc = vnode->GetAttr(&attr);
@@ -453,15 +461,9 @@ int sys_symlinkat(int dirFD, const char* target, size_t targetLen, const char* l
         delete[] kLinkPath;
         return -EISDIR;
     }
-    char* parent = kLinkPath;
-    char* name = strrchr(kLinkPath, '/');
-    if (name == nullptr) {
-        name = kLinkPath;
-        parent = (char*)"";
-    } else {
-        name[0] = 0;
-        name++;
-    }
+    const char* parent;
+    const char* name;
+    SplitPath(kLinkPath, &parent, &name);
 
     int rc = FS::VFS_CreateSymlink(parent, name, kTarget, dirVNode, proc->GetCred());
 
@@ -778,15 +780,9 @@ int sys_mkdirat(int dirFD, const char* path, size_t pathLen, mode_t mode) {
         return -EINVAL;
     }
 
-    char* parent = kPath;
-    char* name = strrchr(kPath, '/');
-    if (name == nullptr) {
-        name = kPath;
-        parent = (char*)"";
-    } else {
-        name[0] = 0;
-        name++;
-    }
+    const char* parent;
+    const char* name;
+    SplitPath(kPath, &parent, &name);
 
     FS::VNode* vnode = nullptr;
     int rc = FS::VFS_CreateDir(parent, name, dirVNode, cred, nullptr, &vnode);
