@@ -33,6 +33,9 @@ namespace FS {
         virtual void* AllocatePage() override;
         virtual bool GetPage(VMM::MemoryObject* obj, uint64_t offset, VMM::Page** outPage, bool write) override; // obj is assumed to already be locked
         virtual void FreePage(void* page) override;
+
+        void ZeroRange(VMM::MemoryObject* obj, uint64_t from, uint64_t to);
+        void DiscardPages(VMM::MemoryObject* obj, uint64_t fromOffset);
     };
 }
 

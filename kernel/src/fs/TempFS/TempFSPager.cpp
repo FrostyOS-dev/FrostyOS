@@ -15,13 +15,14 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "TempFS.hpp"
 #include "TempFSPager.hpp"
 
 #include <stdint.h>
 #include <spinlock.h>
 #include <string.h>
 #include <util.h>
+
+#include <DataStructures/AVLTree.hpp>
 
 #include <Memory/Pager.hpp>
 #include <Memory/PagingUtil.hpp>
@@ -65,5 +66,36 @@ namespace FS {
         g_PMM->FreePage(page);
     }
 
+    void TempFSPager::ZeroRange(VMM::MemoryObject* obj, uint64_t from, uint64_t to) {
+        if (from >= to)
+            return;
+        spinlock_acquire(&obj->lock);
+        for (AVLTree::wAVLTreeNode* node = obj->pages.FindNodeOrHigher(ALIGN_DOWN(from, PAGE_SIZE)); node != nullptr && node->key < to; node = obj->pages.NextNode(node)) {
+            VMM::Page* page = reinterpret_cast<VMM::Page*>(node->value);
+            if (page->physAddr == 0)
+                continue;
+            uint64_t s = from > node->key ? from - node->key : 0;
+            uint64_t e = (to - node->key) < PAGE_SIZE ? to - node->key : PAGE_SIZE;
+            memset((uint8_t*)(to_HHDM(page->physAddr) + s), 0, e - s);
+        }
+        spinlock_release(&obj->lock);
+    }
 
+    void TempFSPager::DiscardPages(VMM::MemoryObject* obj, uint64_t fromOffset) {
+        while (true) {
+            spinlock_acquire(&obj->lock);
+            AVLTree::wAVLTreeNode* node = obj->pages.FindNodeOrHigher(fromOffset);
+            if (node == nullptr) {
+                spinlock_release(&obj->lock);
+                return;
+            }
+            VMM::Page* page = reinterpret_cast<VMM::Page*>(node->value);
+            obj->pages.RemoveNode(node);
+            spinlock_release(&obj->lock);
+
+            if (page->physAddr != 0)
+                FreePage((void*)page->physAddr);
+            kfree_vmm(page);
+        }
+    }
 }

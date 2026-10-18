@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "TempFSPager.hpp"
 
 #include <errno.h>
+#include <spinlock.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -89,7 +90,7 @@ namespace FS {
     }
 
     
-    TempFSVNode::TempFSVNode(VFS* vfs) : VNode(vfs), m_name(nullptr), m_nameLen(0), m_linkDest(nullptr), m_linkLen(0), m_memObj(nullptr), m_defaultProt(VMM::Protection::READ_WRITE), m_blocks(), m_children() {
+    TempFSVNode::TempFSVNode(VFS* vfs) : VNode(vfs), m_blockCount(0), m_name(nullptr), m_nameLen(0), m_linkDest(nullptr), m_linkLen(0), m_memObj(nullptr), m_defaultProt(VMM::Protection::READ_WRITE), m_blocks(), m_children() {
 
     }
 
@@ -101,6 +102,8 @@ namespace FS {
             return true;
         });
         m_blocks.Clear();
+        if (m_memObj != nullptr)
+            VMM::ReleaseMemoryObject(m_memObj);
         delete[] m_name;
         delete[] m_linkDest;
         UnrefVNode(m_parent);
@@ -139,8 +142,12 @@ namespace FS {
 
     int TempFSVNode::Write(const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, const Credential& cred) {
         *bytesWritten = 0;
-        if (offset + size < offset)
+        if (offset + size < offset || offset + size > (uint64_t)INT64_MAX)
             return -EFBIG;
+
+        if (m_memObj != nullptr && offset > m_attr.size)
+            static_cast<TempFS*>(m_vfs)->GetPager()->ZeroRange(m_memObj, m_attr.size, offset);
+        SyncObjSize((offset + size + PAGE_SIZE - 1) >> PAGE_SIZE_SHIFT);
 
         int rc = ESUCCESS;
         size_t done = 0;
@@ -159,6 +166,7 @@ namespace FS {
 
         if (offset + done > m_attr.size)
             m_attr.size = offset + done;
+        SyncObjSize(0);
         *bytesWritten = done;
         return rc;
     }
@@ -336,8 +344,66 @@ namespace FS {
         return -ENOSYS;
     }
 
-    int TempFSVNode::Resize() {
-        return -ENOSYS;
+    int TempFSVNode::Resize(uint64_t newSize, const Credential& cred) {
+        if (newSize > (int64_t)INT64_MAX)
+            return -EFBIG;
+
+        uint64_t oldSize = m_attr.size;
+        if (newSize == oldSize)
+            return ESUCCESS;
+
+        VMM::MemoryObject* obj = m_memObj;
+        TempFSPager* pager = static_cast<TempFS*>(m_vfs)->GetPager();
+
+        if (newSize > oldSize) {
+            if (obj != nullptr)
+                pager->ZeroRange(obj, oldSize, newSize);
+            m_attr.size = newSize;
+            SyncObjSize(0);
+            return ESUCCESS;
+        }
+
+        uint64_t newPages = DIV_ROUNDUP(newSize, PAGE_SIZE);
+        uint64_t cutoff = newPages << PAGE_SIZE_SHIFT;
+
+        m_attr.size = newSize;
+        SyncObjSize(0);
+        if (obj == nullptr)
+            return ESUCCESS;
+
+        pager->ZeroRange(obj, newSize, cutoff);
+
+        spinlock_acquire(&obj->lock);
+        bool userMapped = obj->refCount > m_blockCount + 1; // each block and vnode hold 1 ref
+        spinlock_release(&obj->lock);
+
+        if (userMapped) {
+            // TODO: reverse map to revoke user mappings
+            pager->ZeroRange(obj, cutoff, UINT64_MAX);
+            return ESUCCESS;
+        }
+
+        while (true) {
+            m_blocks.lock();
+            AVLTree::wAVLTreeNode* node = m_blocks.FindNodeOrHigher(newPages);
+            if (node == nullptr) {
+                m_blocks.unlock();
+                break;
+            }
+
+            Block* b = reinterpret_cast<Block*>(node->value);
+            m_blocks.RemoveNode(node);
+            m_blocks.unlock();
+
+            assert(b->pages == 1);
+            VMM::g_KVMM->FreePages(b->addr);
+            m_attr.blocks -= b->pages * PAGE_SIZE;
+            m_blockCount--;
+            delete b;
+        }
+
+        pager->DiscardPages(obj, cutoff);
+        return ESUCCESS;
     }
 
     int TempFSVNode::Rename() {
@@ -383,6 +449,7 @@ namespace FS {
     }
 
     TempFSVNode::Block* TempFSVNode::CreateBlock(uint64_t offset, uint64_t pages) {
+        bool firstBlock = (m_memObj == nullptr);
         Block* block = new Block;
         block->pages = pages;
         block->addr = VMM::g_KVMM->AllocMemObjAnonPages(pages, this, offset << PAGE_SIZE_SHIFT, VMM::DEFAULT_KALLOC_FLAGS, &m_memObj, static_cast<TempFS*>(m_vfs)->GetPager());
@@ -391,10 +458,29 @@ namespace FS {
             return nullptr;
         }
 
+        if (firstBlock) {
+            spinlock_acquire(&m_memObj->lock);
+            m_memObj->refCount++; // vnode's own reference
+            spinlock_release(&m_memObj->lock);
+        }
+        m_blockCount++;
+        SyncObjSize(offset + pages);
+
         m_defaultProt = VMM::Protection::READ_WRITE;
         m_blocks.Insert(offset, block);
         m_attr.blocks += pages * PAGE_SIZE;
         return block;
+    }
+
+    void TempFSVNode::SyncObjSize(uint64_t minPages) {
+        if (m_memObj == nullptr)
+            return;
+        uint64_t pages = (m_attr.size + PAGE_SIZE - 1) >> PAGE_SIZE_SHIFT;
+        if (minPages > pages)
+            pages = minPages;
+        spinlock_acquire(&m_memObj->lock);
+        m_memObj->size = pages;
+        spinlock_release(&m_memObj->lock);
     }
 
 }

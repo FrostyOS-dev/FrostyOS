@@ -102,6 +102,18 @@ struct Stat {
 #define AT_FDCWD -100
 #define AT_REMOVEDIR 0x200
 
+#define F_DUPFD            0
+#define F_GETFD            1
+#define F_SETFD            2
+#define F_GETFL            3
+#define F_SETFL            4
+#define F_DUPFD_CLOEXEC 1030
+
+#define FD_CLOEXEC 1
+
+#define O_OPEN_ONLY_FLAGS (O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC | O_CLOEXEC)
+#define O_SETFL_MASK (O_APPEND | O_NONBLOCK | O_ASYNC | O_DIRECT | O_NOATIME)
+
 struct PollFD {
 	int fd;
 	short events;
@@ -149,5 +161,13 @@ int sys_fchmodat(int fd, const char* path, size_t pathLen, mode_t mode, int flag
 int sys_fchownat(int fd, const char* path, size_t pathLen, UGIDs ids, int flags);
 
 int sys_unlinkat(int dirFD, const char* path, size_t pathLen, int flags);
+
+int sys_fcntl(int fd, int op, uint64_t arg);
+
+int sys_dup(int fd, int flags);
+int sys_dup2(int fd, int newFD, int flags);
+
+int sys_truncate(const char* path, size_t pathLen, off_t size);
+int sys_ftruncate(int fd, off_t size);
 
 #endif /* _SYSCALL_FILE_HPP */

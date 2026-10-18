@@ -174,6 +174,8 @@ namespace VMM {
         AVLTree::wAVLTree<uint64_t, MapEntry*> m_mapEntries; // Key is startVirt
     };
 
+    void ReleaseMemoryObject(MemoryObject* obj);
+
     extern VMM* g_KVMM; // to be implemented in arch-specific code
 
 };

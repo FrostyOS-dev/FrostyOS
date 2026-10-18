@@ -1048,6 +1048,34 @@ namespace FS {
         return ESUCCESS;
     }
 
+    int VFS_Truncate(VNode* vnode, uint64_t size, const Credential& cred, bool clearSID) {
+        if (vnode == nullptr)
+            return -EINVAL;
+    
+        vnode->Lock();
+        if (VType type = vnode->GetType(); type != VType::REG) {
+            vnode->Unlock();
+            return type == VType::DIR ? -EISDIR : -EPERM;
+        }
+
+        int rc = vnode->Resize(size, cred);
+        if (rc >= 0) {
+            VAttr attr;
+            rc = vnode->GetAttr(&attr);
+            if (rc >= 0) {
+                if (cred.euid != 0 && clearSID)
+                    attr.mode &= (uint16_t)~(S_ISUID | S_ISGID);
+                attr.mtime.tv_sec = HAL_GetUnixEpochTime();
+                attr.mtime.tv_nsec = 0;
+                attr.ctime = attr.mtime;
+                rc = vnode->SetAttr(attr);
+            }
+        }
+
+        vnode->Unlock();
+        return rc;
+    }
+
     uint8_t VFS_GetPosixType(VType type) {
         switch (type) {
 #define TYPE_CASE(v, p) \

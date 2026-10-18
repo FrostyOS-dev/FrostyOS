@@ -260,8 +260,8 @@ namespace FS {
         CALL_DEV_OP(Munmap);
     }
 
-    int DevTempFSVNode::Resize() {
-        return -ENOSYS;
+    int DevTempFSVNode::Resize(uint64_t newSize, const Credential& cred) {
+        return -EPERM;
     }
 
     int DevTempFSVNode::Rename() {

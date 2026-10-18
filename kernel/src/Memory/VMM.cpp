@@ -1514,4 +1514,12 @@ namespace VMM {
     }
 
 
+    void ReleaseMemoryObject(MemoryObject* obj) {
+        spinlock_acquire(&obj->lock);
+        if (--obj->refCount != 0) {
+            spinlock_release(&obj->lock);
+            return;
+        }
+        DestroyMemoryObject(obj);
+    }
 }

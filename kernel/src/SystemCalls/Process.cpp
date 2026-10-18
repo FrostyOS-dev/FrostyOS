@@ -162,7 +162,7 @@ pid_t sys_fork(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, CPU_Registers* 
         return -ENOMEM;
     }
 
-    if (!FDManager->Fork(currentProc->GetFDManager(), proc)) {
+    if (!FDManager->Fork(currentProc->GetFDManager())) {
         delete FDManager;
         delete proc;
         return -ENOMEM;
@@ -346,8 +346,11 @@ int sys_exec(const char* path, char* const argv[], char* const env[]) {
     newProc->SetCWD(currentProc->GetCWDRef());
 
     FileDescriptorManager* FDManager = newProc->GetFDManager();
-    FDManager->Delete();
-    FDManager->Fork(currentProc->GetFDManager(), newProc);
+    if (!FDManager->Exec(currentProc->GetFDManager())) {
+        newProc->Delete();
+        delete newProc;
+        return -ENOMEM;
+    }
 
     Scheduler::g_Processes.lock();
     Scheduler::g_Processes.remove(currentProc);
@@ -356,7 +359,13 @@ int sys_exec(const char* path, char* const argv[], char* const env[]) {
     if (!newProc->Start()) {
         newProc->Delete();
         delete newProc;
+        Scheduler::g_Processes.lock();
+        Scheduler::g_Processes.insert(currentProc);
+        Scheduler::g_Processes.unlock();
+        return -ENOTSUP; // very unlikely to happen
     }
+
+    currentProc->GetFDManager()->Delete(); // clear the descriptor table to ensure FDs close immediately
 
     Thread::ExitCurrentThread(0, true, true, false);
 

@@ -64,7 +64,7 @@ namespace FS {
         virtual int ReadLink(char* buffer, size_t size, const Credential& cred) override;
         virtual int Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, const Credential& cred) override;
         virtual int Munmap() override;
-        virtual int Resize() override;
+        virtual int Resize(uint64_t newSize, const Credential& cred) override;
         virtual int Rename() override;
         virtual int GetName(char* buf, size_t size, size_t* realSize) override; // copy the null-terminated name into buf
         virtual int Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) override;

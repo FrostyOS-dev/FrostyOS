@@ -58,7 +58,6 @@ public:
     void Init(Process* proc, FDType type, TTY* tty, TTYStream stream);
 
     int Open(int flags);
-    void Close();
     bool isOpen() const;
 
     int Read(void* buf, size_t count, size_t* realCount);
@@ -73,7 +72,8 @@ public:
     EventWaitQueue* GetPollQueue(uint32_t events);
     uint32_t PollReady(uint32_t events);
 
-    bool Fork(FileDescriptor* other, Process* newProc); // copy from other into this
+    int GetFlags();
+    int SetFlags(int flags);
 
     FDType GetType() const;
     FS::VNode* GetVNode();
@@ -83,12 +83,11 @@ public:
     void Unref();
 
 private:
-    Process* m_proc;
+    Process* m_proc; // only used by Open()
     FDType m_type;
 
     size_t m_offset;
     bool m_open;
-    bool m_append;
 
     FS::VNode* m_vnode;
 
@@ -99,6 +98,7 @@ private:
     uint64_t m_refCount;
 
     Credential m_cred;
+    int m_flags;
     bool m_canRead;
     bool m_canWrite;
 };

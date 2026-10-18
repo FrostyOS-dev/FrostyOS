@@ -73,7 +73,12 @@ bool UserReadAtomic32(const uint32_t* userBuf, uint32_t* kBuf, Process* currentP
     SC(FCHOWNAT, fchownat) \
     SC(SETRESUID, setresuid) \
     SC(SETRESGID, setresgid) \
-    SC(UNLINKAT, unlinkat)
+    SC(UNLINKAT, unlinkat) \
+    SC(FCNTL, fcntl) \
+    SC(DUP, dup) \
+    SC(DUP2, dup2) \
+    SC(TRUNCATE, truncate) \
+    SC(FTRUNCATE, ftruncate)
 
 enum SystemCalls : uint64_t {
 #define ENUMERATE_CALL(u, l) SYS_##u,
@@ -81,6 +86,6 @@ enum SystemCalls : uint64_t {
 #undef ENUMERATE_CALL
 };
 
-#define SYSTEM_CALL_COUNT 41
+#define SYSTEM_CALL_COUNT 46
 
 #endif /* _SYSTEM_CALL_HPP */

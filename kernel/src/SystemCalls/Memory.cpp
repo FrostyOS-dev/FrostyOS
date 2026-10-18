@@ -103,7 +103,9 @@ void* sys_mmap(void* addr, size_t length, int prot, int flags, sys_mmapExtraArgs
             return (void*)-EBADF;
         }
     
+        vnode->Lock();
         int rc = FS::VFS_MapFile(addr, length, protection, flags, true, vnode, kArgs.offset, &mem, vmm, proc->GetCred());
+        vnode->Unlock();
         desc->Unref();
         if (rc < 0)
             return (void*)(int64_t)rc;

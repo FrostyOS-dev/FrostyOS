@@ -20,11 +20,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <errno.h>
 #include <string.h>
+#include <util.h>
 
 #include <DataStructures/Bitmap.hpp>
 #include <DataStructures/AVLTree.hpp>
 
 #include <Scheduling/Mutex.hpp>
+
+#include <SystemCalls/File.hpp>
 
 FileDescriptorManager::FileDescriptorManager() {
 
@@ -35,74 +38,60 @@ FileDescriptorManager::~FileDescriptorManager() {
 }
 
 bool FileDescriptorManager::Init() {
-    uint8_t* buffer = new uint8_t[INITIAL_FD_TABLE_SIZE / 8];
+    uint8_t* buffer = new uint8_t[INITIAL_FD_TABLE_SIZE / 8]; // new clears the buffer
     if (buffer == nullptr)
         return false;
-    m_bitmapLock.Lock();
+
+    m_currentFDs.lock();
+    delete[] m_bitmap.GetBuffer();
     m_bitmap.SetBuffer(buffer);
     m_bitmap.SetSize(INITIAL_FD_TABLE_SIZE / 8);
-    m_bitmapLock.Unlock();
+    m_currentFDs.unlock();
     return true;
 }
 
 void FileDescriptorManager::Delete() {
-    m_bitmapLock.Lock();
-    delete[] m_bitmap.GetBuffer();
-    m_bitmap.SetBuffer(nullptr);
-    m_bitmap.SetSize(0);
-    m_bitmapLock.Unlock();
-
-    m_currentFDs.lock();
-    m_currentFDs.forEach([](void*, fd_t, FileDescriptor* desc) -> bool {
-        if (desc != nullptr)
-            desc->Unref();
-        return true;
-    }, nullptr);
-    m_currentFDs.Clear();
-    m_currentFDs.unlock();
-}
-
-fd_t FileDescriptorManager::Allocate(FileDescriptor* desc) {
-    m_bitmapLock.Lock();
-    for (uint64_t i = 0; i < m_bitmap.GetSize() * 8; i++) {
-        if (!m_bitmap.Get(i)) {
-            m_bitmap.Set(i, true);
-            m_bitmapLock.Unlock();
-            m_currentFDs.lock();
-            m_currentFDs.Insert(i, desc);
+    while (true) {
+        m_currentFDs.lock();
+        AVLTree::wAVLTreeNode* node = m_currentFDs.FindNodeOrHigher(0);
+        if (node == nullptr) {
+            delete[] m_bitmap.GetBuffer();
+            m_bitmap.SetBuffer(nullptr);
+            m_bitmap.SetSize(0);
             m_currentFDs.unlock();
-            return i;
+            return;
+        }
+        FDTableEntry* entry = reinterpret_cast<FDTableEntry*>(node->value);
+        m_currentFDs.RemoveNode(node);
+        m_currentFDs.unlock();
+
+        if (entry != nullptr) {
+            if (entry->desc != nullptr)
+                entry->desc->Unref();
+            delete entry;
         }
     }
+}
 
-    // All current FDs are allocated
+fd_t FileDescriptorManager::Allocate(FileDescriptor* desc, int fdFlags, fd_t minFD) {
+    if (desc == nullptr || minFD < 0 || minFD >= MAX_FD)
+        return -EINVAL;
 
-    if (m_bitmap.GetSize() * 8 == MAX_FD) {
-        m_bitmapLock.Unlock();
-        return -EMFILE; // no more FDs are allowed
-    }
-
-    size_t currentSize = m_bitmap.GetSize();
-    uint8_t* buffer = new uint8_t[currentSize + INITIAL_FD_TABLE_SIZE / 8];
-    if (buffer == nullptr) {
-        m_bitmapLock.Unlock();
+    FDTableEntry* entry = new FDTableEntry;
+    if (entry == nullptr)
         return -ENOMEM;
-    }
-
-    memcpy(buffer, m_bitmap.GetBuffer(), currentSize);
-
-    delete[] m_bitmap.GetBuffer();
-
-    m_bitmap.SetBuffer(buffer);
-    m_bitmap.SetSize(currentSize + INITIAL_FD_TABLE_SIZE / 8);
-    
-    m_bitmap.Set(currentSize * 8, true); // currentSize * 8 is the first fd in the newly expanded region
-    m_bitmapLock.Unlock();
+    entry->desc = desc;
+    entry->flags = fdFlags & FD_CLOEXEC;
 
     m_currentFDs.lock();
-    m_currentFDs.Insert(currentSize * 8, desc);
+    fd_t fd = AllocateLocked(minFD);
+    if (fd >= 0)
+        m_currentFDs.Insert(fd, entry);
     m_currentFDs.unlock();
-    return currentSize * 8;
+
+    if (fd < 0)
+        delete entry;
+    return fd;
 }
 
 bool FileDescriptorManager::Free(fd_t fd, FileDescriptor** descOut) {
@@ -114,100 +103,216 @@ bool FileDescriptorManager::Free(fd_t fd, FileDescriptor** descOut) {
         return false;
     }
 
-    if (descOut != nullptr)
-        *descOut = (FileDescriptor*)node->value;
-
+    FDTableEntry* entry = reinterpret_cast<FDTableEntry*>(node->value);
     m_currentFDs.RemoveNode(node);
+    m_bitmap.Set(fd, false);
     m_currentFDs.unlock();
 
-    m_bitmapLock.Lock();
-    m_bitmap.Set(fd, false);
-    m_bitmapLock.Unlock();
+    if (descOut != nullptr)
+        *descOut = entry->desc; // slot's reference moves to the caller
+    else
+        entry->desc->Unref();
 
+    delete entry;
     return true;
 }
 
-bool FileDescriptorManager::ReserveFD(fd_t fd, FileDescriptor* desc) {
-    m_bitmapLock.Lock();
-    if (m_bitmap.Get(fd)) {
-        m_bitmapLock.Unlock();
+fd_t FileDescriptorManager::Replace(fd_t fd, FileDescriptor* desc, int fdFlags) {
+    if (desc == nullptr)
+        return -EINVAL;
+    if (fd < 0 || fd >= MAX_FD)
+        return -EBADF;
+
+    FDTableEntry* newEntry = new FDTableEntry;
+    if (newEntry == nullptr)
+        return -ENOMEM;
+
+    FileDescriptor* old = nullptr;
+    int rc = ESUCCESS;
+
+    m_currentFDs.lock();
+    FDTableEntry* existingEntry = m_currentFDs.Find(fd);
+    if (existingEntry != nullptr) {
+        old = existingEntry->desc;
+        existingEntry->desc = desc;
+        existingEntry->flags = fdFlags & FD_CLOEXEC;
+    } else if (!GrowLocked((uint64_t)fd + 1))
+        rc = -ENOMEM;
+    else {
+        newEntry->desc = desc;
+        newEntry->flags = fdFlags & FD_CLOEXEC;
+        m_bitmap.Set(fd, true);
+        m_currentFDs.Insert(fd, newEntry);
+        newEntry = nullptr; // now owned by the table
+    }
+    m_currentFDs.unlock();
+
+    delete newEntry;
+    if (rc < 0)
+        return rc;
+
+    if (old != nullptr)
+        old->Unref();
+    return fd;
+}
+
+bool FileDescriptorManager::ReserveFD(fd_t fd, FileDescriptor* desc, int fdFlags) {
+    if (desc == nullptr || fd < 0 || fd >= MAX_FD)
+        return false;
+
+    FDTableEntry* entry = new FDTableEntry;
+    if (entry == nullptr)
+        return false;
+    entry->desc = desc;
+    entry->flags = fdFlags & FD_CLOEXEC;
+
+    m_currentFDs.lock();
+    if (!GrowLocked((uint64_t)fd + 1) || m_bitmap.Get(fd)) {
+        m_currentFDs.unlock();
+        delete entry;
         return false;
     }
     m_bitmap.Set(fd, true);
-    m_bitmapLock.Unlock();
-
-    m_currentFDs.lock();
-    m_currentFDs.Insert(fd, desc);
+    m_currentFDs.Insert(fd, entry);
     m_currentFDs.unlock();
 
     return true;
 }
 
-FileDescriptor* FileDescriptorManager::Get(fd_t fd) {
+FileDescriptor* FileDescriptorManager::Get(fd_t fd, int* fdFlags) {
     m_currentFDs.lock();
-    FileDescriptor* fDesc = m_currentFDs.Find(fd);
-    if (fDesc != nullptr)
-        fDesc->Ref();
+    FDTableEntry* entry = m_currentFDs.Find(fd);
+    FileDescriptor* desc = nullptr;
+    if (entry != nullptr) {
+        desc = entry->desc;
+        desc->Ref();
+        if (fdFlags != nullptr)
+            *fdFlags = entry->flags;
+    }
     m_currentFDs.unlock();
-    return fDesc;
+    return desc;
 }
 
-bool FileDescriptorManager::Fork(FileDescriptorManager* other, Process* newProc) {
-    other->m_bitmapLock.Lock();
-    size_t size = other->m_bitmap.GetSize();
+int FileDescriptorManager::GetFDFlags(fd_t fd) {
+    m_currentFDs.lock();
+    FDTableEntry* entry = m_currentFDs.Find(fd);
+    int flags = entry != nullptr ? entry->flags : -EBADF;
+    m_currentFDs.unlock();
+    return flags;
+}
 
-    uint8_t* buffer = new uint8_t[size];
-    if (buffer == nullptr) {
-        other->m_bitmapLock.Unlock();
-        return false;
+int FileDescriptorManager::SetFDFlags(fd_t fd, int flags) {
+    m_currentFDs.lock();
+    FDTableEntry* entry = m_currentFDs.Find(fd);
+    int rc = -EBADF;
+    if (entry != nullptr) {
+        entry->flags = flags & FD_CLOEXEC;
+        rc = ESUCCESS;
     }
-    memcpy(buffer, other->m_bitmap.GetBuffer(), size);
-    other->m_bitmapLock.Unlock();
-    
-    m_bitmapLock.Lock();
-    m_bitmap.SetBuffer(buffer);
-    m_bitmap.SetSize(size);
-    m_bitmapLock.Unlock();
+    m_currentFDs.unlock();
+    return rc;
+}
+
+bool FileDescriptorManager::Fork(FileDescriptorManager* other) {
+    return CopyFrom(other, false);
+}
+
+bool FileDescriptorManager::Exec(FileDescriptorManager* other) {
+    return CopyFrom(other, true);
+}
+
+bool FileDescriptorManager::CopyFrom(FileDescriptorManager* other, bool forExec) {
+    if (other == nullptr || other == this)
+        return false;
+
+    Delete(); // ensure the table is empty
+
+    bool ok = true;
 
     other->m_currentFDs.lock();
     m_currentFDs.lock();
-    struct Data {
-        FileDescriptorManager* current;
-        FileDescriptorManager* other;
-        Process* newProc;
-        bool success;
-    } data = {this, other, newProc, true};
-    other->m_currentFDs.forEach([](void* data, fd_t fd, FileDescriptor* desc) -> bool {
-        Data* d = static_cast<Data*>(data);
-        FileDescriptor* newDesc = new FileDescriptor;
-        if (newDesc == nullptr || !newDesc->Fork(desc, d->newProc)) {
-            if (newDesc != nullptr)
-                delete newDesc;
-            d->success = false;
-            return false;
-        }
-        d->current->m_currentFDs.Insert(fd, newDesc);
 
-        return true;
-    }, &data);
-    other->m_currentFDs.unlock();
-    if (!data.success) {
-        m_currentFDs.forEach([](void*, fd_t, FileDescriptor* desc) -> bool {
-            if (desc != nullptr)
-                desc->Unref();
+    size_t size = other->m_bitmap.GetSize();
+    if (size == 0)
+        size = INITIAL_FD_TABLE_SIZE / 8;
+
+    uint8_t* buffer = new uint8_t[size];
+    if (buffer == nullptr)
+        ok = false;
+    else {
+        memset(buffer, 0, size);
+        m_bitmap.SetBuffer(buffer);
+        m_bitmap.SetSize(size);
+
+        other->m_currentFDs.forEach([&](fd_t fd, FDTableEntry* entry) -> bool {
+            if (entry == nullptr || entry->desc == nullptr)
+                return true;
+            if (forExec && (entry->flags & FD_CLOEXEC) > 0)
+                return true; // closed on exec
+
+            FDTableEntry* copy = new FDTableEntry;
+            if (copy == nullptr) {
+                ok = false;
+                return false;
+            }
+            copy->desc = entry->desc;
+            copy->flags = entry->flags;
+            copy->desc->Ref();
+
+            m_bitmap.Set(fd, true);
+            m_currentFDs.Insert(fd, copy);
+
             return true;
-        }, nullptr);
-        m_currentFDs.Clear();
-    }
-    m_currentFDs.unlock();
-    if (!data.success) {
-        m_bitmapLock.Lock();
-        delete[] m_bitmap.GetBuffer();
-        m_bitmap.SetBuffer(nullptr);
-        m_bitmap.SetSize(0);
-        m_bitmapLock.Unlock();
-        return false;
+        });
     }
 
+    m_currentFDs.unlock();
+    other->m_currentFDs.unlock();
+
+    if (!ok)
+        Delete(); // release whatever was copied
+    return ok;
+}
+
+bool FileDescriptorManager::GrowLocked(uint64_t bits) {
+    uint64_t currentBits = m_bitmap.GetSize() * 8;
+    if (bits <= currentBits)
+        return true;
+    if (bits > MAX_FD)
+        return false;
+
+    uint64_t newBits = ALIGN_UP(bits, INITIAL_FD_TABLE_SIZE);
+    size_t oldSize = m_bitmap.GetSize();
+    size_t newSize = newBits / 8;
+
+    uint8_t* buffer = new uint8_t[newSize]; // new[] clears the buffer
+    if (buffer == nullptr)
+        return false;
+
+    if (oldSize > 0)
+        memcpy(buffer, m_bitmap.GetBuffer(), oldSize);
+
+    delete[] m_bitmap.GetBuffer();
+    m_bitmap.SetBuffer(buffer);
+    m_bitmap.SetSize(newSize);
     return true;
+}
+
+fd_t FileDescriptorManager::AllocateLocked(fd_t minFD) {
+    uint64_t bits = m_bitmap.GetSize() * 8;
+    for (uint64_t i = minFD; i < bits; i++) {
+        if (!m_bitmap.Get(i)) {
+            m_bitmap.Set(i, true);
+            return i;
+        }
+    }
+
+    uint64_t first = (uint64_t)minFD > bits ? (uint64_t)minFD : bits;
+    if (first >= MAX_FD)
+        return -EMFILE;
+    if (!GrowLocked(first + 1))
+        return -ENOMEM;
+
+    m_bitmap.Set(first, true);
+    return first;
 }

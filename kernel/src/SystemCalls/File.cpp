@@ -92,6 +92,7 @@ int sys_openat(int dirFD, const char* path, size_t pathLen, int flags, mode_t mo
         return -EINVAL;
     }
 
+    bool created = false;
     FS::VNode* vnode = nullptr;
     int rc = FS::VFS_Open(realPath, flags, &vnode, dirVNode, proc->GetCred());
     if (rc < 0) {
@@ -113,6 +114,7 @@ int sys_openat(int dirFD, const char* path, size_t pathLen, int flags, mode_t mo
                 rc = FS::VFS_Open(realPath, flags, &vnode, dirVNode, proc->GetCred());
                 open = true;
             }
+            created = true;
 
             FS::UnrefVNode(dirVNode);
 
@@ -167,6 +169,14 @@ int sys_openat(int dirFD, const char* path, size_t pathLen, int flags, mode_t mo
         return -ENOTDIR;
     }
 
+    if ((flags & O_TRUNC) > 0 && type == FS::VType::REG) {
+        rc = FS::VFS_Truncate(vnode, 0, proc->GetCred(), !created);
+        if (rc < 0) {
+            FS::VFS_Close(vnode, proc->GetCred());
+            return rc;
+        }
+    }
+
     FileDescriptor* desc = new FileDescriptor(proc, type == FS::VType::REG ? FDType::File : FDType::Directory, vnode);
     if (desc == nullptr) {
         FS::VFS_Close(vnode, proc->GetCred());
@@ -179,18 +189,16 @@ int sys_openat(int dirFD, const char* path, size_t pathLen, int flags, mode_t mo
         return rc;
     }
 
-    fd_t fd = manager->Allocate(desc);
-    if (fd < 0) {
-        desc->Close();
+    fd_t fd = manager->Allocate(desc, (flags & O_CLOEXEC) > 0 ? FD_CLOEXEC : 0);
+    if (fd < 0)
         delete desc;
-    }
     
     return fd;
 }
 
 int sys_close(int fd) {
-    if (fd <= stddebug)
-        return 0; // ignore close on stdin, stdout, stderr and stddebug
+    if (fd < 0)
+        return -EBADF;
 
     Thread* current = Thread::GetCurrentThread();
     Process* proc = current->GetParent();
@@ -198,15 +206,8 @@ int sys_close(int fd) {
     if (manager == nullptr)
         return -ENOSYS;
 
-    FileDescriptor* desc = nullptr;
-    if (!manager->Free(fd, &desc))
+    if (!manager->Free(fd))
         return -EBADF;
-
-    if (desc->isOpen())
-        desc->Close();
-
-    desc->Unref();
-
     return ESUCCESS;
 }
 
@@ -1129,5 +1130,159 @@ int sys_unlinkat(int dirFD, const char* path, size_t pathLen, int flags) {
 
     FS::UnrefVNode(dirVNode);
     delete[] kPath;
+    return rc;
+}
+
+int sys_fcntl(int fd, int op, uint64_t arg) {
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+    FileDescriptorManager* manager = proc->GetFDManager();
+    if (manager == nullptr)
+        return -ENOSYS;
+
+    // ops that don't require the descriptor
+    switch (op) {
+    case F_GETFD:
+        return manager->GetFDFlags(fd);
+    case F_SETFD:
+        return manager->SetFDFlags(fd, (int)arg);
+    default:
+        break;
+    }
+
+    FileDescriptor* desc = manager->Get(fd);
+    if (desc == nullptr || !desc->isOpen()) {
+        if (desc != nullptr)
+            desc->Unref();
+        return -EBADF;
+    }
+
+    int rc = -EINVAL;
+
+    switch (op) {
+    case F_DUPFD_CLOEXEC:
+    case F_DUPFD: {
+        desc->Ref(); // new slot's reference
+        fd_t newFD = manager->Allocate(desc, op == F_DUPFD_CLOEXEC ? FD_CLOEXEC : 0, (fd_t)arg);
+        if (newFD < 0)
+            desc->Unref();
+        rc = newFD;
+        break;
+    }
+    case F_GETFL:
+        rc = desc->GetFlags();
+        break;
+    case F_SETFL:
+        rc = desc->SetFlags((int)arg);
+        break;
+    }
+
+    desc->Unref();
+    return rc;
+}
+
+int sys_dup(int fd, int flags) {
+    if ((flags & ~O_CLOEXEC) != 0)
+        return -EINVAL;
+
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+    FileDescriptorManager* manager = proc->GetFDManager();
+    if (manager == nullptr)
+        return -ENOSYS;
+
+    FileDescriptor* desc = manager->Get(fd);
+    if (desc == nullptr || !desc->isOpen()) {
+        if (desc != nullptr)
+            desc->Unref();
+        return -EBADF;
+    }
+
+    fd_t newFD = manager->Allocate(desc, (flags & O_CLOEXEC) > 0 ? FD_CLOEXEC : 0);
+    if (newFD < 0)
+        desc->Unref();
+    return newFD;
+}
+
+int sys_dup2(int fd, int newFD, int flags) {
+    if ((flags & ~O_CLOEXEC) != 0)
+        return -EINVAL;
+
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+    FileDescriptorManager* manager = proc->GetFDManager();
+    if (manager == nullptr)
+        return -ENOSYS;
+
+    if (newFD < 0 || newFD >= MAX_FD)
+        return -EBADF;
+
+    FileDescriptor* desc = manager->Get(fd);
+    if (desc == nullptr || !desc->isOpen()) {
+        if (desc != nullptr)
+            desc->Unref();
+        return -EBADF;
+    }
+
+    if (fd == newFD) {
+        desc->Unref();
+        return flags != 0 ? -EINVAL : newFD;
+    }
+
+    fd_t rc = manager->Replace(newFD, desc, (flags & O_CLOEXEC) > 0 ? FD_CLOEXEC : 0);
+    if (rc < 0)
+        desc->Unref();
+    return rc;
+}
+
+int sys_truncate(const char* path, size_t pathLen, off_t size) {
+    if (path == nullptr || pathLen == 0 || size < 0)
+        return -EINVAL;
+
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+    
+    FS::VNode* vnode = nullptr;
+    int rc = ResolveVNodeAt(proc, AT_FDCWD, path, pathLen, 0, &vnode);
+    if (rc < 0)
+        return rc;
+
+    rc = vnode->Access(ACCESS_W, proc->GetCred());
+    if (rc < 0) {
+        FS::UnrefVNode(vnode);
+        return rc;
+    }
+
+    rc = FS::VFS_Truncate(vnode, size, proc->GetCred());
+    FS::UnrefVNode(vnode);
+    return rc;
+}
+
+int sys_ftruncate(int fd, off_t size) {
+    if (fd < 0)
+        return -EBADF;
+    if (size < 0)
+        return -EINVAL;
+
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+    FileDescriptorManager* manager = proc->GetFDManager();
+    if (manager == nullptr)
+        return -ENOSYS;
+
+    FileDescriptor* desc = manager->Get(fd);
+    if (desc == nullptr || !desc->isOpen()) {
+        if (desc != nullptr)
+            desc->Unref();
+        return -EBADF;
+    }
+
+    int flags = desc->GetFlags() & O_ACCMODE;
+    if (flags != O_WRONLY && flags != O_RDWR) {
+        desc->Unref();
+        return -EINVAL;
+    }
+
+    FS::VNode* vnode = desc->GetVNode();
+    FS::RefVNode(vnode);
+    desc->Unref();
+
+    int rc = FS::VFS_Truncate(vnode, size, proc->GetCred());
+    FS::UnrefVNode(vnode);
     return rc;
 }

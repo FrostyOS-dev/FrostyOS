@@ -30,15 +30,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <tty/TTY.hpp>
 #include <tty/TTYBackend.hpp>
 
-FileDescriptor::FileDescriptor() : m_proc(nullptr), m_type(FDType::Invalid), m_offset(0), m_open(false), m_append(false), m_vnode(nullptr), m_tty(nullptr), m_ttyStream(TTYStream::INVALID), m_refCount(1), m_cred(), m_canRead(false), m_canWrite(false) {
+FileDescriptor::FileDescriptor() : m_proc(nullptr), m_type(FDType::Invalid), m_offset(0), m_open(false), m_vnode(nullptr), m_tty(nullptr), m_ttyStream(TTYStream::INVALID), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false) {
 
 }
 
-FileDescriptor::FileDescriptor(Process* proc, FDType type, FS::VNode* vnode) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_append(false), m_vnode(vnode), m_tty(nullptr), m_ttyStream(TTYStream::INVALID), m_refCount(1), m_cred(), m_canRead(false), m_canWrite(false) {
+FileDescriptor::FileDescriptor(Process* proc, FDType type, FS::VNode* vnode) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_vnode(vnode), m_tty(nullptr), m_ttyStream(TTYStream::INVALID), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false) {
 
 }
 
-FileDescriptor::FileDescriptor(Process* proc, FDType type, TTY* tty, TTYStream stream) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_append(false), m_vnode(nullptr), m_tty(tty), m_ttyStream(stream), m_refCount(1), m_cred(), m_canRead(false), m_canWrite(false) {
+FileDescriptor::FileDescriptor(Process* proc, FDType type, TTY* tty, TTYStream stream) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_vnode(nullptr), m_tty(tty), m_ttyStream(stream), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false) {
 
 }
 
@@ -69,8 +69,6 @@ int FileDescriptor::Open(int flags) {
             m_mutex.Unlock();
             return -EBADF;
         }
-        if ((flags & O_APPEND) > 0)
-            m_append = true;
         break;
     case FDType::TTY:
         if ((flags & O_APPEND) == 0)
@@ -92,18 +90,14 @@ int FileDescriptor::Open(int flags) {
     m_canRead = (acc == O_RDONLY || acc == O_RDWR);
     m_canWrite = (acc == O_WRONLY || acc == O_RDWR);
 
+    // Creation-time flags and O_CLOEXEC aren't saved here
+    m_flags = flags & ~O_OPEN_ONLY_FLAGS;
+
     m_open = true;
     m_offset = 0;
-    if (m_proc != nullptr)
-        m_cred = m_proc->GetCred();
+    m_cred = m_proc->GetCred();
     m_mutex.Unlock();
     return ESUCCESS;
-}
-
-void FileDescriptor::Close() {
-    m_offset = 0;
-    m_append = false;
-    m_open = false;
 }
 
 bool FileDescriptor::isOpen() const {
@@ -199,10 +193,11 @@ int FileDescriptor::Write(const void* buf, size_t count, size_t* realCount) {
             m_mutex.Unlock();
             return -EBADF;
         }
+        bool append = (__atomic_load_n(&m_flags, __ATOMIC_ACQUIRE) & O_APPEND) > 0;
         m_vnode->Lock();
         size_t bytesWritten = 0;
         size_t offset = m_offset;
-        if (m_append) {
+        if (append) {
             FS::VAttr attr;
             rc = m_vnode->GetAttr(&attr);
             if (rc < 0) {
@@ -212,11 +207,10 @@ int FileDescriptor::Write(const void* buf, size_t count, size_t* realCount) {
             offset = attr.size;
         }
         rc = m_vnode->Write(buf, count, 0, offset, &bytesWritten, m_cred);
-        if (bytesWritten > 0 && m_proc != nullptr)
-            FS::VFS_ClearSetID(m_vnode, m_proc->GetCred());
+        if (bytesWritten > 0)
+            FS::VFS_ClearSetID(m_vnode, m_cred);
         m_vnode->Unlock();
-        if (!m_append)
-            m_offset += bytesWritten;
+        m_offset = offset + bytesWritten;
         *realCount = bytesWritten;
         break;
     }
@@ -457,32 +451,17 @@ uint32_t FileDescriptor::PollReady(uint32_t events) {
     return 0;
 }
 
-bool FileDescriptor::Fork(FileDescriptor* other, Process* newProc) { // no special logic is needed, just a direct data copy
-    other->m_mutex.Lock();
-    m_mutex.Lock();
+int FileDescriptor::GetFlags() {
+    return __atomic_load_n(&m_flags, __ATOMIC_ACQUIRE);
+}
 
-    m_proc = newProc;
-    m_type = other->m_type;
-
-    m_offset = other->m_offset;
-    m_open = other->m_open;
-    m_append = other->m_append;
-
-    m_vnode = other->m_vnode;
-    if (m_vnode != nullptr)
-        FS::RefVNode(m_vnode);
-
-    m_tty = other->m_tty;
-    m_ttyStream = other->m_ttyStream;
-
-    m_cred = other->m_cred;
-    m_canRead = other->m_canRead;
-    m_canWrite = other->m_canWrite;
-
-    other->m_mutex.Unlock();
-    m_mutex.Unlock();
-
-    return true;
+int FileDescriptor::SetFlags(int flags) {
+    int old = __atomic_load_n(&m_flags, __ATOMIC_RELAXED);
+    int updated;
+    do {
+        updated = (old & ~O_SETFL_MASK) | (flags & (O_SETFL_MASK));
+    } while (!__atomic_compare_exchange_n(&m_flags, &old, updated, false, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED));
+    return ESUCCESS;
 }
 
 FDType FileDescriptor::GetType() const {

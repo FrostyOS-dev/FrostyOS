@@ -160,7 +160,7 @@ namespace FS {
         virtual int ReadLink(char* buffer, size_t size, const Credential& cred) = 0;
         virtual int Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, const Credential& cred) = 0;
         virtual int Munmap() = 0;
-        virtual int Resize() = 0;
+        virtual int Resize(uint64_t newSize, const Credential& cred) = 0;
         virtual int Rename() = 0;
         virtual int GetName(char* buf, size_t size, size_t* realSize) = 0;
         virtual int Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) = 0; // returns 0 on success, positive value on fail
@@ -222,6 +222,8 @@ namespace FS {
     void VFS_ClearSetID(VNode* vnode, const Credential& cred); // caller must hold vnode's lock
 
     int VFS_Unlink(const char* path, const char* name, VNode* cwd, const Credential& cred, bool removeDir, bool trailingSlash);
+
+    int VFS_Truncate(VNode* vnode, uint64_t size, const Credential& cred, bool clearSID = true); // clearSID: allow clearing of the set-id and set-gid bits
 
     uint8_t VFS_GetPosixType(VType type);
 

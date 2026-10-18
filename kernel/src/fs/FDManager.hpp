@@ -18,6 +18,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _FILE_DESCRIPTOR_MANAGER_HPP
 #define _FILE_DESCRIPTOR_MANAGER_HPP
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <DataStructures/Bitmap.hpp>
 #include <DataStructures/AVLTree.hpp>
 
@@ -30,7 +33,10 @@ typedef long fd_t;
 
 class FileDescriptor;
 
-class Process;
+struct FDTableEntry {
+    FileDescriptor* desc;
+    int flags;
+};
 
 class FileDescriptorManager {
 public:
@@ -40,19 +46,28 @@ public:
     bool Init();
     void Delete();
 
-    fd_t Allocate(FileDescriptor* desc);
-    bool Free(fd_t fd, FileDescriptor** descOut = nullptr); // destruction of the underlying FileDescriptor is the responsibility of the caller
+    fd_t Allocate(FileDescriptor* desc, int fdFlags = 0, fd_t minFD = 0);
+    bool Free(fd_t fd, FileDescriptor** descOut = nullptr);
 
-    bool ReserveFD(fd_t fd, FileDescriptor* desc);
+    fd_t Replace(fd_t fd, FileDescriptor* desc, int fdFlags = 0);
 
-    FileDescriptor* Get(fd_t fd);
+    bool ReserveFD(fd_t fd, FileDescriptor* desc, int fdFlags = 0);
 
-    bool Fork(FileDescriptorManager* other, Process* newProc); // copy from other into this
+    FileDescriptor* Get(fd_t fd, int* fdFlags = nullptr);
+
+    int GetFDFlags(fd_t fd);
+    int SetFDFlags(fd_t fd, int flags);
+
+    bool Fork(FileDescriptorManager* other);
+    bool Exec(FileDescriptorManager* other);
 
 private:
-    AVLTree::wAVLTree<fd_t, FileDescriptor*> m_currentFDs;
+    bool CopyFrom(FileDescriptorManager* other, bool forExec);
+    bool GrowLocked(uint64_t bits);
+    fd_t AllocateLocked(fd_t minFD);
+
+    AVLTree::wAVLTree<fd_t, FDTableEntry*> m_currentFDs;
     RawBitmap m_bitmap;
-    Mutex m_bitmapLock;
 };
 
 #endif /* _FILE_DESCRIPTOR_MANAGER_HPP */
