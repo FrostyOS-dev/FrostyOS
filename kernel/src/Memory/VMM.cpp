@@ -662,7 +662,9 @@ namespace VMM {
         return true;
     }
 
-    bool VMM::HandlePageFault(PageFaultCode code, uint64_t virtAddr) {
+    bool VMM::HandlePageFault(PageFaultCode code, uint64_t virtAddr, bool* busError) {
+        if (busError != nullptr)
+            *busError = false;
         if (m_vmRegionAllocator == nullptr || virtAddr < m_vmRegionAllocator->GetStart() || virtAddr >= m_vmRegionAllocator->GetEnd())
             return false; // outside the region
 
@@ -783,6 +785,8 @@ namespace VMM {
                 if (!rc) {
                     spinlock_release(&obj->lock);
                     spinlock_release(&map->lock);
+                    if (busError != nullptr)
+                        *busError = true;
                     return false;
                 }
 
@@ -870,6 +874,8 @@ namespace VMM {
             bool rc = obj->pager->GetPage(obj, offset + pageIndex * PAGE_SIZE, &page, code.write);
             if (!rc || page == nullptr) {
                 spinlock_release(&obj->lock);
+                if (busError != nullptr)
+                    *busError = true;
                 return false;
             }
 

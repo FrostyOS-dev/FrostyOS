@@ -147,7 +147,7 @@ namespace VMM {
         bool RemapPages(void* virtAddr, uint64_t count = 0, Protection prot = Protection::READ_WRITE, bool user = false, CacheType cacheType = CacheType::DEFAULT, bool multipleRegions = false);
         bool MapPages(void* virtAddr, uint64_t count);
 
-        bool HandlePageFault(PageFaultCode code, uint64_t virtAddr);
+        bool HandlePageFault(PageFaultCode code, uint64_t virtAddr, bool* busError = nullptr);
 
         bool PrepareAccess(const void* addr, size_t size, bool write, bool user = true);
         bool ValidateRead(const void* addr, size_t size, bool user = true);
