@@ -148,7 +148,7 @@ namespace Video {
 
             m_memObj->pager = m_device->GetPager();
             m_memObj->pagerData = this;
-            m_memObj->size = bufferSize;
+            m_memObj->size = DIV_ROUNDUP(bufferSize, PAGE_SIZE);
             m_memObj->refCount = 1;
         }
         m_lock.Unlock();
