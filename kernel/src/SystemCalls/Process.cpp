@@ -42,7 +42,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define WNOHANG 1
 
 [[noreturn]] void sys_exit(uint64_t code) {
-    Thread::ExitCurrentThread(code, true, true, true);
+    Thread::ExitCurrentThread((code & 0xFF) << 8, true, true, true);
 
     PANIC("sys_exit failed!");
 }
@@ -402,7 +402,7 @@ long sys_waitpid(pid_t pid, int* wstatus, int options) {
             Event::UnregisterWaitNodes(&nodePtr, 1);
 
             if (wstatus != nullptr) {
-                int status = zombieChild->GetExitStatus() << 8;
+                int status = zombieChild->GetExitStatus();
                 if (!UserWrite(wstatus, &status, sizeof(int), currentProcess)) {
                     Scheduler::g_Processes.unlock();
                     return -EFAULT;
