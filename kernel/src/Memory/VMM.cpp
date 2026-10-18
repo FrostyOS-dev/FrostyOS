@@ -80,6 +80,18 @@ namespace VMM {
         return __atomic_load_n(&m->refCount, __ATOMIC_ACQUIRE) > 1;
     }
 
+    // lock is held, refCount == 0
+    static void DestroyMemoryObject(MemoryObject* obj) {
+        obj->pages.forEach([&](uint64_t, Page* page) -> bool {
+            if (page->physAddr != 0)
+                g_PMM->FreePage((void*)page->physAddr);
+            kfree_vmm(page);
+            return true;
+        });
+        obj->pages.Clear();
+        kfree_vmm(obj);
+    }
+
     VMM::VMM() : m_pageMapper(nullptr), m_vmRegionAllocator(nullptr), m_mapEntries(true) {
 
     }
@@ -133,17 +145,12 @@ namespace VMM {
                         return true;
                     if (offset >= entry->offset + (entry->endVirt - entry->startVirt))
                         return false;
-                    if (page->physAddr != 0) {
+                    if (page->physAddr != 0)
                         m_pageMapper->UnmapPage(entry->startVirt + (offset - entry->offset));
-                        if (del)
-                            g_PMM->FreePage((void*)page->physAddr);
-                    }
-                    if (del)
-                        kfree_vmm(page);
                     return true;
                 });
                 if (del)
-                    kfree_vmm(obj);
+                    DestroyMemoryObject(obj);
                 else
                     spinlock_release(&obj->lock);
             }
@@ -327,7 +334,23 @@ namespace VMM {
                 Page* page;
                 bool rc = obj->pager->GetPage(obj, offset + i * PAGE_SIZE, &page, write);
                 if (!rc) {
-                    assert(false);
+                    spinlock_release(&obj->lock);
+                    if (allocFlags.isPrivate) {
+                        if (write) {
+                            for (uint64_t j = 0; j < i; j++) {
+                                if (map->slots[i] != nullptr) {
+                                    Anon* anon = map->slots[i];
+                                    g_PMM->FreePage((void*)anon->physAddr);
+                                    kfree_vmm(anon);
+                                }
+                            }
+                        }
+                        kfree_vmm(map->slots);
+                        kfree_vmm(map);
+                    }
+                    kfree_vmm(entry);
+                    m_vmRegionAllocator->FreePages(pages, count);
+                    return nullptr;
                 }
                 if (allocFlags.isPrivate && write) {
                     Anon* anon = (Anon*)kcalloc_vmm(1, sizeof(Anon));
@@ -1375,20 +1398,9 @@ namespace VMM {
 
                 if (obj != nullptr) {
                     obj->refCount--;
-                    if (obj->refCount == 0) {
-                        obj->pages.forEach([&](uint64_t offset, Page* page) -> bool {
-                            if (offset < entry->offset)
-                                return true;
-                            if (offset >= entry->offset + (entry->endVirt - entry->startVirt))
-                                return false;
-                            if (page->physAddr != 0)
-                                g_PMM->FreePage(reinterpret_cast<void*>(page->physAddr));
-                            kfree_vmm(page);
-                            return true;
-                        });
-
-                        kfree_vmm(obj);
-                    } else
+                    if (obj->refCount == 0)
+                        DestroyMemoryObject(obj);
+                    else
                         spinlock_release(&obj->lock);
                 }
             } else if (entry->memoryObject != nullptr) {
@@ -1419,20 +1431,9 @@ namespace VMM {
                     m_pageMapper->InvalidatePages(entry->startVirt + (lowest - entry->offset), (highest - lowest) / PAGE_SIZE + 1, true);
 
                 // go through a second time and free the underlying pages and structures
-                if (obj->refCount == 0) {
-                    obj->pages.forEach([&](uint64_t offset, Page* page) -> bool {
-                        if (offset < entry->offset)
-                            return true;
-                        if (offset >= entry->offset + (entry->endVirt - entry->startVirt))
-                            return false;
-                        if (page->physAddr != 0)
-                            g_PMM->FreePage(reinterpret_cast<void*>(page->physAddr));
-                        kfree_vmm(page);
-                        return true;
-                    });
-
-                    kfree_vmm(obj);
-                } else
+                if (obj->refCount == 0)
+                    DestroyMemoryObject(obj);
+                else
                     spinlock_release(&obj->lock);
             }
 
