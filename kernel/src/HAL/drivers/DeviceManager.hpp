@@ -77,8 +77,9 @@ private:
     FS::DevTempFS* m_fs;
     Credential m_cred;
 
-    uint64_t m_lastID; // protected by the device list lock
+    uint64_t m_lastID; // protected by the devices lock
     LinkedList::LockableLinkedList<DeviceInfo> m_devices;
+    Mutex m_devicesLock;
 };
 
 extern DeviceManager* g_DeviceManager;

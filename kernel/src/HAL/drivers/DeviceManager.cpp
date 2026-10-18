@@ -39,13 +39,13 @@ void DeviceManager::ProbeDevices() {
                 info->type = DeviceType::PCIDevice;
                 info->manager = this;
 
-                m_devices.lock();
+                m_devicesLock.Lock();
 
                 info->id = m_lastID;
                 m_lastID++;
 
                 m_devices.insert(info);
-                m_devices.unlock();
+                m_devicesLock.Unlock();
                 break;
             }
             delete info;
@@ -55,7 +55,7 @@ void DeviceManager::ProbeDevices() {
 
 int DeviceManager::InitDevices() {
     int rc = 0;
-    m_devices.lock();
+    m_devicesLock.Lock();
     m_devices.Enumerate([&](DeviceInfo* info, void*) -> bool {
         if (info == nullptr || info->dev == nullptr)
             return true;
@@ -63,7 +63,7 @@ int DeviceManager::InitDevices() {
         rc = info->dev->Init(info);
         return rc == 0;
     }, nullptr);
-    m_devices.unlock();
+    m_devicesLock.Unlock();
     return rc;
 }
 
@@ -79,12 +79,12 @@ int DeviceManager::AddDevice(Device* dev, DeviceInfo** outInfo) {
     info->dev = dev;
     info->type = DeviceType::Device;
 
-    m_devices.lock();
+    m_devicesLock.Lock();
     info->id = m_lastID;
     m_lastID++;
 
     m_devices.insert(info);
-    m_devices.unlock();
+    m_devicesLock.Unlock();
 
     if (outInfo != nullptr)
         *outInfo = info;
