@@ -19,6 +19,7 @@ set(JINX
 
 set(PACKAGES
     bash
+    base-files
 )
 
 set(ALWAYS_BUILD_PACKAGES
