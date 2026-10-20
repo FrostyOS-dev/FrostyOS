@@ -32,6 +32,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Thread.hpp"
 #include "ThreadList.hpp"
 
+#define PROCESS_WAIT_STOPPED 1
+#define PROCESS_WAIT_CONTINUED 2
+
 enum class ProcessMode {
     KERNEL,
     USER
@@ -58,6 +61,8 @@ class FutexWaitQueue;
 namespace FS {
     class VNode;
 }
+
+class TTY;
 
 class Process {
 public:
@@ -113,6 +118,15 @@ public:
 
     EventWaitQueue& GetChildWaitQueue();
 
+    int64_t GetPGID() const;
+    void SetPGID(int64_t pgid);
+    int64_t GetSID() const;
+    void SetSID(int64_t sid);
+    TTY* GetControllingTTY() const;
+    void SetControllingTTY(TTY* tty);
+    bool HasExeced() const;
+    void SetHasExeced(bool v);
+
     int SetSignalAction(int signal, sigaction_t* newAct, sigaction_t* oldAct);
     int RaiseSignal(int signal);
 
@@ -124,7 +138,20 @@ public:
     void AcquireSignalLock(); // uses a spinlock, but does NOT disable interrupts
     void ReleaseSignalLock();
 
+    void Stop(int signal);
+    bool Resume();
+    void NotifyParentStateChange();
+    bool TakeContinueNotify();
+    int GetStopSignal() const;
+    uint32_t GetWaitEvents() const;
+    void ClearWaitEvents(uint32_t events);
+    EventWaitQueue& GetContinueQueue();
+    void MarkExiting();
+    bool IsExiting() const;
+
 private:
+    void DiscardPendingSignals(const int* sigs, size_t count); // caller holds m_signalLock
+
     ProcessMode m_Mode;
     VMM::VMM* m_VMM;
     uint8_t m_Nice;
@@ -145,6 +172,17 @@ private:
     sigaction_t m_sigActions[NSIG];
     sigset_t m_pendingSignals;
     spinlock_t m_signalLock;
+
+    int m_stopSignal;
+    uint32_t m_waitEvents;
+    uint32_t m_continueNotify;
+    bool m_exiting;
+    EventWaitQueue m_continueQueue;
+
+    int64_t m_PGID;
+    int64_t m_SID;
+    TTY* m_ctty;
+    bool m_hasExeced;
 };
 
 extern Process* g_KProcess;

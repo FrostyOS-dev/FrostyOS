@@ -23,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <errno.h>
 #include <stdint.h>
+#include <string.h>
 #include <spinlock.h>
 
 #include <DataStructures/LinkedList.hpp>
@@ -30,6 +31,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <fs/FDManager.hpp>
 #include <fs/FileDescriptor.hpp>
 #include <fs/VFS.hpp>
+
+#include <HAL/Processor.hpp>
 
 #include <Memory/PageMapper.hpp>
 #include <Memory/VMM.hpp>
@@ -42,7 +45,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <tty/TTY.hpp>
 
 
-Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), m_VMM(vmm), m_Nice(nice), m_PID(-1), m_PPID(-1), m_nextTID(0), m_MainThread(nullptr), m_Threads(), m_cred({0, 0, 0, 0, 0, 0}), m_FDManager(nullptr), m_cwd(nullptr), m_state(ProcessState::ACTIVE), m_exitStatus(0) {
+Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), m_VMM(vmm), m_Nice(nice), m_PID(-1), m_PPID(-1), m_nextTID(0), m_MainThread(nullptr), m_Threads(), m_cred({0, 0, 0, 0, 0, 0}), m_FDManager(nullptr), m_cwd(nullptr), m_state(ProcessState::ACTIVE), m_exitStatus(0), m_sigActions{}, m_pendingSignals{}, m_signalLock(SPINLOCK_DEFAULT_VALUE), m_stopSignal(0), m_waitEvents(0), m_continueNotify(0), m_exiting(false), m_PGID(-1), m_SID(-1), m_ctty(nullptr), m_hasExeced(false) {
 
 }
 
@@ -293,6 +296,7 @@ void Process::SetCWD(FS::VNode* cwd) {
 }
 
 bool Process::Fork(Process* other, uint64_t newMainReturn, CPU_Registers* regs) {
+    memcpy(&m_sigActions, &other->m_sigActions, sizeof(sigaction_t) * NSIG);
     m_MainThread = new Thread();
     m_MainThread->SetParent(this);
     m_MainThread->SetTID(0);
@@ -314,11 +318,13 @@ AVLTree::wAVLTree<uint64_t, FutexWaitQueue*>& Process::GetFutextList() {
 }
 
 ProcessState Process::GetState() const {
-    return m_state;
+    ProcessState s;
+    __atomic_load(&m_state, &s, __ATOMIC_ACQUIRE);
+    return s;
 }
 
 void Process::SetState(ProcessState state) {
-    m_state = state;
+    __atomic_store(&m_state, &state, __ATOMIC_RELEASE);
 }
 
 int Process::GetExitStatus() const {
@@ -331,6 +337,38 @@ void Process::SetExitStatus(int status) {
 
 EventWaitQueue& Process::GetChildWaitQueue() {
     return m_childWaitQueue;
+}
+
+int64_t Process::GetPGID() const {
+    return __atomic_load_n(&m_PGID, __ATOMIC_ACQUIRE);
+}
+
+void Process::SetPGID(int64_t pgid) {
+    __atomic_store_n(&m_PGID, pgid, __ATOMIC_RELEASE);
+}
+
+int64_t Process::GetSID() const {
+    return __atomic_load_n(&m_SID, __ATOMIC_ACQUIRE);
+}
+
+void Process::SetSID(int64_t sid) {
+    __atomic_store_n(&m_SID, sid, __ATOMIC_RELEASE);
+}
+
+TTY* Process::GetControllingTTY() const {
+    return m_ctty;
+}
+
+void Process::SetControllingTTY(TTY* tty) {
+    m_ctty = tty;
+}
+
+bool Process::HasExeced() const {
+    return m_hasExeced;
+}
+
+void Process::SetHasExeced(bool v) {
+    m_hasExeced = v;
 }
 
 int Process::SetSignalAction(int signal, sigaction_t* newAct, sigaction_t* oldAct) {
@@ -356,10 +394,33 @@ int Process::RaiseSignal(int signal) {
     if (signal <= 0 || signal >= NSIG)
         return -EINVAL;
 
+    if (GetState() == ProcessState::ZOMBIE)
+        return 0;
+
+    if (signal == SIGCONT)
+        Resume();
+
     int state = Processor::DisableInterrupts();
     AcquireSignalLock();
 
+    if (m_exiting) {
+        ReleaseSignalLock();
+        Processor::EnableInterrupts(state);
+        return 0;
+    }
+
     void* addr = m_sigActions[signal].address;
+    if (signal == SIGCONT && (addr == SIG_DFL || addr == SIG_IGN)) {
+        ReleaseSignalLock();
+        Processor::EnableInterrupts(state);
+        return 0;
+    }
+
+    if (signal == SIGSTOP || signal == SIGTSTP || signal == SIGTTIN || signal == SIGTTOU) {
+        const int cont[] = { SIGCONT };
+        DiscardPendingSignals(cont, 1); // stop cancels pending SIGCONT
+    }
+
     bool notIgnorable = signal == SIGKILL || signal == SIGSTOP || signal == SIGCONT;
     bool continued = false;
     bool isDefaultAct = addr == SIG_DFL;
@@ -426,5 +487,108 @@ void Process::ReleaseSignalLock() {
     spinlock_release(&m_signalLock);
 }
 
+static const int s_stopSignals[] = { SIGSTOP, SIGTSTP, SIGTTIN, SIGTTOU };
+
+static void ClearThreadPending(Thread* t, const int* sigs, size_t count) {
+    t->AcquireSignalLock();
+    for (size_t k = 0; k < count; k++) {
+        int s = sigs[k];
+        SIGNAL_CLEAR(&t->GetPendingSignals(), s);
+    }
+    t->ReleaseSignalLock();
+}
+
+void Process::Stop(int signal) {
+    bool changed = false;
+    int state = Processor::DisableInterrupts();
+    AcquireSignalLock();
+    if (GetState() == ProcessState::ACTIVE) {
+        m_stopSignal = signal;
+        __atomic_or_fetch(&m_waitEvents, PROCESS_WAIT_STOPPED, __ATOMIC_ACQ_REL);
+        __atomic_and_fetch(&m_waitEvents, ~static_cast<uint32_t>(PROCESS_WAIT_CONTINUED), __ATOMIC_ACQ_REL);
+        SetState(ProcessState::STOPPED);
+        changed = true;
+    }
+    ReleaseSignalLock();
+    Processor::EnableInterrupts(state);
+    if (changed)
+        NotifyParentStateChange();
+}
+
+bool Process::Resume() {
+    bool wasStopped = false;
+    int state = Processor::DisableInterrupts();
+    AcquireSignalLock();
+    DiscardPendingSignals(s_stopSignals, 4);
+    if (GetState() == ProcessState::STOPPED) {
+        SetState(ProcessState::ACTIVE);
+        __atomic_and_fetch(&m_waitEvents, ~static_cast<uint32_t>(PROCESS_WAIT_STOPPED), __ATOMIC_ACQ_REL);
+        __atomic_or_fetch(&m_waitEvents, PROCESS_WAIT_CONTINUED, __ATOMIC_ACQ_REL);
+        __atomic_store_n(&m_continueNotify, 1, __ATOMIC_RELEASE);
+        wasStopped = true;
+    }
+    ReleaseSignalLock();
+    Processor::EnableInterrupts(state);
+    if (wasStopped)
+        m_continueQueue.Trigger(PROCESS_CONTINUE_EVENT);
+    return wasStopped;
+}
+
+void Process::NotifyParentStateChange() {
+    Process* parent = Scheduler::GetProcess(m_PPID);
+    if (parent == nullptr)
+        return;
+    parent->GetChildWaitQueue().Trigger(PROCESS_EXIT_EVENT);
+    if ((parent->GetSignalAction(SIGCHLD)->flags & SA_NOCLDSTOP) == 0)
+        parent->RaiseSignal(SIGCHLD);
+}
+
+bool Process::TakeContinueNotify() {
+    return __atomic_exchange_n(&m_continueNotify, 0, __ATOMIC_ACQ_REL) != 0;
+}
+
+int Process::GetStopSignal() const {
+    return m_stopSignal;
+}
+
+uint32_t Process::GetWaitEvents() const {
+    return __atomic_load_n(&m_waitEvents, __ATOMIC_ACQUIRE);
+}
+
+void Process::ClearWaitEvents(uint32_t events) {
+    __atomic_and_fetch(&m_waitEvents, ~events, __ATOMIC_ACQ_REL);
+}
+
+EventWaitQueue& Process::GetContinueQueue() {
+    return m_continueQueue;
+}
+
+void Process::MarkExiting() {
+    int state = Processor::DisableInterrupts();
+    AcquireSignalLock();
+    m_exiting = true;
+    ReleaseSignalLock();
+    Processor::EnableInterrupts(state);
+}
+
+bool Process::IsExiting() const {
+    return m_exiting;
+}
+
+void Process::DiscardPendingSignals(const int* sigs, size_t count) {
+    for (size_t k = 0; k < count; k++) {
+        int s = sigs[k];
+        SIGNAL_CLEAR(&m_pendingSignals, s);
+    }
+
+    m_Threads.lock();
+    if (m_MainThread != nullptr)
+        ClearThreadPending(m_MainThread, sigs, count);
+    m_Threads.Enumerate([&](Thread* t) -> ThreadList::IteratorDecision {
+        ClearThreadPending(t, sigs, count);
+        return ThreadList::IteratorDecision::Continue;
+    });
+    m_Threads.unlock();
+}
 
 Process* g_KProcess = nullptr;

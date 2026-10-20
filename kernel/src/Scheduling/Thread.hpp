@@ -145,6 +145,9 @@ public:
 
     bool WakeFromEventWait();
 
+    bool HasPendingKill();
+    void WaitWhileStopped();
+
     uint64_t sleepRemainingTime;
     bool isSleeping;
     YieldCallback yieldCallback;

@@ -18,9 +18,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _THREAD_LIST_HPP
 #define _THREAD_LIST_HPP
 
-#include <stdint.h>
-
+#include <Function.hpp>
 #include <spinlock.h>
+#include <stdint.h>
 
 class Thread;
 
@@ -53,6 +53,7 @@ public:
     uint64_t getCount() const;
 
     void Enumerate(IteratorDecision (*func)(Thread*, void*), void* data); // Deletion of the current and previous threads is allowed during the provided function.
+    void Enumerate(FunctionRef<IteratorDecision(Thread*)> func);
     void EnumerateConst(IteratorDecision (*func)(Thread*, void*), void* data) const; // Does not support deletion, will just break/continue depending on type
 
     void lock() const;

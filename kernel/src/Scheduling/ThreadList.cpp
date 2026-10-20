@@ -146,6 +146,32 @@ void ThreadList::Enumerate(IteratorDecision (*func)(Thread*, void*), void* data)
     }
 }
 
+void ThreadList::Enumerate(FunctionRef<IteratorDecision(Thread*)> func) {
+    Thread* thread = m_Head;
+    uint64_t originalCount = m_Count;
+    for (uint64_t i = 0; i < originalCount; i++) {
+        if (thread == nullptr)
+            break;
+        Thread* next = GetDataFromThread(thread).next;
+        switch (func(thread)) {
+        case IteratorDecision::Break:
+            return;
+        case IteratorDecision::Continue:
+            break;
+        case IteratorDecision::Delete_Break:
+            remove(thread);
+            return;
+        case IteratorDecision::Delete: {
+            remove(thread);
+            thread = next;
+            continue;
+        }
+        }
+
+        thread = next;
+    }
+}
+
 void ThreadList::EnumerateConst(IteratorDecision (*func)(Thread*, void*), void* data) const {
     Thread* thread = m_Head;
     for (uint64_t i = 0; i < m_Count; i++) {

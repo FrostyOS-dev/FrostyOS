@@ -112,6 +112,12 @@ public:
     static bool CanRead(TTYStream stream);
     static bool CanWrite(TTYStream stream);
 
+    int64_t GetSession() const;
+    int64_t GetForegroundPGID() const;
+    bool AttachSession(Process* leader);
+    void DetachSession();
+    int CheckBackgroundAccess(Process* proc, bool write);
+
 protected:
     virtual int InternalWrite(const char* buf, size_t size, bool flush = false);
 
@@ -120,6 +126,11 @@ protected:
     uint64_t GetOutputColumn();
 
     bool TakePendingEOF();
+
+    void HandleInputLocked(char c);
+    void ApplyTermios(const termios_t& t, bool flushInput);
+    void FlushInput();
+    void FlushInputLocked();
 
     TTYBackend* m_inputBackend;
     TTYBackend* m_outputBackend;
@@ -138,6 +149,10 @@ protected:
     RingBuffer<char, TTY_READ_BUFFER_SIZE> m_readBuffer;
 
     EventWaitQueue m_inputWaitQueue;
+
+    int64_t m_session;
+    int64_t m_foregroundPGID;
+    spinlock_t m_inputLock;
 
 private:
     TTYType m_type;

@@ -21,5 +21,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <time.h>
 
 int sys_clockget(int clock, timespec* time);
+int sys_sleep(timespec* time);
 
 #endif /* _SYSCALL_TIME_HPP */

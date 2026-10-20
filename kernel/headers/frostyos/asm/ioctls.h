@@ -3,6 +3,8 @@
 
 #define TCGETS       0x5401
 #define TCSETS       0x5402
+#define TCSETSW      0x5403
+#define TCSETSF      0x5404
 #define TCSBRK       0x5409
 #define TCFLSH       0x540B
 #define TIOCSCTTY    0x540E
@@ -12,7 +14,6 @@
 #define TIOCSWINSZ   0x5414
 #define FIONREAD     0x541B
 #define TIOCINQ      FIONREAD
-#define TCSBRKP      0x5425
-
+#define TIOCGSID     0x5429
 
 #endif /* _FROSTYOS_ASM_IOCTLS_H */

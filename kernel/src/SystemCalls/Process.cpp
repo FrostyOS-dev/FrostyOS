@@ -40,6 +40,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #endif
 
 #define WNOHANG 1
+#define WUNTRACED 2
+#define WCONTINUED 8
 
 [[noreturn]] void sys_exit(uint64_t code) {
     Thread::ExitCurrentThread((code & 0xFF) << 8, true, true, true);
@@ -171,6 +173,9 @@ pid_t sys_fork(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, CPU_Registers* 
     proc->SetFDManager(FDManager);
     proc->SetCred(currentProc->GetCred());
     proc->SetCWD(currentProc->GetCWDRef());
+    proc->SetPGID(currentProc->GetPGID());
+    proc->SetSID(currentProc->GetSID());
+    proc->SetControllingTTY(currentProc->GetControllingTTY());
 
     if (!proc->Create(false)) {
         FDManager->Delete();
@@ -342,6 +347,19 @@ int sys_exec(const char* path, char* const argv[], char* const env[]) {
 
     newProc->SetPID(currentProc->GetPID());
     newProc->SetPPID(parentPID);
+    newProc->SetPGID(currentProc->GetPGID());
+    newProc->SetSID(currentProc->GetSID());
+    newProc->SetControllingTTY(currentProc->GetControllingTTY());
+    newProc->SetHasExeced(true);
+    for (int s = 1; s < NSIG; s++) { // SIG_IGN survives exec, handlers reset
+        sigaction_t* old = currentProc->GetSignalAction(s);
+        if (old->address == SIG_IGN) {
+            sigaction_t act = {};
+            act.address = SIG_IGN;
+            newProc->SetSignalAction(s, &act, nullptr);
+        }
+    }
+
     FS::UnrefVNode(newProc->GetCWD());
     newProc->SetCWD(currentProc->GetCWDRef());
 
@@ -384,36 +402,63 @@ long sys_waitpid(pid_t pid, int* wstatus, int options) {
         Event::RegisterWaitNodes(&nodePtr, 1);
 
         bool hasChildren = false;
-        Process* zombieChild = nullptr;
+        Process* hit = nullptr;
+        uint32_t hitEvent = 0;
+        int64_t myPID = currentProcess->GetPID();
+        int64_t myPGID = currentProcess->GetPGID();
         
         Scheduler::g_Processes.lock();
         Scheduler::g_Processes.Enumerate([&](Process* p, void* data) -> bool {
-            if (p->GetPPID() == currentProcess->GetPID() && (pid == -1 || p->GetPID() == pid)) {
-                hasChildren = true;
-                if (p->GetState() == ProcessState::ZOMBIE) {
-                    zombieChild = p;
-                    return false; // Break enumeration
-                }
+            if (p->GetPPID() != myPID)
+                return true;
+            bool match = (pid == -1) || (pid > 0 && p->GetPID() == pid) || (pid == 0 && p->GetPGID() == myPGID) || (pid < -1 && p->GetPGID() == -pid);
+            if (!match)
+                return true;
+            hasChildren = true;
+            if (p->GetState() == ProcessState::ZOMBIE) {
+                hit = p;
+                return false;
+            }
+            uint32_t ev = p->GetWaitEvents();
+            if ((options & WUNTRACED) > 0 && (ev & PROCESS_WAIT_STOPPED) > 0 && p->GetState() == ProcessState::STOPPED) {
+                hit = p;
+                hitEvent = PROCESS_WAIT_STOPPED;
+                return false;
+            }
+            if ((options & WCONTINUED) > 0 && (ev & PROCESS_WAIT_CONTINUED) > 0) {
+                hit = p;
+                hitEvent = PROCESS_WAIT_CONTINUED;
+                return false;
             }
             return true;
         }, nullptr);
         
-        if (zombieChild != nullptr) {
+        if (hit != nullptr) {
             Event::UnregisterWaitNodes(&nodePtr, 1);
 
             if (wstatus != nullptr) {
-                int status = zombieChild->GetExitStatus();
+                int status;
+                if (hitEvent == PROCESS_WAIT_STOPPED)
+                    status = (hit->GetStopSignal() << 8) | 0x7F;
+                else if (hitEvent == PROCESS_WAIT_CONTINUED)
+                    status = 0xFFFF;
+                else
+                    status = hit->GetExitStatus();
                 if (!UserWrite(wstatus, &status, sizeof(int), currentProcess)) {
                     Scheduler::g_Processes.unlock();
                     return -EFAULT;
                 }
             }
             
-            uint64_t reapedPid = zombieChild->GetPID();
-            Scheduler::g_Processes.remove(zombieChild);
+            int64_t reapedPid = hit->GetPID();
+            if (hitEvent != 0) { // stop/continue don't reap
+                hit->ClearWaitEvents(hitEvent);
+                Scheduler::g_Processes.unlock();
+                return reapedPid;
+            }
+            Scheduler::g_Processes.remove(hit);
             Scheduler::g_Processes.unlock();
-            
-            delete zombieChild; // Final cleanup
+            delete hit;
             return reapedPid;
         }
         
@@ -436,8 +481,71 @@ long sys_waitpid(pid_t pid, int* wstatus, int options) {
         
         if (rc == -EINTR)
             return -EINTR;
-            
-        // If awoken (rc > 0), the loop repeats to find the new zombie
     }
 }
 
+int sys_setpgid(pid_t pid, pid_t pgid) {
+    if (pid < 0 || pgid < 0)
+        return -EINVAL;
+
+    Process* caller = Thread::GetCurrentThread()->GetParent();
+    if (pid == 0)
+        pid = caller->GetPID();
+    if (pgid == 0)
+        pgid = pid;
+
+    Process* target;
+    if (pid == caller->GetPID())
+        target = caller;
+    else {
+        target = Scheduler::GetProcess(pid);
+        if (target == nullptr || target->GetPPID() != caller->GetPID())
+            return -ESRCH;
+        if (target->HasExeced())
+            return -EACCES;
+    }
+
+    if (target->GetSID() != caller->GetSID())
+        return -EPERM;
+    if (target->GetSID() == target->GetPID())
+        return -EPERM; // session leader can't change group
+    if (pgid != pid && !Scheduler::ProcessGroupExists(pgid, caller->GetSID()))
+        return -EPERM; // can only join an existing group in the same session
+
+    Scheduler::OrphanCandidate cands[16];
+    int nc = Scheduler::SnapshotOrphanCandidates(target, cands, 16);
+    target->SetPGID(pgid);
+    Scheduler::CheckOrphanTransitions(cands, nc);
+    return ESUCCESS;
+}
+
+pid_t sys_getpgid(pid_t pid) {
+    Process* caller = Thread::GetCurrentThread()->GetParent();
+    Process* target = (pid == 0 || pid == caller->GetPID()) ? caller : Scheduler::GetProcess(pid);
+    if (target == nullptr)
+        return -ESRCH;
+    return target->GetPGID();
+}
+
+pid_t sys_setsid() {
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+    pid_t pid = proc->GetPID();
+    if (Scheduler::ProcessGroupExists(pid))
+        return -EPERM;
+
+    Scheduler::OrphanCandidate cands[16];
+    int nc = Scheduler::SnapshotOrphanCandidates(proc, cands, 16);
+    proc->SetSID(pid);
+    proc->SetPGID(pid);
+    proc->SetControllingTTY(nullptr);
+    Scheduler::CheckOrphanTransitions(cands, nc);
+    return pid;
+}
+
+pid_t sys_getsid(pid_t pid) {
+    Process* caller = Thread::GetCurrentThread()->GetParent();
+    Process* target = (pid == 0 || pid == caller->GetPID()) ? caller : Scheduler::GetProcess(pid);
+    if (target == nullptr)
+        return -ESRCH;
+    return target->GetSID();
+}

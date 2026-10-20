@@ -19,11 +19,11 @@ set(JINX
 
 set(PACKAGES
     bash
-    base-files
 )
 
 set(ALWAYS_BUILD_PACKAGES
     mlibc
+    base-files
 )
 
 # Define the primary target for building the packages

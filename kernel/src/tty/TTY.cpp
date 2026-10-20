@@ -29,6 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Graphics/VGAFont.hpp>
 
 #include <Scheduling/Event.hpp>
+#include <Scheduling/Scheduler.hpp>
 
 #include <SystemCalls/Signal.hpp>
 #include <SystemCalls/SystemCall.hpp>
@@ -52,11 +53,11 @@ static inline bool IsSpecialChar(char c, char special) {
     return special != '\0' && c == special;
 }
 
-TTY::TTY() : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termios(), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_internalBufferOffset(0), m_eofPending(0), m_type(TTYType::Invalid) {
+TTY::TTY() : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termios(), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_internalBufferOffset(0), m_eofPending(0), m_session(-1), m_foregroundPGID(-1), m_type(TTYType::Invalid) {
     
 }
 
-TTY::TTY(TTYType type) : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termios(), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_internalBufferOffset(0), m_eofPending(0), m_type(type) {
+TTY::TTY(TTYType type) : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termios(), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_internalBufferOffset(0), m_eofPending(0), m_session(-1), m_foregroundPGID(-1), m_type(type) {
 
 }
 
@@ -164,6 +165,12 @@ int TTY::WriteDebug(const char* buf, size_t size) {
 }
 
 void TTY::HandleInput(char c) {
+    spinlock_acquire(&m_inputLock);
+    HandleInputLocked(c);
+    spinlock_release(&m_inputLock);
+}
+
+void TTY::HandleInputLocked(char c) {
     if (c == '\r' && (m_termios.c_iflag & IGNCR) > 0)
         return;
 
@@ -183,7 +190,14 @@ void TTY::HandleInput(char c) {
 
         if (signal >= 0) {
             EchoChar(c);
-            // TODO: get process that is controlling the tty, and raise the signal on it
+            if ((m_termios.c_lflag & NOFLSH) == 0) {
+                memset(m_internalBuffer, 0, m_internalBufferOffset);
+                memset(m_internalWidths, 0, m_internalBufferOffset);
+                m_internalBufferOffset = 0;
+            }
+            int64_t fg = GetForegroundPGID();
+            if (fg > 0)
+                Scheduler::SignalProcessGroup(fg, signal); // sender == nullptr: kernel
             return;
         }
     }
@@ -308,23 +322,95 @@ int TTY::Ioctl(uint64_t op, void* arg, int* result, Process* currentProc) {
             return EFAULT;
         *result = 0;
         return 0;
+    case TCSETSW: // output is synchronous, so TCSETSW is the same as TCSETS
+    case TCSETSF:
     case TCSETS: {
-        if (!UserRead(arg, &m_termios, sizeof(termios_t), currentProc))
-            return EFAULT; // TODO: validate termios
-
+        termios_t termios;
+        if (!UserRead(arg, &termios, sizeof(termios_t), currentProc))
+            return EFAULT;
+        ApplyTermios(termios, op == TCSETSF);
         int rc = 0;
         if (m_termiosCallback != nullptr)
             rc = m_termiosCallback(m_termiosCallbackData, &m_termios);
-
         *result = 0;
         return rc;
     }
-    case TIOCSCTTY:
-    case TIOCGPGRP:
-    case TIOCSPGRP:
+    case TCFLSH: {
+        int sel;
+        if (!UserRead(arg, &sel, sizeof(int), currentProc))
+            return EFAULT;
+        if (sel < 0 || sel > 2) {
+            return EINVAL;
+        }
+        if (sel != 1)
+            FlushInput();
+        *result = 0;
+        return 0;
+    }
+    case TCSBRK:
+        *result = 0;
+        return 0;
+    case TIOCSCTTY: {
+        if (currentProc->GetPID() != currentProc->GetSID()) 
+            return EPERM;
+        if (currentProc->GetControllingTTY() != nullptr)
+            return EPERM;
+        int64_t cur = GetSession();
+        if (cur != -1 && cur != currentProc->GetSID())
+            return EPERM;
+        AttachSession(currentProc);
+        *result = 0;
+        return 0;
+    }
+    case TIOCGPGRP: {
+        if (GetSession() == -1 || currentProc->GetSID() != GetSession())
+            return ENOTTY;
+        int pg = static_cast<int>(GetForegroundPGID());
+        if (!UserWrite(arg, &pg, sizeof(int), currentProc))
+            return EFAULT;
+        *result = 0;
+        return 0;
+    }
+    case TIOCSPGRP: {
+        if (GetSession() == -1 || currentProc->GetSID() != GetSession())
+            return ENOTTY;
+        int pg;
+        if (!UserRead(arg, &pg, sizeof(int), currentProc))
+            return EFAULT;
+        if (pg <= 0)
+            return EINVAL;
+        if (!Scheduler::ProcessGroupExists(pg, currentProc->GetSID()))
+            return EPERM;
+
+        if (currentProc->GetPGID() != GetForegroundPGID()) {
+            Thread* t = Thread::GetCurrentThread();
+            bool ignored = currentProc->GetSignalAction(SIGTTOU)->address == SIG_IGN;
+            bool blocked = SIGNAL_GET(&t->GetBlockedSignals(), SIGTTOU) != 0;
+            if (!ignored && !blocked) {
+                if (Scheduler::IsProcessGroupOrphaned(currentProc->GetPGID(), currentProc->GetSID()))
+                    return EIO;
+                Scheduler::SignalProcessGroup(currentProc->GetPGID(), SIGTTOU);
+                return EINTR;
+            }
+        }
+        __atomic_store_n(&m_foregroundPGID, pg, __ATOMIC_RELEASE);
+        *result = 0;
+        return 0;
+    }
+    case TIOCGSID: {
+        int s = static_cast<int>(GetSession());
+        if (s == -1 || currentProc->GetSID() != s)
+            return ENOTTY;
+        if (!UserWrite(arg, &s, sizeof(int), currentProc))
+            return EFAULT;
+        *result = 0;
+        return 0;
+    }
     case FIONREAD:
         return ENOSYS;
     }
+
+    dbgprintf("Unrecognised ioctl: %lu\n", op);
 
     return EINVAL;
 }
@@ -447,6 +533,46 @@ bool TTY::CanWrite(TTYStream stream) {
     }
 }
 
+int64_t TTY::GetSession() const {
+    return __atomic_load_n(&m_session, __ATOMIC_ACQUIRE);
+}
+
+int64_t TTY::GetForegroundPGID() const {
+    return __atomic_load_n(&m_foregroundPGID, __ATOMIC_ACQUIRE);
+}
+
+bool TTY::AttachSession(Process* leader) {
+    __atomic_store_n(&m_foregroundPGID, leader->GetPGID(), __ATOMIC_RELEASE);
+    __atomic_store_n(&m_session, leader->GetSID(), __ATOMIC_RELEASE);
+    Scheduler::SetSessionTTY(leader->GetSID(), this);
+    return true;
+}
+
+void TTY::DetachSession() {
+    __atomic_store_n(&m_session, -1, __ATOMIC_RELEASE);
+    __atomic_store_n(&m_foregroundPGID, -1, __ATOMIC_RELEASE);
+}
+
+int TTY::CheckBackgroundAccess(Process* proc, bool write) {
+    if (proc == nullptr || GetSession() == -1 || proc->GetSID() != GetSession())
+        return 0;
+    if (proc->GetPGID() == GetForegroundPGID())
+        return 0;
+    if (write && (m_termios.c_lflag & TOSTOP) == 0)
+        return 0;
+
+    int sig = write ? SIGTTOU : SIGTTIN;
+    Thread* t = Thread::GetCurrentThread();
+    bool ignored = proc->GetSignalAction(sig)->address == SIG_IGN;
+    bool blocked = SIGNAL_GET(&t->GetBlockedSignals(), sig) != 0;
+    if (ignored || blocked)
+        return write ? 0 : -EIO;
+    if (Scheduler::IsProcessGroupOrphaned(proc->GetPGID(), proc->GetSID()))
+        return -EIO; // orphaned: don't signal
+    Scheduler::SignalProcessGroup(proc->GetPGID(), sig);
+    return -EINTR;
+}
+
 int TTY::InternalWrite(const char* buf, size_t size, bool flush) {
     if (m_outputBackend == nullptr)
         return -ENODEV;
@@ -533,6 +659,46 @@ bool TTY::TakePendingEOF() {
             return true;
     }
     return false;
+}
+
+void TTY::ApplyTermios(const termios_t& t, bool flushInput) {
+    bool commit = false;
+    int st = Processor::DisableInterrupts();
+    spinlock_acquire(&m_inputLock);
+    bool wasCanon = (m_termios.c_lflag & ICANON) > 0;
+    m_termios = t;
+    bool isCanon = (m_termios.c_lflag & ICANON) > 0;
+    if (flushInput)
+        FlushInputLocked();
+    else if (wasCanon && !isCanon && m_internalBufferOffset > 0) {
+        for (uint64_t i = 0; i< m_internalBufferOffset; i++)
+            m_readBuffer.push(m_internalBuffer[i]);
+        memset(m_internalBuffer, 0, m_internalBufferOffset);
+        memset(m_internalWidths, 0, m_internalBufferOffset);
+        m_internalBufferOffset = 0;
+        commit = true;
+    }
+    spinlock_release(&m_inputLock);
+    Processor::EnableInterrupts(st);
+    if (commit)
+        m_inputWaitQueue.Trigger(POLLIN | POLLRDNORM);
+}
+
+void TTY::FlushInput() {
+    int st = Processor::DisableInterrupts();
+    spinlock_acquire(&m_inputLock);
+    FlushInputLocked();
+    spinlock_release(&m_inputLock);
+    Processor::EnableInterrupts(st);
+}
+
+void TTY::FlushInputLocked() {
+    memset(m_internalBuffer, 0, m_internalBufferOffset);
+    memset(m_internalWidths, 0, m_internalBufferOffset);
+    m_internalBufferOffset = 0;
+    char c;
+    while (m_readBuffer.pop(c)) {}
+    __atomic_store_n(&m_eofPending, 0, __ATOMIC_RELEASE);
 }
 
 static Colour& GetANSI256Colour(uint8_t index) {

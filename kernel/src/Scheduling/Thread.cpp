@@ -329,7 +329,7 @@ int Thread::RaiseSignal(int signal, bool synchronous) {
     if (m_inSignalHandler && synchronous) {
         spinlock_release(&m_signalLock);
         m_Parent->ReleaseSignalLock();
-        Thread::ExitCurrentThread(0x7F | (signal << 8), true, m_Parent->GetMainThread() == this, true);
+        Thread::ExitCurrentThread(signal, true, m_Parent->GetMainThread() == this, true);
     }
 
     SIGNAL_SET(&m_pendingSignals, signal);
@@ -359,57 +359,76 @@ int Thread::CheckSignals() {
     if (m_inSignalHandler)
         return 0; // Prevent signal nesting
 
-    int state = Processor::DisableInterrupts();
+    while (true) {
+        if (m_Parent->GetState() == ProcessState::STOPPED)
+            WaitWhileStopped();
 
-    int signum = 0;
-    sigset_t pending;
-    GetPendingSignals(&pending); // Uses locks internally
+        int state = Processor::DisableInterrupts();
+        sigset_t pending;
+        GetPendingSignals(&pending); // Uses locks internally
 
-    for (int i = 1; i < NSIG; i++) {
-        if (SIGNAL_GET(&m_blockedSignals, i) == 0 && SIGNAL_GET(&pending, i) > 0) {
-            signum = i;
-
-            // Clear from thread or process pending mask
-            AcquireSignalLock();
-            if (SIGNAL_GET(&m_pendingSignals, i) > 0)
-                SIGNAL_CLEAR(&m_pendingSignals, i);
-            else {
-                m_Parent->AcquireSignalLock();
-                SIGNAL_CLEAR(&m_Parent->GetPendingSignals(), i);
-                m_Parent->ReleaseSignalLock();
+        int signum = 0;
+        if (SIGNAL_GET(&pending, SIGKILL) > 0)
+            signum = SIGKILL;
+        else {
+            for (int i = 1; i < NSIG; i++) {
+                if (SIGNAL_GET(&m_blockedSignals, i) == 0 && SIGNAL_GET(&pending, i) > 0) {
+                    signum = i;
+                    break;
+                }
             }
-            ReleaseSignalLock();
-            break;
         }
+
+        if (signum != 0) {
+            m_Parent->AcquireSignalLock();
+            AcquireSignalLock();
+            if (SIGNAL_GET(&m_pendingSignals, signum) > 0)
+                SIGNAL_CLEAR(&m_pendingSignals, signum);
+            else
+                SIGNAL_CLEAR(&m_Parent->GetPendingSignals(), signum);
+            ReleaseSignalLock();
+            m_Parent->ReleaseSignalLock();
+        }
+        Processor::EnableInterrupts(state);
+
+        if (signum == 0)
+            return 0;
+
+        void* handler = m_Parent->GetSignalAction(signum)->address;
+        if (handler == SIG_IGN)
+            continue;
+
+        if (handler != SIG_DFL)
+            return signum;
+
+        switch (g_signalDefaultActions[signum]) {
+        case SIGACTION_TERM:
+        case SIGACTION_CORE:
+            ExitCurrentThread(signum, true, m_Parent->GetMainThread() == this, true);
+            continue;
+        case SIGACTION_STOP:
+            if (signum != SIGSTOP && Scheduler::IsProcessGroupOrphaned(m_Parent->GetPGID(), m_Parent->GetSID()))
+                continue;
+            m_Parent->Stop(signum);
+            WaitWhileStopped();
+            continue;
+        default:
+            continue;
+        }
+
     }
-
-    Processor::EnableInterrupts(state);
-
-    if (signum == 0)
-        return 0;
-
-    sigaction_t act = *m_Parent->GetSignalAction(signum);
-    void* handler = act.address;
-
-    if (handler == SIG_IGN)
-        return 0;
-
-    if (handler == SIG_DFL) {
-        int defAct = g_signalDefaultActions[signum];
-        if (defAct == SIGACTION_TERM || defAct == SIGACTION_CORE)
-            ExitCurrentThread(0x7F | (signum << 8), true, m_Parent->GetMainThread() == this, true);
-        return 0;
-    }
-
-    return signum; // returns postitive integer to indicate a signal frame needs to be built
 }
 
 int Thread::DispatchSignals(CPU_Registers* regs, CPU_ExtraContext* extra) {
     if (regs == nullptr || extra == nullptr || m_Parent == nullptr)
         return -EINVAL;
 
-    // CheckSignals returns the signal number if a user handler needs to be invoked
-    int signum = CheckSignals();
+    // CheckSignals can block, so the registers must be saved
+    CPU_Registers userRegs;
+    memcpy(&userRegs, regs, sizeof(CPU_Registers));
+    int signum = CheckSignals(); // CheckSignals returns the signal number if a user handler needs to be invoked
+    memcpy(regs, &userRegs, sizeof(CPU_Registers));
+
     if (signum <= 0)
         return 0; // no userspace frame needs to be built
 
@@ -631,6 +650,37 @@ bool Thread::WakeFromEventWait() {
     yieldCallback = {};
     Scheduler::AddExistingThread(this);
     return true;
+}
+
+bool Thread::HasPendingKill() {
+    if (m_Parent == nullptr)
+        return false;
+    int state = Processor::DisableInterrupts();
+    m_Parent->AcquireSignalLock();
+    spinlock_acquire(&m_signalLock);
+    bool r = SIGNAL_GET(&m_pendingSignals, SIGKILL) > 0 || SIGNAL_GET(&m_Parent->GetPendingSignals(), SIGKILL) > 0;
+    spinlock_release(&m_signalLock);
+    m_Parent->ReleaseSignalLock();
+    Processor::EnableInterrupts(state);
+    return r;
+}
+
+void Thread::WaitWhileStopped() {
+    while (m_Parent->GetState() == ProcessState::STOPPED) {
+        if (HasPendingKill())
+            return;
+
+        EventWaitNode node = {};
+        node.queue = &m_Parent->GetContinueQueue();
+        node.requestedEvents = PROCESS_CONTINUE_EVENT;
+        EventWaitNode* nodes[] = { &node };
+        Event::RegisterWaitNodes(nodes, 1);
+        if (m_Parent->GetState() == ProcessState::STOPPED)
+            Event::BlockOnWaitNodes(nodes, 1, UINT64_MAX, true);
+        Event::UnregisterWaitNodes(nodes, 1);
+    }
+    if (m_Parent->TakeContinueNotify())
+        m_Parent->NotifyParentStateChange();
 }
 
 [[noreturn]] void Thread_ExitHelper(void* data) {

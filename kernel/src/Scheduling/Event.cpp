@@ -119,7 +119,7 @@ namespace Event {
         Processor::EnableInterrupts(intState);
     }
 
-    int BlockOnWaitNodes(EventWaitNode** nodes, size_t count, uint64_t timeoutMS) {
+    int BlockOnWaitNodes(EventWaitNode** nodes, size_t count, uint64_t timeoutMS, bool killOnly) {
         int intState = Processor::DisableInterrupts();
         Scheduler::ProcessorState* state = GetCurrentProcessorState();
         Thread* currentThread = state->currentThread;
@@ -138,7 +138,9 @@ namespace Event {
             return triggeredCount;
         }
 
-        if (currentThread->HasPendingUnblockedSignals()) {
+        auto signalled = [&]() { return killOnly ? currentThread->HasPendingKill() : currentThread->HasPendingUnblockedSignals(); };
+
+        if (signalled()) {
             spinlock_release(&currentThread->eventLock);
             Processor::EnableInterrupts(intState);
             return -EINTR;
@@ -173,7 +175,7 @@ namespace Event {
         if (triggeredCount > 0)
             return triggeredCount;
 
-        if (currentThread->HasPendingUnblockedSignals())
+        if (signalled())
             return -EINTR;
 
         return -ETIMEDOUT;

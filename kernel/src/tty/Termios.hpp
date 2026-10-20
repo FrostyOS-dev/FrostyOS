@@ -33,8 +33,10 @@ typedef unsigned int tcflag_t;
 #define INLCR   0000100
 #define CSTOPB  0000100
 #define IGNCR   0000200
+#define NOFLSH  0000200
 #define ICRNL   0000400
 #define PARENB  0000400
+#define TOSTOP  0000400
 #define ECHOCTL 0001000
 #define PARODD  0001000
 #define CBAUD   0010017

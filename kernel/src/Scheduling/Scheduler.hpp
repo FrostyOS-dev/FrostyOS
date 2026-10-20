@@ -33,6 +33,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define DEFAULT_NICE 8
 #define DEFAULT_TIMESLICE 10
 
+class TTY;
+
 namespace Scheduler {
     
     struct ProcessorState {
@@ -55,6 +57,12 @@ namespace Scheduler {
         ProcessorState* prev;
     };
 
+    struct OrphanCandidate {
+        int64_t pgid;
+        int64_t sid;
+        bool wasOrphaned;
+    };
+
     extern ProcessorState g_BSPState;
     extern LinkedList::LockableLinkedList<Process> g_Processes;
 
@@ -71,6 +79,16 @@ namespace Scheduler {
     void AddProcess(Process* process);
     Process* GetProcess(int64_t pid);
     void RemoveProcess(int64_t pid);
+
+    bool CanSignalProcess(Process* sender, Process* target, int signal); // sender == nullptr: kernel
+    int SignalProcessGroup(int64_t pgid, int signal, Process* sender = nullptr);
+    bool ProcessGroupExists(int64_t pgid, int64_t sid = -1);
+    void SetSessionTTY(int64_t sid, TTY* tty);
+
+    bool IsProcessGroupOrphaned(int64_t pgid, int64_t sid);
+    int SnapshotOrphanCandidates(Process* subject, OrphanCandidate* out, int max);
+    void CheckOrphanTransitions(const OrphanCandidate* c, int n);
+    void ReparentChildren(Process* dying);
     
     void ScheduleThread(Thread* thread, ProcessorState* state = nullptr);
     bool AddExistingThread(Thread* thread);

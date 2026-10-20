@@ -15,6 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "Event.hpp"
 #include "Process.hpp"
 #include "Scheduler.hpp"
 #include "Semaphore.hpp"
@@ -22,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "ThreadList.hpp"
 
 #include <assert.h>
+#include <errno.h>
 #include <spinlock.h>
 #include <string.h>
 
@@ -34,6 +36,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <HAL/HAL.hpp>
 #include <HAL/Processor.hpp>
 #include <HAL/Time.hpp>
+
+#include <tty/TTY.hpp>
 
 #ifdef __x86_64__
 #include <arch/x86_64/Memory/PagingInit.hpp>
@@ -50,7 +54,6 @@ namespace Scheduler {
     LinkedList::LockableLinkedList<Process> g_Processes;
     Process g_IdleProcess(ProcessMode::KERNEL, nullptr, 0);
     uint64_t g_LastPID = 0;
-    spinlock_t g_PIDLock;
     uint64_t g_isRunning = 0;
     spinlock_t g_ProcessorsLock = SPINLOCK_DEFAULT_VALUE;
     spinlock_t g_StealLock = SPINLOCK_DEFAULT_VALUE;
@@ -64,11 +67,6 @@ namespace Scheduler {
         ProcessorState* state = GetCurrentProcessorState();
         Process* parent = thread->GetParent();
         if (parent != nullptr && parent->GetMode() == ProcessMode::USER) {
-            // if (!noSignals) {
-            //     int rc = thread->DispatchSignals(&thread->GetMutableRegisters(), thread->GetExtraContext());
-            //     assert(rc >= 0);
-            // }
-            
             state->processor->SwitchKernelStack(thread->GetKernelStack());
             state->processor->RestoreExtraContext(thread->GetExtraContext());
 #ifdef __x86_64__
@@ -154,9 +152,11 @@ namespace Scheduler {
 
     void AddProcess(Process* process) {
         if (process->GetPID() < 0) {
-            spinlock_acquire(&g_PIDLock);
-            process->SetPID(g_LastPID++);
-            spinlock_release(&g_PIDLock);
+            process->SetPID(__atomic_fetch_add(&g_LastPID, 1, __ATOMIC_ACQ_REL));
+            if (process->GetPGID() == -1) {
+                process->SetPGID(process->GetPID());
+                process->SetSID(process->GetPID());
+            }
         }
 
         g_Processes.lock();
@@ -189,6 +189,186 @@ namespace Scheduler {
         g_Processes.lock();
         g_Processes.remove(process);
         g_Processes.unlock();
+    }
+
+    bool CanSignalProcess(Process* sender, Process* target, int signal) {
+        if (sender == nullptr)
+            return true;
+        const Credential& s = sender->GetCred();
+        const Credential& t = target->GetCred();
+        if (s.euid == 0)
+            return true;
+        if (signal == SIGCONT && sender->GetSID() == target->GetSID())
+            return true;
+        return s.uid == t.uid || s.uid == t.suid || s.euid == t.uid || s.euid == t.suid;
+    }
+
+    int SignalProcessGroup(int64_t pgid, int signal, Process* sender) {
+        if (pgid <= 0)
+            return -EINVAL;
+
+        int found = 0;
+        int permitted = 0;
+
+        int state = Processor::DisableInterrupts();
+        g_Processes.lock();
+        g_Processes.Enumerate([&](Process* p, void*) -> bool {
+            if (p->GetPGID() != pgid || p->GetState() == ProcessState::ZOMBIE)
+                return true;
+            found++;
+            if (!CanSignalProcess(sender, p, signal))
+                return true;
+            permitted++;
+            if (signal != 0)
+                p->RaiseSignal(signal);
+            return true;
+        }, nullptr);
+        g_Processes.unlock();
+        Processor::EnableInterrupts(state);
+
+        if (found == 0)
+            return -ESRCH;
+        if (permitted == 0)
+            return -EPERM;
+        return 0;
+    }
+
+    bool ProcessGroupExists(int64_t pgid, int64_t sid) {
+        bool exists = false;
+        g_Processes.lock();
+        g_Processes.Enumerate([&](Process* p, void*) -> bool {
+            if (p->GetPGID() == pgid && p->GetState() != ProcessState::ZOMBIE && (sid == -1 || p->GetSID() == sid)) {
+                exists = true;
+                return false;
+            }
+            return true;
+        }, nullptr);
+        g_Processes.unlock();
+        return exists;
+    }
+
+    void SetSessionTTY(int64_t sid, TTY* tty) {
+        g_Processes.lock();
+        g_Processes.Enumerate([&](Process* p, void*) -> bool {
+            if (p->GetSID() == sid)
+                p->SetControllingTTY(tty);
+            return true;
+        }, nullptr);
+        g_Processes.unlock();
+    }
+
+    static inline bool IsDead(Process* p) {
+        return p->GetState() == ProcessState::ZOMBIE || p->IsExiting();
+    }
+
+    static bool IsGroupOrphanedLocked(int64_t pgid, int64_t sid) {
+        int64_t ppids[32];
+        int n = 0;
+        bool overflow = false;
+        g_Processes.Enumerate([&](Process* p, void*) -> bool {
+            if (p->GetPGID() != pgid || IsDead(p))
+                return true;
+            if (n == 32) {
+                overflow = true;
+                return false;
+            }
+            ppids[n++] = p->GetPPID();
+            return true;
+        }, nullptr);
+        if (overflow)
+            return false;
+
+        bool orphaned = true;
+        g_Processes.Enumerate([&](Process* q, void*) -> bool {
+            if (IsDead(q) || q->GetPGID() == pgid || q->GetSID() != sid)
+                return true;
+            for (int i = 0; i < n; i++) {
+                if (ppids[i] == q->GetPID()) {
+                    orphaned = false;
+                    return false;
+                }
+            }
+            return true;
+        }, nullptr);
+        return orphaned;
+    }
+
+    bool IsProcessGroupOrphaned(int64_t pgid, int64_t sid) {
+        g_Processes.lock();
+        bool r = IsGroupOrphanedLocked(pgid, sid);
+        g_Processes.unlock();
+        return r;
+    }
+
+    int SnapshotOrphanCandidates(Process* subject, OrphanCandidate* out, int max) {
+        int64_t sid = subject->GetSID();
+        int64_t ownPGID = subject->GetPGID();
+        int n = 0;
+        auto add = [&](int64_t pgid) {
+            for (int i = 0; i < n; i++)
+                if (out[i].pgid == pgid)
+                    return;
+            if (n < max)
+                out[n++] = { pgid, sid, false };
+        };
+
+        g_Processes.lock();
+        add(ownPGID);
+        g_Processes.Enumerate([&](Process* p, void*) -> bool {
+            if (p != subject && p->GetPPID() == subject->GetPID() && !IsDead(p) && p->GetSID() == sid)
+                add(p->GetPGID());
+            return true;
+        }, nullptr);
+        for (int i = 0; i < n; i++)
+            out[i].wasOrphaned = IsGroupOrphanedLocked(out[i].pgid, out[i].sid);
+        g_Processes.unlock();
+        return n;
+    }
+
+    void CheckOrphanTransitions(const OrphanCandidate* c, int n) {
+        for (int i = 0; i < n; i++) {
+            if (c[i].wasOrphaned)
+                continue;
+            bool now, hasStopped = false;
+            g_Processes.lock();
+            now = IsGroupOrphanedLocked(c[i].pgid, c[i].sid);
+            if (now) {
+                g_Processes.Enumerate([&](Process* p, void*) -> bool {
+                    if (p->GetPGID() == c[i].pgid && !IsDead(p) && p->GetState() == ProcessState::STOPPED) {
+                        hasStopped = true;
+                        return false;
+                    }
+                    return true;
+                }, nullptr);
+            }
+            g_Processes.unlock();
+            if (now && hasStopped) {
+                SignalProcessGroup(c[i].pgid, SIGHUP);
+                SignalProcessGroup(c[i].pgid, SIGCONT);
+            }
+        }
+    }
+
+    void ReparentChildren(Process* dying) {
+        const int64_t initPID = 1;
+        if (dying->GetPID() == initPID)
+            return;
+        bool zombies = false;
+        g_Processes.lock();
+        g_Processes.Enumerate([&](Process* p, void*) -> bool {
+            if (p != dying && p->GetPPID() == dying->GetPID()) {
+                p->SetPPID(initPID);
+                if (p->GetState() == ProcessState::ZOMBIE)
+                    zombies = true;
+            }
+            return true;
+        }, nullptr);
+        g_Processes.unlock();
+        if (zombies) {
+            Process* init = GetProcess(initPID);
+            if (init != nullptr)
+                init->GetChildWaitQueue().Trigger(PROCESS_EXIT_EVENT);
+        }
     }
 
     void ScheduleThread(Thread* thread, ProcessorState* state) {
@@ -651,6 +831,18 @@ namespace Scheduler {
                     break;
 
                 Process* proc = thread->GetParent(); 
+                bool shouldDeleteParent = thread->ShouldDeleteParent();
+                bool shouldRemoveProc = thread->ShouldRemoveProc();
+                bool shouldDelete = thread->ShouldDelete();
+                bool finalExit = proc != nullptr && shouldDeleteParent && shouldRemoveProc;
+
+                OrphanCandidate orphanCands[16];
+                int orphanCount = 0;
+                if (finalExit) {
+                    orphanCount = SnapshotOrphanCandidates(proc, orphanCands, 16);
+                    proc->MarkExiting();
+                }
+
                 if (proc != nullptr) {
                     if (thread == proc->GetMainThread())
                         proc->SetExitStatus(thread->GetExitCode());
@@ -660,26 +852,39 @@ namespace Scheduler {
                 }
                 thread->Delete();
 
-                bool shouldDeleteParent = thread->ShouldDeleteParent();
-                bool shouldRemoveProc = thread->ShouldRemoveProc();
-
-                if (thread->ShouldDelete())
+                if (shouldDelete)
                     delete thread;
+
                 if (shouldDeleteParent) {
-                    proc->Delete(); // clear the VMM and FDs
+                    proc->Delete();
 
                     if (shouldRemoveProc) {
-                        proc->SetState(ProcessState::ZOMBIE);
+                        TTY* tty = proc->GetControllingTTY();
+                        if (tty != nullptr && proc->GetPID() == proc->GetSID()) {
+                            if (tty->GetSession() == proc->GetSID()) {
+                                int64_t fg = tty->GetForegroundPGID();
+                                if (fg > 0) {
+                                    SignalProcessGroup(fg, SIGHUP);
+                                    SignalProcessGroup(fg, SIGCONT);
+                                }
+                                tty->DetachSession();
+                            }
+                            SetSessionTTY(proc->GetSID(), nullptr);
+                        }
 
-                        Process* parent = Scheduler::GetProcess(proc->GetPPID());
+                        ReparentChildren(proc);
+                        CheckOrphanTransitions(orphanCands, orphanCount);
+
+                        int64_t ppid = proc->GetPPID();
+                        proc->SetState(ProcessState::ZOMBIE); // last use of proc: waitpid may free it from now on
+
+                        Process* parent = GetProcess(ppid);
                         if (parent != nullptr) {
                             parent->GetChildWaitQueue().Trigger(PROCESS_EXIT_EVENT);
                             parent->RaiseSignal(SIGCHLD);
                         }
-
-                        // do not need to remove process or delete it here
-                    } else // for execve, where the process is being replaced
-                        delete proc;
+                    } else
+                        delete proc; // execve
                 }
             }
             g_deadThreadsSemaphore.Wait(); // nothing to delete, wait until next is ready

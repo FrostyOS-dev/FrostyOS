@@ -172,15 +172,23 @@ int sys_sigprocmask(int how, sigset_t* set, sigset_t* oldSet) {
 }
 
 int sys_kill(pid_t pid, int signal) {
-	if (signal >= NSIG)
+	if (signal < 0 || signal >= NSIG)
 		return -EINVAL;
 
-	if (pid <= 0)
-		return -ENOSYS; // targetting anything other than a specific process is unsupported
+	Process* caller = Thread::GetCurrentThread()->GetParent();
 
-	Process* target = Scheduler::GetProcess(pid);
-	if (target == nullptr)
-		return -ESRCH;
+	if (pid == -1)
+		return -ENOSYS; // broadcast is unsupported
 
-	return target->RaiseSignal(signal);
+	if (pid > 0) {
+		Process* target = Scheduler::GetProcess(pid);
+		if (target == nullptr)
+			return -ESRCH;
+		if (!Scheduler::CanSignalProcess(caller, target, signal))
+			return -EPERM;
+		return signal == 0 ? ESUCCESS : target->RaiseSignal(signal);
+	}
+
+	int64_t pgid = (pid == 0) ? caller->GetPGID() : -pid;
+	return Scheduler::SignalProcessGroup(pgid, signal, caller);
 }

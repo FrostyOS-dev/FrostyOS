@@ -23,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <spinlock.h>
 
 #define PROCESS_EXIT_EVENT 0x10000
+#define PROCESS_CONTINUE_EVENT 0x20000
 #define POLLIN 0x1
 #define POLLPRI 0x2
 #define POLLOUT 0x4
@@ -70,7 +71,7 @@ private:
 
 namespace Event {
     void RegisterWaitNodes(EventWaitNode** nodes, size_t count);
-    int BlockOnWaitNodes(EventWaitNode** nodes, size_t count, uint64_t timeoutMS);
+    int BlockOnWaitNodes(EventWaitNode** nodes, size_t count, uint64_t timeoutMS, bool killOnly = false);
     void UnregisterWaitNodes(EventWaitNode** nodes, size_t count);
 
     // Wrapper around the 3 above functions

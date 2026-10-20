@@ -147,6 +147,11 @@ int FileDescriptor::Read(void* buf, size_t count, size_t* realCount) {
             return -EBADF;
         }
         size_t bytesRead = 0;
+        rc = m_tty->CheckBackgroundAccess(Thread::GetCurrentThread()->GetParent(), m_ttyStream == TTYStream::OUT);
+        if (rc < 0) {
+            *realCount = 0;
+            break;
+        }
         m_tty->Lock(m_ttyStream);
         m_tty->Read(static_cast<char*>(buf), count, &bytesRead);
         m_tty->Unlock(m_ttyStream);
@@ -218,6 +223,11 @@ int FileDescriptor::Write(const void* buf, size_t count, size_t* realCount) {
         if (m_tty == nullptr || m_ttyStream == TTYStream::INVALID || !m_tty->CanWrite(m_ttyStream)) {
             m_mutex.Unlock();
             return -EBADF;
+        }
+        rc = m_tty->CheckBackgroundAccess(Thread::GetCurrentThread()->GetParent(), m_ttyStream == TTYStream::OUT);
+        if (rc < 0) {
+            *realCount = 0;
+            break;
         }
         // Ignore offset
         m_tty->Lock(m_ttyStream);

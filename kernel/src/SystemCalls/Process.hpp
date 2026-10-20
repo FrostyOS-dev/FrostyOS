@@ -59,4 +59,9 @@ int sys_exec(const char* path, char* const argv[], char* const env[]);
 
 long sys_waitpid(pid_t pid, int* wstatus, int options);
 
+int sys_setpgid(pid_t pid, pid_t pgid);
+pid_t sys_getpgid(pid_t pid);
+pid_t sys_setsid();
+pid_t sys_getsid(pid_t pid);
+
 #endif /* _SYSCALL_PROCESS_HPP */

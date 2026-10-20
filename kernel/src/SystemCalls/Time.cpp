@@ -18,13 +18,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Time.hpp"
 #include "SystemCall.hpp"
 
-#include <stdint.h>
 #include <errno.h>
+#include <stdint.h>
 #include <time.h>
+#include <util.h>
 
 #include <HAL/Time.hpp>
 
+#include <Scheduling/Event.hpp>
 #include <Scheduling/Process.hpp>
+#include <Scheduling/Scheduler.hpp>
 #include <Scheduling/Thread.hpp>
 
 int sys_clockget(int clock, timespec* time) {
@@ -55,4 +58,44 @@ int sys_clockget(int clock, timespec* time) {
         return -EFAULT;
 
     return ESUCCESS;
+}
+
+int sys_sleep(timespec* time) {
+    constexpr uint64_t NS = UINT64_C(1'000'000'000);
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+
+    timespec req;
+    if (!UserRead(time, &req, sizeof(timespec), proc))
+        return -EFAULT;
+    if (req.tv_sec < 0 || req.tv_nsec < 0 || req.tv_nsec >= (int64_t)NS)
+        return -EINVAL;
+
+    uint64_t reqNS;
+    if (static_cast<uint64_t>(req.tv_sec) >= (UINT64_MAX / NS) / 2)
+        reqNS = UINT64_MAX / 2; // clamp extremely long durations
+    else
+        reqNS = static_cast<uint64_t>(req.tv_sec) * NS + static_cast<uint64_t>(req.tv_nsec);
+    if (reqNS == 0)
+        return ESUCCESS;
+
+    uint64_t deadline = HAL_GetNSTicks() + reqNS;
+    while (true) {
+        uint64_t now = HAL_GetNSTicks();
+        if (now >= deadline)
+            return ESUCCESS;
+
+        uint64_t leftMS = DIV_ROUNDUP(deadline - now, 1'000'000);
+        int rc = Event::WaitOnEvents(nullptr, 0, leftMS);
+
+        if (rc == -EINTR) {
+            now = HAL_GetNSTicks();
+            if (now >= deadline)
+                return ESUCCESS;
+            uint64_t left = deadline - now;
+            timespec rem = { static_cast<int64_t>(left / NS), static_cast<int64_t>(left % NS) };
+            if (!UserWrite(time, &rem, sizeof(timespec), proc))
+                return -EFAULT;
+            return -EINTR;
+        }
+    }
 }
