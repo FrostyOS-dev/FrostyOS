@@ -160,13 +160,13 @@ void Process::Delete() {
 }
 
 bool Process::CreateMainThread(ThreadEntryPoint entryPoint) {
-    m_MainThread = new Thread(entryPoint, this, 0);
+    m_MainThread = new Thread(entryPoint, this, Scheduler::AssignTID());
     return m_MainThread->Init();
 }
 
 void Process::SetMainThread(Thread* thread) {
     m_MainThread = thread;
-    thread->SetTID(0);
+    thread->SetTID(Scheduler::AssignTID());
 }
 
 Thread* Process::GetMainThread() const {
@@ -175,7 +175,7 @@ Thread* Process::GetMainThread() const {
 
 uint64_t Process::AddThread(Thread* thread) {
     m_Threads.lock();
-    thread->SetTID(m_nextTID++);
+    thread->SetTID(Scheduler::AssignTID());
     m_Threads.pushBack(thread);
     m_Threads.unlock();
     return thread->GetTID();

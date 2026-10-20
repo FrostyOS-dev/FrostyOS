@@ -54,6 +54,7 @@ namespace Scheduler {
     LinkedList::LockableLinkedList<Process> g_Processes;
     Process g_IdleProcess(ProcessMode::KERNEL, nullptr, 0);
     uint64_t g_LastPID = 0;
+    uint64_t g_LastTID = 0;
     uint64_t g_isRunning = 0;
     spinlock_t g_ProcessorsLock = SPINLOCK_DEFAULT_VALUE;
     spinlock_t g_StealLock = SPINLOCK_DEFAULT_VALUE;
@@ -189,6 +190,10 @@ namespace Scheduler {
         g_Processes.lock();
         g_Processes.remove(process);
         g_Processes.unlock();
+    }
+
+    uint64_t AssignTID() {
+        return __atomic_fetch_add(&g_LastTID, 1, __ATOMIC_ACQ_REL);
     }
 
     bool CanSignalProcess(Process* sender, Process* target, int signal) {
@@ -448,7 +453,7 @@ namespace Scheduler {
         if (state->id == g_BSPState.id)
             g_IdleProcess.SetVMM(VMM::g_KVMM);
 
-        Thread* thread = new Thread({IdleTask, nullptr}, &g_IdleProcess, state->id);
+        Thread* thread = new Thread({IdleTask, nullptr}, &g_IdleProcess, AssignTID());
         if (!thread->Init()) {
             delete thread;
             return;

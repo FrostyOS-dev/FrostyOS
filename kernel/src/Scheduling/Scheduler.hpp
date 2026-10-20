@@ -80,6 +80,8 @@ namespace Scheduler {
     Process* GetProcess(int64_t pid);
     void RemoveProcess(int64_t pid);
 
+    uint64_t AssignTID();
+
     bool CanSignalProcess(Process* sender, Process* target, int signal); // sender == nullptr: kernel
     int SignalProcessGroup(int64_t pgid, int signal, Process* sender = nullptr);
     bool ProcessGroupExists(int64_t pgid, int64_t sid = -1);

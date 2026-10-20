@@ -80,9 +80,7 @@ pid_t sys_getppid() {
 }
 
 pid_t sys_gettid() {
-    Thread* current = Thread::GetCurrentThread();
-    Process* proc = current->GetParent();
-    return proc->GetPID(); // todo: unique TIDs between processes
+    return Thread::GetCurrentThread()->GetTID();
 }
 
 int sys_getresuid(UIDs* uids) {
