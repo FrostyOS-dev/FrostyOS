@@ -26,6 +26,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Function.hpp>
 
+#include <HAL/Processor.hpp>
+
 #include <Scheduling/Mutex.hpp>
 
 namespace LinkedList {
@@ -512,9 +514,6 @@ namespace LinkedList {
         LockableLinkedList(bool usePool = false)
             : m_list(usePool), m_lock() {}
         ~LockableLinkedList() {
-            spinlock_acquire(&m_lock);
-            m_list.~SimpleLinkedList();
-            spinlock_release(&m_lock);
         }
 
         void insert(const T* obj) {
@@ -553,15 +552,20 @@ namespace LinkedList {
         }
 
         void lock() const {
+            uint64_t intState = Processor::DisableInterrupts();
             spinlock_acquire(&m_lock);
+            m_intState = intState;
         }
         void unlock() const {
+            uint64_t intState = m_intState;
             spinlock_release(&m_lock);
+            Processor::EnableInterrupts(intState);
         }
 
     private:
         SimpleLinkedList<T> m_list;
         mutable spinlock_t m_lock;
+        mutable uint64_t m_intState;
     };
 
 } // namespace LinkedList
