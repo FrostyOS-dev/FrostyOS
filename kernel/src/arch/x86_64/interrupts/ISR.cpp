@@ -151,7 +151,7 @@ extern "C" void x86_64_ISR_Handler(x86_64_ISR_Frame* frame) {
                 if (signal > 0 && 0 == thread->RaiseSignal(signal, true))
                     success = true;
             }
-            if (success) {
+            if (success && frame->INT != 2 && frame->INT != 8) {
                 Scheduler::SaveThreadFromINT(thread, frame);
                 int rc = thread->DispatchSignals(&thread->GetMutableRegisters(), thread->GetExtraContext());
                 assert(rc >= 0);
