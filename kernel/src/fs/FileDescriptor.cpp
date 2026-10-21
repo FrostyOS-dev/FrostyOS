@@ -305,9 +305,12 @@ int FileDescriptor::Seek(int64_t offset, FDOffsetStart whence, int64_t* realOffs
 
     uint64_t newOffset = 0;
 
+    bool allowPastEnd = (m_type == FDType::File);
+    uint64_t limit = allowPastEnd ? (uint64_t)INT64_MAX : endOffset;
+
     switch (whence) {
     case FDOffsetStart::START:
-        if (offset < 0 || (uint64_t)offset > endOffset) {
+        if (offset < 0 || (uint64_t)offset > limit) {
             rc = -EINVAL;
             break;
         }
@@ -316,7 +319,12 @@ int FileDescriptor::Seek(int64_t offset, FDOffsetStart whence, int64_t* realOffs
     case FDOffsetStart::END:
         if (endOffset == UINT64_MAX)
             break; // just ignore it
-        if (offset > 0 || (uint64_t)(-offset) > endOffset) {
+        if (offset < 0) {
+            if ((uint64_t)(-offset) > endOffset) {
+                rc = -EINVAL;
+                break;
+            }
+        } else if (offset > 0 && (!allowPastEnd || (uint64_t)offset > limit - endOffset)) {
             rc = -EINVAL;
             break;
         }
@@ -325,7 +333,12 @@ int FileDescriptor::Seek(int64_t offset, FDOffsetStart whence, int64_t* realOffs
     case FDOffsetStart::CURRENT:
         if (currentOffset == UINT64_MAX)
             break; // ignore it
-        if ((offset < 0 && (uint64_t)(-offset) > currentOffset) || (offset > 0 && (currentOffset + offset) > endOffset)) {
+        if (offset < 0) {
+            if ((uint64_t)(-offset) > currentOffset) {
+                rc = -EINVAL;
+                break;
+            }
+        } else if (offset > 0 && (currentOffset > limit || (uint64_t)offset > limit - currentOffset)) {
             rc = -EINVAL;
             break;
         }
