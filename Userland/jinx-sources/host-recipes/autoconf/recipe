@@ -1,0 +1,18 @@
+name=autoconf
+version=2.69
+revision=1
+tarball_url="https://ftpmirror.gnu.org/gnu/autoconf/autoconf-${version}.tar.xz"
+tarball_sha512=995d3e5a8eb1eb37e2b7fae53c6ec7a9b4df997286b7d643344818f94636756b1bf5ff5ea9155e755cb9461149a853dfbf2886fc6bd7132e5afa9c168e306e9b
+imagedeps="gcc m4 make"
+
+configure() {
+    ${source_dir}/configure --prefix=${prefix}
+}
+
+build() {
+    make -j${parallelism}
+}
+
+package() {
+    make install DESTDIR=${dest_dir}
+}

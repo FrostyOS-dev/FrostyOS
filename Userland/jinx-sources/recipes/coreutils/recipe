@@ -1,0 +1,20 @@
+name=coreutils
+version=9.1
+revision=1
+tarball_url=https://ftpmirror.gnu.org/coreutils/coreutils-${version}.tar.xz
+tarball_sha512=a6ee2c549140b189e8c1b35e119d4289ec27244ec0ed9da0ac55202f365a7e33778b1dc7c4e64d1669599ff81a8297fe4f5adbcc8a3a2f75c919a43cd4b9bdfa
+imagedeps="build-essential gperf"
+hostdeps="xgcc xbinutils"
+deps="base"
+
+configure() {
+    ${source_dir}/configure --host=x86_64-frostyos --prefix=/data
+}
+
+build() {
+    make -j ${parallelism}
+}
+
+package() {
+    make install DESTDIR="${dest_dir}"
+}

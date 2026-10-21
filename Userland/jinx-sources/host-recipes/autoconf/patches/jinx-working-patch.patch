@@ -1,0 +1,12 @@
+diff -ruN autoconf-clean/build-aux/config.sub autoconf-working/build-aux/config.sub
+--- autoconf-clean/build-aux/config.sub	2012-04-25 12:37:26.000000000 +1000
++++ autoconf-working/build-aux/config.sub	2026-10-13 17:28:21.317119774 +1000
+@@ -1343,7 +1343,7 @@
+ 	# The portable systems comes first.
+ 	# Each alternative MUST END IN A *, to match a version number.
+ 	# -sysv* is not here because it comes later, after sysvr4.
+-	-gnu* | -bsd* | -mach* | -minix* | -genix* | -ultrix* | -irix* \
++	-gnu* | -bsd* | -mach* | -minix* | -genix* | -ultrix* | -irix* | -frostyos* \
+ 	      | -*vms* | -sco* | -esix* | -isc* | -aix* | -cnk* | -sunos | -sunos[34]*\
+ 	      | -hpux* | -unos* | -osf* | -luna* | -dgux* | -auroraux* | -solaris* \
+ 	      | -sym* | -kopensolaris* \

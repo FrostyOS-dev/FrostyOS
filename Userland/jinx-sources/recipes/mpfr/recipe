@@ -1,0 +1,28 @@
+name=mpfr
+version=4.1.0
+revision=1
+tarball_url="https://www.mpfr.org/mpfr-${version}/mpfr-${version}.tar.xz"
+tarball_sha512=1bd1c349741a6529dfa53af4f0da8d49254b164ece8a46928cdb13a99460285622d57fe6f68cef19c6727b3f9daa25ddb3d7d65c201c8f387e421c7f7bee6273
+source_imagedeps="build-essential m4"
+imagedeps="build-essential m4 texinfo"
+source_hostdeps="autoconf automake libtool autoconf-archive"
+hostdeps="xgcc xbinutils"
+deps="base gmp"
+
+prepare() {
+    autoreconf -vfi
+}
+
+configure() {
+    cp -pr ${source_dir}/* .
+    ./configure --host=x86_64-frostyos --prefix=/data
+}
+
+build() {
+    make -j${parallelism}
+}
+
+package() {
+    make install DESTDIR="${dest_dir}"
+    find "${dest_dir}/data" -name "*.la" -type f -exec sed -i "s/^dependency_libs=.*/dependency_libs=''/" {} +
+}

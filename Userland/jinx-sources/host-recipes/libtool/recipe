@@ -1,0 +1,23 @@
+name=libtool
+version=2.5.4
+revision=1
+tarball_url="https://ftpmirror.gnu.org/gnu/libtool/libtool-${version}.tar.gz"
+tarball_sha512=60599f5c3168a287fe3a35062fd2e32e0b73433fce820bfd18d28b0e3bd7a8fefde6d6f0505fbbc2d664119ab7c539269184993843289932c895847ea1ab9f04
+imagedeps="gcc build-essential help2man autoconf automake"
+source_hostdeps="automake"
+
+prepare() {
+    cp -v $(find /usr/local/share/automake* -name config.sub) ./build-aux/
+}
+
+configure() {
+    ${source_dir}/configure --prefix=${prefix} --with-gnu-ld --enable-shared --disable-static
+}
+
+build() {
+    make -j${parallelism}
+}
+
+package() {
+    make install DESTDIR="${dest_dir}"
+}

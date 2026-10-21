@@ -110,38 +110,3 @@ diff -ruN binutils-clean/ld/Makefile.am binutils-dirty/ld/Makefile.am
  	ehppa64linux.c \
  	ei386pep.c \
  	emmo.c
-diff -ruN binutils-clean/ld/Makefile.in binutils-dirty/ld/Makefile.in
---- binutils-clean/ld/Makefile.in	2025-11-10 10:00:00.000000000 +1000
-+++ binutils-dirty/ld/Makefile.in	2026-05-29 15:18:35.473932559 +1000
-@@ -794,6 +794,7 @@
- 	eelf_i386_ldso.c \
- 	eelf_i386_sol2.c \
- 	eelf_i386_vxworks.c \
-+	eelf_i386_frostyos.c \
- 	eelf_iamcu.c \
- 	eelf_s390.c \
- 	eh8300elf.c \
-@@ -973,6 +974,7 @@
- 	eelf_x86_64_fbsd.c \
- 	eelf_x86_64_haiku.c \
- 	eelf_x86_64_sol2.c \
-+	eelf_x86_64_frostyos.c \
- 	ehppa64linux.c \
- 	ei386pep.c \
- 	emmo.c
-@@ -1482,6 +1484,7 @@
- @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_i386_ldso.Po@am__quote@
- @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_i386_sol2.Po@am__quote@
- @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_i386_vxworks.Po@am__quote@
-+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_i386_frostyos.Po@am__quote@
- @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_iamcu.Po@am__quote@
- @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_mipsel_haiku.Po@am__quote@
- @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_s390.Po@am__quote@
-@@ -1490,6 +1493,7 @@
- @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_fbsd.Po@am__quote@
- @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_haiku.Po@am__quote@
- @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_sol2.Po@am__quote@
-+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_frostyos.Po@am__quote@
- @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eh8300elf.Po@am__quote@
- @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eh8300elf_linux.Po@am__quote@
- @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eh8300helf.Po@am__quote@

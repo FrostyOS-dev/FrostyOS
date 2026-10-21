@@ -1,0 +1,150 @@
+diff -ruN gcc-clean/config.sub gcc-dirty/config.sub
+--- gcc-clean/config.sub	2025-08-08 16:51:39.866337996 +1000
++++ gcc-dirty/config.sub	2026-05-29 17:56:10.142001959 +1000
+@@ -1749,7 +1749,7 @@
+ 	     | onefs* | tirtos* | phoenix* | fuchsia* | redox* | bme* \
+ 	     | midnightbsd* | amdhsa* | unleashed* | emscripten* | wasi* \
+ 	     | nsk* | powerunix* | genode* | zvmoe* | qnx* | emx* | zephyr* \
+-	     | fiwix* )
++	     | fiwix* | frostyos* )
+ 		;;
+ 	# This one is extra strict with allowed versions
+ 	sco3.2v2 | sco3.2v[4-9]* | sco5v6*)
+diff -ruN gcc-clean/fixincludes/mkfixinc.sh gcc-dirty/fixincludes/mkfixinc.sh
+--- gcc-clean/fixincludes/mkfixinc.sh	2025-08-08 16:51:39.912338764 +1000
++++ gcc-dirty/fixincludes/mkfixinc.sh	2026-05-29 17:56:10.142615829 +1000
+@@ -11,6 +11,8 @@
+ 
+ # Check for special fix rules for particular targets
+ case $machine in
++    *-frostyos* | \
++    *-*-frostyos* | \
+     i?86-*-cygwin* | \
+     *-mingw32* | \
+     powerpc-*-eabisim* | \
+diff -ruN gcc-clean/gcc/config/frostyos.h gcc-dirty/gcc/config/frostyos.h
+--- gcc-clean/gcc/config/frostyos.h	1970-01-01 10:00:00.000000000 +1000
++++ gcc-dirty/gcc/config/frostyos.h	2026-05-29 18:00:40.378669360 +1000
+@@ -0,0 +1,30 @@
++#undef TARGET_FROSTYOS
++#define TARGET_FROSTYOS 1
++
++#undef LIB_SPEC
++#define LIB_SPEC "-lc" /* link against C standard library */
++
++#undef LINK_SPEC
++#define LINK_SPEC "%{shared:-shared} %{static:-static} %{!shared: %{!static: %{rdynamic:-export-dynamic}}} %{!dynamic-linker:-dynamic-linker /data/lib/ld.so} -z max-page-size=4096"
++
++#undef STARTFILE_SPEC
++#define STARTFILE_SPEC "%{!shared:crt1.o%s} crti.o%s %{shared:crtbeginS.o%s;:crtbegin.o%s}"
++
++#undef ENDFILE_SPEC
++#define ENDFILE_SPEC "%{shared:crtendS.o%s;:crtend.o%s} crtn.o%s"
++
++#undef TARGET_OS_CPP_BUILTINS
++#define TARGET_OS_CPP_BUILTINS()          \
++  do                                      \
++    {                                     \
++      builtin_define ("__frostyos__");     \
++      builtin_define ("__unix__");         \
++      builtin_assert ("system=frostyos");  \
++      builtin_assert ("system=unix");      \
++      builtin_assert ("system=posix");     \
++    }                                     \
++  while (0);
++
++#undef STANDARD_STARTFILE_PREFIX
++#define STANDARD_STARTFILE_PREFIX "/data/lib/"
++
+diff -ruN gcc-clean/gcc/config/i386/t-x86_64-elf gcc-dirty/gcc/config/i386/t-x86_64-elf
+--- gcc-clean/gcc/config/i386/t-x86_64-elf	1970-01-01 10:00:00.000000000 +1000
++++ gcc-dirty/gcc/config/i386/t-x86_64-elf	2026-05-29 17:56:10.146029009 +1000
+@@ -0,0 +1,4 @@
++# Add libgcc multilib variant without red-zone requirement
++ 
++MULTILIB_OPTIONS += mno-red-zone
++MULTILIB_DIRNAMES += no-red-zone
+diff -ruN gcc-clean/gcc/config.gcc gcc-dirty/gcc/config.gcc
+--- gcc-clean/gcc/config.gcc	2025-08-08 16:51:40.435347488 +1000
++++ gcc-dirty/gcc/config.gcc	2026-05-29 18:02:55.175570299 +1000
+@@ -1172,6 +1172,14 @@
+   *) ;;
+   esac
+   ;;
++*-*-frostyos*)
++  extra_options="$extra_options gnu-user.opt"
++  gas=yes
++  gnu_ld=yes
++  default_use_cxa_atexit=yes
++  use_gcc_stdint=provide
++  thread_file='posix'
++  ;;
+ esac
+ 
+ # Figure out if we need to enable heap trampolines by default
+@@ -1959,6 +1966,10 @@
+ i[34567]86-*-elf*)
+ 	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h newlib-stdint.h i386/i386elf.h"
+ 	;;
++x86_64-*-frostyos*)	
++	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h glibc-stdint.h i386/i386elf.h i386/x86-64.h gnu-user.h frostyos.h"
++	native_system_header_dir="/data/include"
++	;;
+ x86_64-*-elf*)
+ 	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h newlib-stdint.h i386/i386elf.h i386/x86-64.h"
+ 	;;
+diff -ruN gcc-clean/libgcc/config.host gcc-dirty/libgcc/config.host
+--- gcc-clean/libgcc/config.host	2025-08-08 16:51:44.833420855 +1000
++++ gcc-dirty/libgcc/config.host	2026-05-29 18:05:01.154711610 +1000
+@@ -764,6 +764,10 @@
+ 	    ;;
+ 	esac
+ 	;;
++x86_64-*-frostyos*)
++	extra_parts="$extra_parts crti.o crtbegin.o crtend.o crtn.o crtbeginS.o crtendS.o crtprec32.o crtprec64.o crtprec80.o crtfastmath.o"
++	tmake_file="$tmake_file t-crtstuff-pic t-libgcc-pic i386/t-crtpc t-crtfm i386/t-crtstuff t-dfprules"
++	;;
+ x86_64-*-fuchsia*)
+ 	tmake_file="$tmake_file t-libgcc-pic"
+ 	;;
+diff -ruN gcc-clean/libgcc/libgcov.h gcc-dirty/libgcc/libgcov.h
+--- gcc-clean/libgcc/libgcov.h	2025-08-08 16:51:44.918422274 +1000
++++ gcc-dirty/libgcc/libgcov.h	2026-05-29 18:05:33.344035940 +1000
+@@ -25,6 +25,8 @@
+ #ifndef GCC_LIBGCOV_H
+ #define GCC_LIBGCOV_H
+ 
++#include <stdint.h>
++
+ /* work around the poisoned malloc/calloc in system.h.  */
+ #ifndef xmalloc
+ #define xmalloc malloc
+diff -ruN gcc-clean/libstdc++-v3/configure.ac gcc-dirty/libstdc++-v3/configure.ac
+--- gcc-clean/libstdc++-v3/configure.ac	2025-08-08 16:51:45.690435151 +1000
++++ gcc-dirty/libstdc++-v3/configure.ac	2026-05-29 18:06:56.544928310 +1000
+@@ -134,7 +134,7 @@
+ # Use glibcxx_compiler_pic_flag to designate a compile-time flags for
+ # creating position-independent objects. This varies with the target
+ # hardware and operating system, but is often: -DPIC -fPIC.
+-if test "$enable_shared" = yes; then
++if test "$enable_shared" = yes || test "${with_pic+set}" = set; then
+   glibcxx_lt_pic_flag="-prefer-pic"
+   glibcxx_compiler_pic_flag="$lt_prog_compiler_pic_CXX"
+   glibcxx_compiler_shared_flag="-D_GLIBCXX_SHARED"
+diff -ruN gcc-clean/libstdc++-v3/crossconfig.m4 gcc-dirty/libstdc++-v3/crossconfig.m4
+--- gcc-clean/libstdc++-v3/crossconfig.m4	2025-08-08 16:51:45.691435169 +1000
++++ gcc-dirty/libstdc++-v3/crossconfig.m4	2026-05-29 17:56:10.164881640 +1000
+@@ -9,6 +9,13 @@
+     # This is a freestanding configuration; there is nothing to do here.
+     ;;
+ 
++  *-frostyos*)
++    GLIBCXX_CHECK_COMPILER_FEATURES
++    GLIBCXX_CHECK_LINKER_FEATURES
++    GLIBCXX_CHECK_MATH_SUPPORT
++    GLIBCXX_CHECK_STDLIB_SUPPORT
++    ;;
++
+   avr*-*-*)
+     AC_DEFINE(HAVE_ACOSF)
+     AC_DEFINE(HAVE_ASINF)

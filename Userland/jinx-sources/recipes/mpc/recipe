@@ -1,0 +1,26 @@
+name=mpc
+version=1.2.1
+revision=1
+tarball_url="https://ftpmirror.gnu.org/gnu/mpc/mpc-${version}.tar.gz"
+tarball_sha512=3279f813ab37f47fdcc800e4ac5f306417d07f539593ca715876e43e04896e1d5bceccfb288ef2908a3f24b760747d0dbd0392a24b9b341bc3e12082e5c836ee
+source_imagedeps="build-essential m4"
+imagedeps="build-essential m4"
+source_hostdeps="autoconf automake libtool"
+hostdeps="xgcc xbinutils"
+deps="base gmp mpfr"
+
+prepare() {
+    autoreconf -vfi
+}
+
+configure() {
+    ${source_dir}/configure --host=x86_64-frostyos --prefix=/data
+}
+
+build() {
+    make -j${parallelism}
+}
+
+package() {
+    make install DESTDIR="${dest_dir}"
+}

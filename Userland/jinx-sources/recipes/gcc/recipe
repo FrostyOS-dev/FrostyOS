@@ -1,0 +1,27 @@
+name=gcc
+version=15.2.0
+revision=1
+tarball_url="https://ftpmirror.gnu.org/gcc/gcc-${version}/gcc-${version}.tar.xz"
+tarball_sha512=89047a2e07bd9da265b507b516ed3635adb17491c7f4f67cf090f0bd5b3fc7f2ee6e4cc4008beef7ca884b6b71dffe2bb652b21f01a702e17b468cca2d10b2de
+source_hostdeps="automake autoconf"
+source_imagedeps="m4"
+imagedeps="build-essential"
+hostrundeps="automake autoconf xgcc xbinutils libstdc++-v3"
+deps="base gmp mpfr mpc binutils"
+clean_workdirs=no
+
+prepare() {
+    (cd libstdc++-v3 && autoconf)
+}
+
+configure() {
+    glibcxx_cv_madvise=no ac_cv_func_madvice=no ${source_dir}/configure --host=x86_64-frostyos --target=x86_64-frostyos --prefix=/data --enable-languages=c,c++ --enable-threads=posix --disable-multilib --with-pic --with-sysroot=/ --with-build-sysroot=${sysroot}
+}
+
+build() {
+    make -j${parallelism} all-gcc all-target-libgcc all-target-libstdc++-v3
+}
+
+package() {
+    make install-gcc install-target-libgcc install-target-libstdc++-v3 DESTDIR="${dest_dir}"
+}

@@ -1,0 +1,178 @@
+diff -ruN coreutils-clean/build-aux/config.sub coreutils-working/build-aux/config.sub
+--- coreutils-clean/build-aux/config.sub	2022-04-08 21:22:26.000000000 +1000
++++ coreutils-working/build-aux/config.sub	2026-09-29 14:11:24.530728805 +1000
+@@ -1754,7 +1754,7 @@
+ 	     | onefs* | tirtos* | phoenix* | fuchsia* | redox* | bme* \
+ 	     | midnightbsd* | amdhsa* | unleashed* | emscripten* | wasi* \
+ 	     | nsk* | powerunix* | genode* | zvmoe* | qnx* | emx* | zephyr* \
+-	     | fiwix* )
++	     | fiwix* | frostyos* )
+ 		;;
+ 	# This one is extra strict with allowed versions
+ 	sco3.2v2 | sco3.2v[4-9]* | sco5v6*)
+diff -ruN coreutils-clean/configure coreutils-working/configure
+--- coreutils-clean/configure	2022-04-16 07:11:02.000000000 +1000
++++ coreutils-working/configure	2026-10-04 14:14:24.463304890 +1000
+@@ -53815,7 +53815,7 @@
+   fi
+ 
+   if test -z "$ac_list_mounted_fs"; then
+-    as_fn_error $? "could not determine how to read list of mounted file systems" "$LINENO" 5
++    as_fn_warn $? "could not determine how to read list of mounted file systems" "$LINENO" 5
+     # FIXME -- no need to abort building the whole package
+     # Can't build mountlist.c or anything that needs its functions
+   fi
+diff -ruN coreutils-clean/lib/stdio.in.h coreutils-working/lib/stdio.in.h
+--- coreutils-clean/lib/stdio.in.h	2022-04-08 21:22:26.000000000 +1000
++++ coreutils-working/lib/stdio.in.h	2026-10-09 18:30:38.568260076 +1000
+@@ -222,7 +222,7 @@
+ #if @GNULIB_FCLOSE@
+ /* Close STREAM and its underlying file descriptor.  */
+ # if @REPLACE_FCLOSE@
+-#  if !(defined __cplusplus && defined GNULIB_NAMESPACE)
++#  if !(defined __cplusplus && defined GNULIB_NAMESPACE) && !defined(__frostyos__)
+ #   define fclose rpl_fclose
+ #  endif
+ _GL_FUNCDECL_RPL (fclose, int, (FILE *stream) _GL_ARG_NONNULL ((1)));
+diff -ruN coreutils-clean/src/du.c coreutils-working/src/du.c
+--- coreutils-clean/src/du.c	2022-04-08 21:22:17.000000000 +1000
++++ coreutils-working/src/du.c	2026-10-04 14:33:05.723793256 +1000
+@@ -422,6 +422,15 @@
+   fflush (stdout);
+ }
+ 
++#ifdef __frostyos__
++struct mount_entry* read_file_system_list(bool) {
++  return NULL;
++}
++void free_mount_entry(struct mount_entry*) {
++
++}
++#endif
++
+ /* Fill the di_mnt set with local mount point dev/ino pairs.  */
+ 
+ static void
+diff -ruN coreutils-clean/src/stat.c coreutils-working/src/stat.c
+--- coreutils-clean/src/stat.c	2022-04-08 21:22:18.000000000 +1000
++++ coreutils-working/src/stat.c	2026-10-04 14:33:38.403686501 +1000
+@@ -20,13 +20,14 @@
+ 
+ /* Keep this conditional in sync with the similar conditional in
+    ../m4/stat-prog.m4.  */
+-#if ((STAT_STATVFS || STAT_STATVFS64)                                       \
+-     && (HAVE_STRUCT_STATVFS_F_BASETYPE || HAVE_STRUCT_STATVFS_F_FSTYPENAME \
+-         || (! HAVE_STRUCT_STATFS_F_FSTYPENAME && HAVE_STRUCT_STATVFS_F_TYPE)))
+-# define USE_STATVFS 1
+-#else
+-# define USE_STATVFS 0
+-#endif
++// #if ((STAT_STATVFS || STAT_STATVFS64)                                       \
++//      && (HAVE_STRUCT_STATVFS_F_BASETYPE || HAVE_STRUCT_STATVFS_F_FSTYPENAME \
++//          || (! HAVE_STRUCT_STATFS_F_FSTYPENAME && HAVE_STRUCT_STATVFS_F_TYPE)))
++// # define USE_STATVFS 1
++// #else
++// # define USE_STATVFS 0
++// #endif
++#define USE_STATVFS 0
+ 
+ #include <stddef.h>
+ #include <stdio.h>
+@@ -81,6 +82,18 @@
+ # define USE_STATX 0
+ #endif
+ 
++#ifdef __frostyos__
++struct mount_entry* read_file_system_list(bool) {
++  return NULL;
++}
++void free_mount_entry(struct mount_entry*) {
++
++}
++int frostyos_statfs(const char* path, int* buf) {
++  return -ENOSYS;
++}
++#endif
++
+ #if USE_STATVFS
+ # define STRUCT_STATXFS_F_FSID_IS_INTEGER STRUCT_STATVFS_F_FSID_IS_INTEGER
+ # define HAVE_STRUCT_STATXFS_F_TYPE HAVE_STRUCT_STATVFS_F_TYPE
+@@ -95,6 +108,9 @@
+ #  define STATFS statvfs
+ # endif
+ # define STATFS_FRSIZE(S) ((S)->f_frsize)
++#elif defined(__frostyos__)
++  #define STATFS frostyos_statfs
++  #define STRUCT_STATVFS int
+ #else
+ # define HAVE_STRUCT_STATXFS_F_TYPE HAVE_STRUCT_STATFS_F_TYPE
+ # if HAVE_STRUCT_STATFS_F_NAMELEN
+@@ -263,6 +279,8 @@
+ {
+ #ifdef STATXFS_FILE_SYSTEM_TYPE_MEMBER_NAME
+   return statfsbuf->STATXFS_FILE_SYSTEM_TYPE_MEMBER_NAME;
++#elif defined(__frostyos__)
++  return "unknown";
+ #else
+   switch (statfsbuf->f_type)
+     {
+@@ -564,7 +582,6 @@
+     case S_MAGIC_ZSMALLOC: /* 0x58295829 local */
+       return "zsmallocfs";
+ 
+-
+ # elif __GNU__
+     case FSTYPE_UFS:
+       return "ufs";
+@@ -864,6 +881,10 @@
+               int fd, char const *filename,
+               void const *data)
+ {
++#ifdef __frostyos__
++  return false;
++#else
++
+   STRUCT_STATVFS const *statfsbuf = data;
+   bool fail = false;
+ 
+@@ -875,7 +896,7 @@
+ 
+     case 'i':
+       {
+-#if STRUCT_STATXFS_F_FSID_IS_INTEGER
++# if STRUCT_STATXFS_F_FSID_IS_INTEGER
+         uintmax_t fsid = statfsbuf->f_fsid;
+ #else
+         typedef unsigned int fsid_word;
+@@ -893,7 +914,7 @@
+             uintmax_t u = p[words - 1 - i];
+             fsid |= u << (i * CHAR_BIT * sizeof *p);
+           }
+-#endif
++# endif
+         out_uint_x (pformat, prefix_len, fsid);
+       }
+       break;
+@@ -902,11 +923,11 @@
+       OUT_NAMEMAX (pformat, prefix_len, SB_F_NAMEMAX (statfsbuf));
+       break;
+     case 't':
+-#if HAVE_STRUCT_STATXFS_F_TYPE
++# if HAVE_STRUCT_STATXFS_F_TYPE
+       out_uint_x (pformat, prefix_len, statfsbuf->f_type);
+-#else
++# else
+       fputc ('?', stdout);
+-#endif
++# endif
+       break;
+     case 'T':
+       out_string (pformat, prefix_len, human_fstype (statfsbuf));
+@@ -942,6 +963,7 @@
+       break;
+     }
+   return fail;
++#endif
+ }
+ 
+ /* Return any bind mounted source for a path.

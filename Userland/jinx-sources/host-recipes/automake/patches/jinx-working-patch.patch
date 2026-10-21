@@ -1,0 +1,25 @@
+diff -ruN automake-clean/lib/config.guess automake-working/lib/config.guess
+--- automake-clean/lib/config.guess	2026-10-13 17:30:58.497822720 +1000
++++ automake-working/lib/config.guess	2026-10-13 17:33:22.547330009 +1000
+@@ -833,6 +833,9 @@
+     *:BSD/OS:*:*)
+ 	echo ${UNAME_MACHINE}-unknown-bsdi${UNAME_RELEASE}
+ 	exit ;;
++	*:FrostyOS:*.*)
++	echo ${UNAME_MACHINE}-pc-frostyos
++	exit ;;
+     *:FreeBSD:*:*)
+ 	UNAME_PROCESSOR=`/usr/bin/uname -p`
+ 	case ${UNAME_PROCESSOR} in
+diff -ruN automake-clean/lib/config.sub automake-working/lib/config.sub
+--- automake-clean/lib/config.sub	2026-10-13 17:30:58.497822720 +1000
++++ automake-working/lib/config.sub	2026-10-13 17:33:56.786612921 +1000
+@@ -1391,7 +1391,7 @@
+ 	# The portable systems comes first.
+ 	# Each alternative MUST END IN A *, to match a version number.
+ 	# -sysv* is not here because it comes later, after sysvr4.
+-	-gnu* | -bsd* | -mach* | -minix* | -genix* | -ultrix* | -irix* \
++	-gnu* | -bsd* | -mach* | -minix* | -genix* | -ultrix* | -irix* | -frostyos* \
+ 	      | -*vms* | -sco* | -esix* | -isc* | -aix* | -cnk* | -sunos | -sunos[34]*\
+ 	      | -hpux* | -unos* | -osf* | -luna* | -dgux* | -auroraux* | -solaris* \
+ 	      | -sym* | -kopensolaris* | -plan9* \
