@@ -24,6 +24,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <string.h>
 #include <util.h>
 
+#include <Memory/PagingUtil.hpp>
+#include <Memory/PMM.hpp>
+
 #include <Scheduling/Process.hpp>
 
 uint64_t StringOctalToNum(char* str, size_t len) {
@@ -37,8 +40,144 @@ uint64_t StringOctalToNum(char* str, size_t len) {
     return n;
 }
 
+static size_t FieldLen(const char* field, size_t max) {
+    size_t n = 0;
+    while (n < max && field[n] != 0)
+        n++;
+    return n;
+}
+
+static int LoadEntry(USTARItemHeader* header, uint64_t itemSize, char* longName, const char* longLink, FS::VNode* cwd, const Credential& cred) {
+    // Build the name once, on the stack
+    char buf[sizeof(header->namePrefix) + 1 + sizeof(header->fileName) + 1];
+    char* path;
+    size_t len;
+
+    if (longName != nullptr) {
+        path = longName;
+        len = strlen(longName);
+    } else {
+        path = buf;
+        len = 0;
+        if (header->ID[5] == 0) {
+            len = FieldLen(header->namePrefix, sizeof(header->namePrefix));
+            if (len > 0) {
+                memcpy(buf, header->namePrefix, len);
+                buf[len++] = '/';
+            }
+        }
+
+        size_t nameLen = FieldLen(header->fileName, sizeof(header->fileName));
+        memcpy(buf + len, header->fileName, nameLen);
+        len += nameLen;
+    }
+
+    while (len > 1 && path[len - 1] == '/')
+        len--;
+    path[len] = 0;
+
+    // Leading "./"
+    while (path[0] && path[1] == '/') {
+        path += 2;
+        while (*path == '/')
+            path++;
+    }
+
+    if (path[0] == 0 || (path[0] == '.' && path[1] == 0))
+        return ESUCCESS;
+
+    char* slash = strrchr(path, '/');
+    const char* parent = "/";
+    const char* name = path;
+    if (slash != nullptr && slash != path) {
+        *slash = 0;
+        parent = path;
+        name = slash + 1;
+    } else if (slash == path)
+        name = path + 1;
+
+    int rc;
+    FS::VNode* vnode = nullptr;
+    switch (header->type) {
+    case '0':
+        rc = FS::VFS_CreateFile(parent, name, cwd, cred, nullptr, &vnode);
+        break;
+    case '2': {
+        char target[sizeof(header->linkedName) + 1];
+        const char* linkTarget = longLink;
+        if (linkTarget == nullptr) {
+            size_t targetLen = FieldLen(header->linkedName, sizeof(header->linkedName));
+            memcpy(target, header->linkedName, targetLen);
+            target[targetLen] = 0;
+            linkTarget = target;
+        }
+        rc = FS::VFS_CreateSymlink(parent, name, linkTarget, cwd, cred, nullptr, &vnode);
+        break;
+    }
+    case '5':
+        rc = FS::VFS_CreateDir(parent, name, cwd, cred, nullptr, &vnode);
+        break;
+    default:
+        dbgprintf("Unknown type %c. parent = %s, name = %s\n", header->type, parent, name);
+        return -ENOSYS;
+    }
+
+    if (slash != nullptr && slash != path)
+        *slash = '/';
+
+    if (rc < 0)
+        return rc;
+
+    uint32_t mtime = StringOctalToNum(header->mtime, 12);
+
+    FS::RefVNode(vnode);
+    vnode->Lock();
+    FS::VAttr attr{};
+    rc = vnode->GetAttr(&attr);
+    if (rc >= 0) {
+        attr.mode = StringOctalToNum(header->mode, 8);
+        attr.uid = StringOctalToNum(header->uid, 8);
+        attr.gid = StringOctalToNum(header->gid, 8);
+        attr.atime.tv_sec = mtime;
+        attr.atime.tv_nsec = 0;
+        attr.mtime = attr.atime;
+        attr.ctime = attr.atime;
+        rc = vnode->SetAttr(attr);
+    }
+    if (rc <= 0 && header->type == '0') {
+        uint64_t bytes = 0;
+        rc = vnode->Write((void*)((uint64_t)header + 512), itemSize, 0, 0, &bytes, cred);
+    }
+    vnode->Unlock();
+    FS::UnrefVNode(vnode);
+    return rc;
+}
+
+static int ReadLongField(USTARItemHeader* header, uint64_t itemSize, char*& out) {
+    if (itemSize == 0 || itemSize > PATH_MAX)
+        return -ENAMETOOLONG;
+    delete[] out;
+    out = new char[itemSize + 1];
+    memcpy(out, (char*)header + 512, itemSize);
+    out[itemSize] = 0;
+    return ESUCCESS;
+}
+
 int LoadInitRAMFS(void* data, size_t size) {
     USTARItemHeader* header = (USTARItemHeader*)data;
+
+    const uint64_t archiveStart = from_HHDM((uint64_t)data);
+    const uint64_t archiveEnd = archiveStart + size;
+
+    uint64_t freedUpTo = ALIGN_UP_BASE2(archiveStart, (uint64_t)PAGE_SIZE);
+
+    auto releaseUpTo = [&](uint64_t limit) {
+        limit = ALIGN_DOWN_BASE2(limit, (uint64_t)PAGE_SIZE);
+        if (limit <= freedUpTo)
+            return;
+        g_PMM->ReclaimPages((void*)freedUpTo, (limit - freedUpTo) >> PAGE_SIZE_SHIFT);
+        freedUpTo = limit;
+    };
 
     const Credential& cred = g_KProcess->GetCred();
     FS::VNode* cwd = nullptr;
@@ -50,151 +189,63 @@ int LoadInitRAMFS(void* data, size_t size) {
     printf("Loading initramfs...\n");
 
     uint64_t count = 0;
+    char* longName = nullptr;
+    char* longLink = nullptr;
+    rc = ESUCCESS;
 
-    while (memcmp(&header->ID, "ustar", 5) == 0 && ((uint64_t)header - (uint64_t)data) < size) {
-        if (header->fileName[99] != 0)
-            break;
+    while (((uint64_t)header - (uint64_t)data) + sizeof(USTARItemHeader) <= size && memcmp(&header->ID, "ustar", 5) == 0) {
         uint64_t itemSize = StringOctalToNum(header->size, 12);
-        uint32_t uid = StringOctalToNum(header->uid, 8);
-        uint32_t gid = StringOctalToNum(header->gid, 8);
-        uint16_t mode = StringOctalToNum(header->mode, 8);
-        uint32_t mtime = StringOctalToNum(header->mtime, 12);
 
-        char* parent = (char*)"/";
-        char* name = strrchr(header->fileName, '/');
-        if (name != nullptr && name[1] == 0) {
-            name[0] = 0;
-            name = strrchr(header->fileName, '/');
-        }
-        if (name == nullptr)
-            name = header->fileName;
-        else {
-            size_t length = (uint64_t)(name - header->fileName);
-            parent = new char[length + 1];
-            memcpy(parent, header->fileName, length);
-            parent[length] = 0;
-            name++; // after the /
-        }
-
-
-        switch (header->type) {
-        case '0': { // File
-            rc = FS::VFS_CreateFile(parent, name, cwd, cred);
-            if (rc < 0)
-                break;
-
-            FS::VNode* vnode = nullptr;
-            FS::VFS* vfs = nullptr;
-            rc = FS::VFS_LookupPath(header->fileName, &vnode, &vfs, cwd, cred);
-            if (rc < 0)
-                break;
-
-            vnode->Lock();
-            FS::VAttr attr{};
-            rc = vnode->GetAttr(&attr);
-            if (rc < 0) {
-                vnode->Unlock();
-                FS::UnrefVNode(vnode);
-                break;
-            }
-
-            attr.mode = mode;
-            attr.uid = uid;
-            attr.gid = gid;
-            attr.atime.tv_sec = mtime;
-            attr.mtime.tv_sec = mtime;
-            attr.ctime.tv_sec = mtime;
-            rc = vnode->SetAttr(attr);
-            if (rc < 0) {
-                vnode->Unlock();
-                FS::UnrefVNode(vnode);
-                break;
-            }
-
-            uint64_t bytes = 0;
-            rc = vnode->Write((void*)((uint64_t)header + 512), itemSize, 0, 0, &bytes, cred);
-            vnode->Unlock();
-            FS::UnrefVNode(vnode);
-            break;
-        }
-        case '2': { // Symlink
-            rc = FS::VFS_CreateSymlink(parent, name, header->linkedName, cwd, cred);
-            if (rc < 0)
-                break;
-
-            FS::VNode* vnode = nullptr;
-            FS::VFS* vfs = nullptr;
-            rc = FS::VFS_LookupPath(header->fileName, &vnode, &vfs, cwd, cred, false);
-            if (rc < 0)
-                break;
-
-            vnode->Lock();
-            FS::VAttr attr{};
-            rc = vnode->GetAttr(&attr);
-            if (rc < 0) {
-                vnode->Unlock();
-                FS::UnrefVNode(vnode);
-                break;
-            }
-
-            attr.mode = mode;
-            attr.uid = uid;
-            attr.gid = gid;
-            attr.atime.tv_sec = mtime;
-            attr.mtime.tv_sec = mtime;
-            attr.ctime.tv_sec = mtime;
-            rc = vnode->SetAttr(attr);
-            vnode->Unlock();
-            FS::UnrefVNode(vnode);
-            break;
-        }
-        case '5': { // Folder
-            rc = FS::VFS_CreateDir(parent, name, cwd, cred);
-            if (rc < 0)
-                break;
-
-            FS::VNode* vnode = nullptr;
-            FS::VFS* vfs = nullptr;
-            rc = FS::VFS_LookupPath(header->fileName, &vnode, &vfs, cwd, cred);
-            if (rc < 0)
-                break;
-
-            vnode->Lock();
-            FS::VAttr attr{};
-            rc = vnode->GetAttr(&attr);
-            if (rc < 0) {
-                vnode->Unlock();
-                FS::UnrefVNode(vnode);
-                break;
-            }
-
-            attr.mode = mode;
-            attr.uid = uid;
-            attr.gid = gid;
-            attr.atime.tv_sec = mtime;
-            attr.mtime.tv_sec = mtime;
-            attr.ctime.tv_sec = mtime;
-            rc = vnode->SetAttr(attr);
-            vnode->Unlock();
-            FS::UnrefVNode(vnode);
-            break;
-        }
-        default:
-            rc = -ENOSYS;
+        uint64_t offset = (uint64_t)header - (uint64_t)data;
+        if (itemSize > size - offset - 512) {
+            rc = -EINVAL;
             break;
         }
 
-        if (name != header->fileName)
-            delete[] parent;
+        USTARItemHeader* next = (USTARItemHeader*)((uint64_t)header + 512 + ALIGN_UP(itemSize, 512));
 
-        if (rc < 0)
-            return rc;
+        if (header->type == 'L' || header->type == 'K') {
+            rc = ReadLongField(header, itemSize, header->type == 'L' ? longName : longLink);
+            if (rc < 0)
+                break;
+            releaseUpTo(from_HHDM((uint64_t)next));
+            header = next;
+            continue;
+        }
 
-        header = (USTARItemHeader*)((uint64_t)header + 512 + ALIGN_UP(itemSize, 512));
+        rc = LoadEntry(header, itemSize, longName, longLink, cwd, cred);
+
+        if (longName != nullptr) {
+            delete[] longName;
+            longName = nullptr;
+        }
+        if (longLink != nullptr) {
+            delete[] longLink;
+            longLink = nullptr;
+        }
+
+        if (rc < 0) {
+            dbgprintf("Entry %lu loading failed: %s\n", count + 1, strerror(-rc));
+            break;
+        }
+
+        releaseUpTo(from_HHDM((uint64_t)next)); // entire entry is consumed, must not be accessed again
+
+        header = next;
         count++;
     }
+    
+    if (longName != nullptr)
+        delete[] longName;
+    if (longLink != nullptr)
+        delete[] longLink;
+
+    FS::UnrefVNode(cwd);
+    releaseUpTo(ALIGN_UP_BASE2(archiveEnd, (uint64_t)PAGE_SIZE));
+
+    if (rc < 0)
+        return rc;
 
     printf("initramfs: loaded %lu items\n", count);
-
     return ESUCCESS;
 }

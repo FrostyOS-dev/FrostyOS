@@ -21,8 +21,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdint.h>
 #include <spinlock.h>
 
-#include <Scheduling/Mutex.hpp>
-
 #include "MemoryMap.hpp"
 
 class PMM {
@@ -38,9 +36,15 @@ public:
     void* AllocatePages(uint64_t pageCount);
     void FreePages(void* pages, uint64_t pageCount);
 
+    void ReclaimPages(void* pages, uint64_t pageCount);
+
     uint64_t GetFreePageCount();
 
 private:
+    void Lock();
+    void Unlock();
+
+    void FreePagesLocked(void* pages, uint64_t pageCount);
 
     void Verify();
 
@@ -59,7 +63,8 @@ private:
     uint64_t m_usedPageCount;
     uint64_t m_totalPageCount;
 
-    Mutex m_lock;
+    spinlock_t m_lock;
+    uint64_t m_intState;
 };
 
 extern PMM* g_PMM;

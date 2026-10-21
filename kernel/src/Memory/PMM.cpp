@@ -19,13 +19,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "PagingUtil.hpp"
 
 #include <assert.h>
+#include <spinlock.h>
 #include <util.h>
 
-#include <Scheduling/Mutex.hpp>
+#include <HAL/Processor.hpp>
 
 PMM* g_PMM = nullptr;
 
-PMM::PMM() : m_FreeListStart(nullptr), m_FreeListEnd(nullptr), m_FreeListNodeCount(0), m_FreePageCount(0), m_usedPageCount(0), m_totalPageCount(0), m_lock() {
+PMM::PMM() : m_FreeListStart(nullptr), m_FreeListEnd(nullptr), m_FreeListNodeCount(0), m_FreePageCount(0), m_usedPageCount(0), m_totalPageCount(0), m_lock(SPINLOCK_DEFAULT_VALUE) {
 
 }
 
@@ -65,7 +66,7 @@ void PMM::Init(MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount) {
 }
 
 void* PMM::AllocatePage() {
-    m_lock.Lock();
+    Lock();
     assert(m_FreePageCount > 0);
 
     FreeListNode* node = m_FreeListStart;
@@ -87,12 +88,12 @@ void* PMM::AllocatePage() {
     m_FreePageCount--;
     m_usedPageCount++;
 
-    m_lock.Unlock();
+    Unlock();
     return (void*)from_HHDM(node);
 }
 
 void PMM::FreePage(void* page) {
-    m_lock.Lock();
+    Lock();
     FreeListNode* node = (FreeListNode*)to_HHDM(page);
     
     FreeListNode* current = m_FreeListStart;
@@ -139,7 +140,7 @@ void PMM::FreePage(void* page) {
             }
             m_FreePageCount++;
             m_usedPageCount--;
-            m_lock.Unlock();
+            Unlock();
             return;
         }
         previous = current;
@@ -164,14 +165,16 @@ void PMM::FreePage(void* page) {
     m_FreePageCount++;
     m_usedPageCount--;
 
-    m_lock.Unlock();
+    Unlock();
 }
 
 void* PMM::AllocatePages(uint64_t pageCount) {
+    if (pageCount == 0)
+        return nullptr;
     if (pageCount == 1)
         return AllocatePage(); // much faster
 
-    m_lock.Lock();
+    Lock();
     assert(m_FreePageCount > 0);
 
     FreeListNode* current = m_FreeListStart;
@@ -213,7 +216,7 @@ void* PMM::AllocatePages(uint64_t pageCount) {
             m_FreePageCount -= pageCount;
             m_usedPageCount += pageCount;
 
-            m_lock.Unlock();
+            Unlock();
             return (void*)from_HHDM(current);
         }
         previous = current;
@@ -221,12 +224,45 @@ void* PMM::AllocatePages(uint64_t pageCount) {
     }
 
     // if we get here, we failed to allocate
-    m_lock.Unlock();
+    Unlock();
     return nullptr;
 }
 
 void PMM::FreePages(void* pages, uint64_t pageCount) {
-    m_lock.Lock();
+    Lock();
+    FreePagesLocked(pages, pageCount);
+    Unlock();
+}
+
+void PMM::ReclaimPages(void* pages, uint64_t pageCount) {
+    Lock();
+    m_totalPageCount += pageCount;
+    m_usedPageCount += pageCount;
+    
+    FreePagesLocked(pages, pageCount);
+    Unlock();
+}
+
+uint64_t PMM::GetFreePageCount() {
+    Lock();
+    uint64_t count = m_FreePageCount;
+    Unlock();
+    return count;
+}
+
+void PMM::Lock() {
+    uint64_t state = Processor::DisableInterrupts();
+    spinlock_acquire(&m_lock);
+    m_intState = state;
+}
+
+void PMM::Unlock() {
+    uint64_t state = m_intState;
+    spinlock_release(&m_lock);
+    Processor::EnableInterrupts(state);
+}
+
+void PMM::FreePagesLocked(void* pages, uint64_t pageCount) {
     FreeListNode* node = (FreeListNode*)to_HHDM(pages);
     
     FreeListNode* current = m_FreeListStart;
@@ -273,7 +309,6 @@ void PMM::FreePages(void* pages, uint64_t pageCount) {
             }
             m_FreePageCount += pageCount;
             m_usedPageCount -= pageCount;
-            m_lock.Unlock();
             return;
         }
         previous = current;
@@ -297,12 +332,6 @@ void PMM::FreePages(void* pages, uint64_t pageCount) {
 
     m_FreePageCount += pageCount;
     m_usedPageCount -= pageCount;
-
-    m_lock.Unlock();
-}
-
-uint64_t PMM::GetFreePageCount() {
-    return m_FreePageCount;
 }
 
 void PMM::Verify() {
