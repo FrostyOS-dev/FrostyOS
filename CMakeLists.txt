@@ -32,7 +32,7 @@ add_custom_target(build_boot
 add_dependencies(build_boot install_kernel)
 
 add_custom_target(build_initramfs
-	COMMAND ${CMAKE_COMMAND} -E chdir ${SYSROOT} /bin/sh -c "tar -c --no-auto-compress --owner=0 --group=0 -f ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/initramfs.tar *"
+	COMMAND ${CMAKE_COMMAND} -E chdir ${SYSROOT} /bin/sh -c "tar -c --no-auto-compress --hard-dereference --owner=0 --group=0 -f ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/initramfs.tar *"
 	BYPRODUCTS ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/initramfs.tar
 )
 
@@ -55,18 +55,18 @@ add_dependencies(build_iso build_boot build_initramfs update_ovmf)
 
 if(FROSTYOS_BUILD_CONFIG STREQUAL "Debug")
 	add_custom_target(run-qemu
-		COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.4m.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/boot.iso,index=0,media=disk -m 256M -debugcon file:/dev/stdout -monitor stdio -M q35,accel=kvm -cpu host -chardev pty,id=serial0 -serial chardev:serial0
+		COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.4m.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/boot.iso,index=0,media=disk -m 1G -debugcon file:/dev/stdout -monitor stdio -M q35,accel=kvm -cpu host -chardev pty,id=serial0 -serial chardev:serial0
 		USES_TERMINAL
 	)
 else()
 	if(FROSTYOS_BUILD_CONFIG STREQUAL "Release")
 		add_custom_target(run-qemu
-			COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.4m.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/boot.iso,index=0,media=disk -m 256M -M q35,accel=kvm -cpu host -chardev pty,id=serial0 -serial chardev:serial0
+			COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.4m.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/boot.iso,index=0,media=disk -m 1G -M q35,accel=kvm -cpu host -chardev pty,id=serial0 -serial chardev:serial0
 			USES_TERMINAL
 		)
 	else() # Default is Debug
 		add_custom_target(run-qemu
-			COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.4m.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/boot.iso,index=0,media=disk -m 256M -debugcon file:/dev/stdout -monitor stdio -M q35,accel=kvm -cpu host -chardev pty,id=serial0 -serial chardev:serial0
+			COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.4m.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/boot.iso,index=0,media=disk -m 1G -debugcon file:/dev/stdout -monitor stdio -M q35,accel=kvm -cpu host -chardev pty,id=serial0 -serial chardev:serial0
 			USES_TERMINAL
 		)
 	endif()
