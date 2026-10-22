@@ -101,6 +101,7 @@ struct Stat {
 #define AT_EMPTY_PATH 0x1000
 #define AT_FDCWD -100
 #define AT_REMOVEDIR 0x200
+#define AT_EACCESS 0x200
 
 #define F_DUPFD            0
 #define F_GETFD            1
@@ -171,5 +172,7 @@ int sys_truncate(const char* path, size_t pathLen, off_t size);
 int sys_ftruncate(int fd, off_t size);
 
 int sys_pipe(int* fds, int flags);
+
+int sys_faccessat(int dirfd, const char* path, size_t pathLen, int mode, int flags);
 
 #endif /* _SYSCALL_FILE_HPP */

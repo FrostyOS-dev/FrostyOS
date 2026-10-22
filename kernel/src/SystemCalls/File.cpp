@@ -1357,3 +1357,26 @@ int sys_pipe(int* fds, int flags) {
     }
     return ESUCCESS;
 }
+
+int sys_faccessat(int dirfd, const char* path, size_t pathLen, int mode, int flags) {
+    if ((flags & ~(AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW | AT_EACCESS)) != 0)
+        return -EINVAL;
+
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+
+    FS::VNode* vnode = nullptr;
+    int rc = ResolveVNodeAt(proc, dirfd, path, pathLen, flags, &vnode);
+    if (rc < 0)
+        return rc;
+
+    Credential cred = proc->GetCred();
+    if ((flags & AT_EACCESS) == 0) { // default behaviour of faccessat is to use uid/gid, but vnode access uses euid/egid
+        cred.euid = cred.uid;
+        cred.egid = cred.gid;
+    }
+
+    rc = vnode->Access(mode, cred);
+
+    FS::UnrefVNode(vnode);
+    return rc;
+}
