@@ -170,4 +170,6 @@ int sys_dup2(int fd, int newFD, int flags);
 int sys_truncate(const char* path, size_t pathLen, off_t size);
 int sys_ftruncate(int fd, off_t size);
 
+int sys_pipe(int* fds, int flags);
+
 #endif /* _SYSCALL_FILE_HPP */

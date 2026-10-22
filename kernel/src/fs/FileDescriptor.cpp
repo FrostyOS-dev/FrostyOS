@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "FileDescriptor.hpp"
+#include "Pipe.hpp"
 #include "VFS.hpp"
 
 #include <errno.h>
@@ -30,21 +31,29 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <tty/TTY.hpp>
 #include <tty/TTYBackend.hpp>
 
-FileDescriptor::FileDescriptor() : m_proc(nullptr), m_type(FDType::Invalid), m_offset(0), m_open(false), m_vnode(nullptr), m_tty(nullptr), m_ttyStream(TTYStream::INVALID), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false) {
+FileDescriptor::FileDescriptor() : m_proc(nullptr), m_type(FDType::Invalid), m_offset(0), m_open(false), m_vnode(nullptr), m_tty(nullptr), m_ttyStream(TTYStream::INVALID), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(nullptr), m_pipeWriteEnd(false) {
 
 }
 
-FileDescriptor::FileDescriptor(Process* proc, FDType type, FS::VNode* vnode) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_vnode(vnode), m_tty(nullptr), m_ttyStream(TTYStream::INVALID), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false) {
+FileDescriptor::FileDescriptor(Process* proc, FDType type, FS::VNode* vnode) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_vnode(vnode), m_tty(nullptr), m_ttyStream(TTYStream::INVALID), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(nullptr), m_pipeWriteEnd(false) {
 
 }
 
-FileDescriptor::FileDescriptor(Process* proc, FDType type, TTY* tty, TTYStream stream) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_vnode(nullptr), m_tty(tty), m_ttyStream(stream), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false) {
+FileDescriptor::FileDescriptor(Process* proc, FDType type, TTY* tty, TTYStream stream) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_vnode(nullptr), m_tty(tty), m_ttyStream(stream), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(nullptr), m_pipeWriteEnd(false) {
+
+}
+
+FileDescriptor::FileDescriptor(Process* proc, Pipe* pipe, bool writeEnd) : m_proc(proc), m_type(FDType::Pipe), m_offset(0), m_open(false), m_vnode(nullptr), m_tty(nullptr), m_ttyStream(TTYStream::INVALID), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(pipe), m_pipeWriteEnd(writeEnd) {
 
 }
 
 FileDescriptor::~FileDescriptor() {
     if (m_vnode != nullptr)
         FS::VFS_Close(m_vnode, m_cred);
+    if (m_pipe != nullptr) {
+        m_pipe->CloseEnd(m_pipeWriteEnd);
+        m_pipe->Unref();
+    }
 }
 
 void FileDescriptor::Init(Process* proc, FDType type, FS::VNode* vnode) {
@@ -81,6 +90,12 @@ int FileDescriptor::Open(int flags) {
             return -EBADF;
         }
         break;
+    case FDType::Pipe:
+        if (m_pipe == nullptr) {
+            m_mutex.Unlock();
+            return -EBADF;
+        }
+        break;
     case FDType::Invalid:
         m_mutex.Unlock();
         return -EBADF;
@@ -111,6 +126,12 @@ int FileDescriptor::Read(void* buf, size_t count, size_t* realCount) {
     if (count == 0) {
         *realCount = 0;
         return ESUCCESS;
+    }
+
+    if (m_type == FDType::Pipe) { // pipes can't hold the mutex as they can block
+        if (!m_open || !m_canRead)
+            return -EBADF;
+        return m_pipe->Read(buf, count, realCount, (GetFlags() & O_NONBLOCK) > 0);
     }
 
     m_mutex.Lock();
@@ -176,6 +197,12 @@ int FileDescriptor::Write(const void* buf, size_t count, size_t* realCount) {
     if (count == 0) {
         *realCount = 0;
         return ESUCCESS;
+    }
+
+    if (m_type == FDType::Pipe) { // pipes can't hold the mutex as they can block
+        if (!m_open || !m_canWrite)
+            return -EBADF;
+        return m_pipe->Write(buf, count, realCount, (GetFlags() & O_NONBLOCK) > 0);
     }
 
     m_mutex.Lock();
@@ -253,6 +280,9 @@ int FileDescriptor::Write(const void* buf, size_t count, size_t* realCount) {
 int FileDescriptor::Seek(int64_t offset, FDOffsetStart whence, int64_t* realOffset) {
     if (realOffset == nullptr)
         return -EINVAL;
+
+    if (m_type == FDType::Pipe)
+        return -ESPIPE;
 
     m_mutex.Lock();
 
@@ -442,7 +472,7 @@ int FileDescriptor::Ioctl(uint64_t op, void* arg, int* result, Process* currentP
         m_vnode->Unlock();
         break;
     default:
-        rc = ENOTSUP;
+        rc = ENOTTY;
         break;
     }
 
@@ -457,6 +487,8 @@ EventWaitQueue* FileDescriptor::GetPollQueue(uint32_t events) {
     case FDType::File:
     case FDType::Directory:
         return m_vnode != nullptr ? m_vnode->GetPollQueue(events) : nullptr;
+    case FDType::Pipe:
+        return m_pipe != nullptr ? m_pipe->GetPollQueue() : nullptr;
     }
     return nullptr;
 }
@@ -470,6 +502,8 @@ uint32_t FileDescriptor::PollReady(uint32_t events) {
     case FDType::File:
     case FDType::Directory:
         return m_vnode != nullptr ? m_vnode->PollReady(events) : 0;
+    case FDType::Pipe:
+        return m_pipe != nullptr ? m_pipe->PollReady(m_pipeWriteEnd, events) : 0;
     }
     return 0;
 }

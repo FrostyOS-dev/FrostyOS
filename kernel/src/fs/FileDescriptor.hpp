@@ -31,6 +31,7 @@ enum class FDType {
     File,
     TTY,
     Directory,
+    Pipe,
     Invalid
 };
 
@@ -45,6 +46,8 @@ namespace FS {
     struct Dentry;
 }
 
+class Pipe;
+
 class Process;
 
 class FileDescriptor {
@@ -52,6 +55,7 @@ public:
     FileDescriptor();
     FileDescriptor(Process* proc, FDType type, FS::VNode* vnode);
     FileDescriptor(Process* proc, FDType type, TTY* tty, TTYStream stream);
+    FileDescriptor(Process* proc, Pipe* pipe, bool writeEnd);
     ~FileDescriptor();
 
     void Init(Process* proc, FDType type, FS::VNode* vnode);
@@ -101,6 +105,9 @@ private:
     int m_flags;
     bool m_canRead;
     bool m_canWrite;
+
+    Pipe* m_pipe;
+    bool m_pipeWriteEnd;
 };
 
 #endif /* _FILE_DESCRIPTOR_HPP */

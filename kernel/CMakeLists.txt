@@ -121,6 +121,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/fs/FDManager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/fs/FileDescriptor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/fs/InitRAMFS.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/fs/Pipe.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/fs/VFS.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Colour.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Graphics/Framebuffer.cpp

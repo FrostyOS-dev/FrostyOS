@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <fs/FDManager.hpp>
 #include <fs/FileDescriptor.hpp>
+#include <fs/Pipe.hpp>
 #include <fs/VFS.hpp>
 
 #include <HAL/Time.hpp>
@@ -632,7 +633,7 @@ static int ResolveVNodeAt(Process* proc, int fd, const char* path, size_t pathLe
                 return -EBADF;
             }
             v = desc->GetVNode();
-            if (v == nullptr) { // TTY
+            if (v == nullptr) { // TTY or Pipe
                 desc->Unref();
                 return -ENOTSUP;
             }
@@ -706,7 +707,7 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
     int rc = ResolveVNodeAt(proc, fd, path, pathLen, flags, &vnode);
     if (rc == -ENOTSUP && fd != AT_FDCWD) { // TTY
         FileDescriptor* desc = manager->Get(fd);
-        if (desc == nullptr || !desc->isOpen() || desc->GetType() != FDType::TTY) {
+        if (desc == nullptr || !desc->isOpen() || (desc->GetType() != FDType::TTY && desc->GetType() != FDType::Pipe)) {
             if (desc != nullptr)
                 desc->Unref();
             return -EBADF;
@@ -715,6 +716,15 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
         if (desc->GetVNode() != nullptr) {
             desc->Unref();
             return rc;
+        }
+
+        if (desc->GetType() == FDType::Pipe) {
+            desc->Unref();
+            Stat buf;
+            memset(&buf, 0, sizeof(Stat));
+            buf.mode = 0600 | ((FS::VFS_GetPosixType(FS::VType::FIFO) & 0xF) << 12);
+            buf.blksize = PIPE_BUF;
+            return UserWrite(stat, &buf, sizeof(Stat), proc) ? ESUCCESS : -EFAULT;
         }
 
         if (desc->GetType() != FDType::TTY) {
@@ -1285,4 +1295,65 @@ int sys_ftruncate(int fd, off_t size) {
     int rc = FS::VFS_Truncate(vnode, size, proc->GetCred());
     FS::UnrefVNode(vnode);
     return rc;
+}
+
+int sys_pipe(int* fds, int flags) {
+    if ((flags & ~(O_CLOEXEC | O_NONBLOCK)) != 0)
+        return -EINVAL;
+
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+    FileDescriptorManager* manager = proc->GetFDManager();
+    if (manager == nullptr)
+        return -ENOSYS;
+
+    Pipe* pipe = new Pipe;
+    if (pipe == nullptr)
+        return -ENOMEM;
+    if (!pipe->Init()) {
+        delete pipe;
+        return -ENOMEM;
+    }
+
+    FileDescriptor* rd = new FileDescriptor(proc, pipe, false);
+    FileDescriptor* wr = rd != nullptr ? new FileDescriptor(proc, pipe, true) : nullptr;
+    if (rd == nullptr || wr == nullptr) {
+        if (rd != nullptr)
+            delete rd;
+        else
+            pipe->Unref();
+        if (wr != nullptr)
+            delete wr;
+        else
+            pipe->Unref();
+        return -ENOMEM;
+    }
+
+    int fdFlags = (flags & O_CLOEXEC) > 0 ? FD_CLOEXEC : 0;
+    if (rd->Open(O_RDONLY | (flags & O_NONBLOCK)) < 0 || wr->Open(O_WRONLY | (flags & O_NONBLOCK)) < 0) {
+        delete rd;
+        delete wr;
+        return -EBADF;
+    }
+
+    fd_t r = manager->Allocate(rd, fdFlags);
+    if (r < 0) {
+        delete rd;
+        delete wr;
+        return (int)r;
+    }
+
+    fd_t w = manager->Allocate(wr, fdFlags);
+    if (w < 0) {
+        manager->Free(r);
+        delete wr;
+        return (int)w;
+    }
+
+    int kFDs[2] = { (int)r, (int)w };
+    if (!UserWrite(fds, kFDs, sizeof(kFDs), proc)) {
+        manager->Free(r);
+        manager->Free(w);
+        return -EFAULT;
+    }
+    return ESUCCESS;
 }
