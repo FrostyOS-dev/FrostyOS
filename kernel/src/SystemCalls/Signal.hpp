@@ -160,7 +160,7 @@ extern int g_signalDefaultActions[NSIG];
 int sys_sigaction(int signal, sigaction_t* newAct, sigaction_t* oldAct);
 int sys_sigpending(sigset_t* set);
 int sys_sigprocmask(int how, sigset_t* set, sigset_t* oldSet);
-[[noreturn]] void sys_sigreturn();
+[[noreturn]] void sys_sigreturn(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, CPU_Registers* state);
 int sys_kill(pid_t pid, int signal);
 
 #endif /* _SYSCALL_SIGNAL_HPP */

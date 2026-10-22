@@ -20,6 +20,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "SystemCall.hpp"
 
 #include <errno.h>
+#include <string.h>
+
+#include <HAL/HAL.hpp>
 
 #include <Scheduling/Process.hpp>
 #include <Scheduling/Scheduler.hpp>
@@ -160,14 +163,19 @@ int sys_sigprocmask(int how, sigset_t* set, sigset_t* oldSet) {
 	return ESUCCESS;
 }
 
-[[noreturn]] void sys_sigreturn() {
+[[noreturn]] void sys_sigreturn(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, CPU_Registers* state) {
 	Thread* current = Thread::GetCurrentThread();
+	Process* proc = current->GetParent();
 
-	int rc = current->RestoreSignalContext(&current->GetMutableRegisters(), current->GetExtraContext());
+	int rc = current->RestoreSignalContext(state, current->GetExtraContext());
 
-	assert(rc == 0); // something is very wrong if this happens, the function only returns 0 if the cpu states are null
+	if (rc != 0) { // corrupt or missing frame: kill the thread with SIGSEGV
+		Thread::ExitCurrentThread(SIGSEGV, true, proc->GetMainThread() == current, true);
+		PANIC("ExitCurrentThread with SIGSEGV failed on signal return");
+	}
 
-	Processor::DisableInterrupts(); // must disable interrupts before calling RunThread
+	Processor::DisableInterrupts();
+	memcpy(&current->GetMutableRegisters(), state, sizeof(CPU_Registers));
 	Scheduler::RunThread(current, false); // Need to context switch back into the thread
 }
 

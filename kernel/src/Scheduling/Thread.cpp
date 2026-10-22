@@ -39,7 +39,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <arch/x86_64/Scheduling/TaskUtil.hpp>
 #endif
 
-Thread::Thread() : isSleeping(false), eventLock(SPINLOCK_DEFAULT_VALUE), eventWaitActive(false), activeEventNodes(nullptr), blocked(false), m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_OriginalStack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_deleteProp(false, false, true, false, -1, 0), m_blockedSignals{}, m_pendingSignals{}, m_returnSignals{}, m_hasReturnSignalMask(false), m_inSignalHandler(false), m_signalLock(SPINLOCK_DEFAULT_VALUE) {
+Thread::Thread() : isSleeping(false), eventLock(SPINLOCK_DEFAULT_VALUE), eventWaitActive(false), activeEventNodes(nullptr), blocked(false), m_EntryPoint({nullptr, nullptr}), m_Parent(nullptr), m_TID(UINT64_MAX), m_Stack(0), m_OriginalStack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_deleteProp(false, false, true, false, -1, 0), m_blockedSignals{}, m_pendingSignals{}, m_returnSignals{}, m_hasReturnSignalMask(false), m_signalLock(SPINLOCK_DEFAULT_VALUE) {
     sleepRemainingTime = 0;
     yieldCallback = {nullptr, nullptr};
     m_InSchedList = false;
@@ -47,7 +47,7 @@ Thread::Thread() : isSleeping(false), eventLock(SPINLOCK_DEFAULT_VALUE), eventWa
 
 }
 
-Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : isSleeping(false), eventLock(SPINLOCK_DEFAULT_VALUE), eventWaitActive(false), activeEventNodes(nullptr), blocked(false), m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_OriginalStack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_deleteProp(false, false, true, false, -1, 0), m_blockedSignals{}, m_pendingSignals{}, m_returnSignals{}, m_hasReturnSignalMask(false), m_inSignalHandler(false), m_signalLock(SPINLOCK_DEFAULT_VALUE) {
+Thread::Thread(ThreadEntryPoint entryPoint, Process* parent, uint64_t tid) : isSleeping(false), eventLock(SPINLOCK_DEFAULT_VALUE), eventWaitActive(false), activeEventNodes(nullptr), blocked(false), m_EntryPoint(entryPoint), m_Parent(parent), m_TID(tid), m_Stack(0), m_OriginalStack(0), m_KernelStack(0), m_ThreadListData{nullptr, nullptr}, m_ProcThreadListData{nullptr, nullptr}, m_TimeRemaining(0), m_CPUInfo(nullptr, SPINLOCK_DEFAULT_VALUE), m_InSchedList(false), m_InProcList(false), m_deleteProp(false, false, true, false, -1, 0), m_blockedSignals{}, m_pendingSignals{}, m_returnSignals{}, m_hasReturnSignalMask(false), m_signalLock(SPINLOCK_DEFAULT_VALUE) {
     sleepRemainingTime = 0;
     yieldCallback = {nullptr, nullptr};
 
@@ -326,10 +326,12 @@ int Thread::RaiseSignal(int signal, bool synchronous) {
     m_Parent->AcquireSignalLock();
     spinlock_acquire(&m_signalLock);
 
-    if (m_inSignalHandler && synchronous) {
-        spinlock_release(&m_signalLock);
-        m_Parent->ReleaseSignalLock();
-        Thread::ExitCurrentThread(signal, true, m_Parent->GetMainThread() == this, true);
+    if (synchronous) { // force the signal
+        sigaction_t* act = m_Parent->GetSignalAction(signal);
+        if (act->address == SIG_IGN || SIGNAL_GET(&m_blockedSignals, signal) > 0) {
+            act->address = SIG_DFL;
+            SIGNAL_CLEAR(&m_blockedSignals, signal);
+        }
     }
 
     SIGNAL_SET(&m_pendingSignals, signal);
@@ -356,9 +358,6 @@ int Thread::RaiseSignal(int signal, bool synchronous) {
 }
 
 int Thread::CheckSignals() {
-    if (m_inSignalHandler)
-        return 0; // Prevent signal nesting
-
     while (true) {
         if (m_Parent->GetState() == ProcessState::STOPPED)
             WaitWhileStopped();
@@ -461,27 +460,19 @@ int Thread::DispatchSignals(CPU_Registers* regs, CPU_ExtraContext* extra) {
     rc = x86_64_SetupSignalFrame(m_Parent, regs, extra, act, &oldBlocked, signum);
 #endif /* __x86_64__ */
 
-    if (rc == 0) {
-        // Safely apply new mask
-        ChangeSignalMask(SIG_SETMASK, &newBlocked, nullptr);
+    if (rc != 0) {
+        ExitCurrentThread(SIGSEGV, true, m_Parent->GetMainThread() == this, true);
+        return -EFAULT;
+    }
 
-        m_inSignalHandler = true; // no nesting of signals
+    ChangeSignalMask(SIG_SETMASK, &newBlocked, nullptr);
 
-        // Reset signal action to default if requested
-        if ((act->flags & SA_RESETHAND) > 0) {
-            sigaction_t defAct;
-            memset(&defAct, 0, sizeof(sigaction_t));
-            defAct.address = SIG_DFL;
-
-            m_Parent->SetSignalAction(signum, &defAct, nullptr);
-        }
-    } else {
-        // Frame setup failed, force SIGSEGV
+    // Reset signal action to default if requested
+    if ((act->flags & SA_RESETHAND) > 0) {
         sigaction_t defAct;
         memset(&defAct, 0, sizeof(sigaction_t));
         defAct.address = SIG_DFL;
-        m_Parent->SetSignalAction(SIGSEGV, &defAct, nullptr);
-        RaiseSignal(SIGSEGV);
+        m_Parent->SetSignalAction(signum, &defAct, nullptr);
     }
 
     return signum;
@@ -491,29 +482,22 @@ int Thread::RestoreSignalContext(CPU_Registers* regs, CPU_ExtraContext* extra) {
     if (regs == nullptr || extra == nullptr)
         return -EINVAL;
 
-    if (!m_inSignalHandler) // ensure we are actually returning from a handler
-        return -EPERM;
-
-    sigset_t restoredMask;
-    int rc = -ENOSYS;
-
 #ifdef __x86_64__
-    rc = x86_64_RestoreSignalFrame(m_Parent, regs, extra, &restoredMask, regs->RSP);
+    uint64_t frameAddr = regs->RSP;
+
+    x86_64_SignalFrame* kFrame = static_cast<x86_64_SignalFrame*>(__builtin_alloca(x86_64_SignalFrameSize()));
+    int rc = x86_64_ReadSignalFrame(m_Parent, frameAddr, kFrame);
+    if (rc != 0)
+        return rc;
+
+    Processor::DisableInterrupts();
+    sigset_t restoredMask;
+    x86_64_ApplySignalFrame(kFrame, regs, extra, &restoredMask);
+    ChangeSignalMask(SIG_SETMASK, &restoredMask, nullptr);
+    return ESUCCESS;
+#else
+    return -ENOSYS;
 #endif /* __x86_64__ */
-
-    if (rc == 0) {
-        ChangeSignalMask(SIG_SETMASK, &restoredMask, nullptr); // restore mask
-
-        m_inSignalHandler = false; // allow new signals
-    } else { // Failed to restore, force terminate the process with SIGSEGV
-        sigaction_t defAct;
-        memset(&defAct, 0, sizeof(sigaction_t));
-        defAct.address = SIG_DFL;
-        m_Parent->SetSignalAction(SIGSEGV, &defAct, nullptr);
-        RaiseSignal(SIGSEGV);
-    }
-
-    return rc;
 }
 
 void Thread::ChangeSignalMask(int how, sigset_t* newSet, sigset_t* oldSet) {

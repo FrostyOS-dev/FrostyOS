@@ -27,6 +27,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Scheduling/Process.hpp>
 #include <Scheduling/Thread.hpp>
 
+#include <SystemCalls/Signal.hpp>
+
 class PageMapper;
 
 void x86_64_CopyToISRFrame(const x86_64_Registers* regs, x86_64_ISR_Frame* frame);
@@ -51,6 +53,9 @@ struct alignas(16) x86_64_SignalFrame {
 };
 
 int x86_64_SetupSignalFrame(Process* proc, x86_64_Registers* regs, x86_64_ExtraContext* extra, const sigaction_t* act, const sigset_t* blocked, int signum);
-int x86_64_RestoreSignalFrame(Process* proc, x86_64_Registers* regs, x86_64_ExtraContext* extra, sigset_t* blocked, uint64_t userFrameAddr);
+
+size_t x86_64_SignalFrameSize();
+int x86_64_ReadSignalFrame(Process* proc, uint64_t userFrameAddr, x86_64_SignalFrame* kFrame);
+void x86_64_ApplySignalFrame(const x86_64_SignalFrame* kFrame, x86_64_Registers* regs, x86_64_ExtraContext* extra, sigset_t* blocked);
 
 #endif /* _x86_64_TASK_UTIL_HPP */

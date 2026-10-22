@@ -192,26 +192,28 @@ int x86_64_SetupSignalFrame(Process* proc, x86_64_Registers* regs, x86_64_ExtraC
     return ESUCCESS;
 }
 
-int x86_64_RestoreSignalFrame(Process* proc, x86_64_Registers* regs, x86_64_ExtraContext* extra, sigset_t* blocked, uint64_t userFrameAddr) {
-    if (regs == nullptr || userFrameAddr == 0)
-        return -EINVAL;
+size_t x86_64_SignalFrameSize() {
+    x86_64_Processor* processor = static_cast<x86_64_Processor*>(GetCurrentProcessor());
+    return sizeof(x86_64_SignalFrame) + processor->GetCPUInfo()->SIMDInfo.XSAVESize;
+}
 
+int x86_64_ReadSignalFrame(Process* proc, uint64_t userFrameAddr, x86_64_SignalFrame* kFrame) {
+    return UserRead(reinterpret_cast<void*>(userFrameAddr), kFrame, x86_64_SignalFrameSize(), proc) ? ESUCCESS : -EFAULT;
+}
+
+void x86_64_ApplySignalFrame(const x86_64_SignalFrame* kFrame, x86_64_Registers* regs, x86_64_ExtraContext* extra, sigset_t* blocked) {
     x86_64_Processor* processor = static_cast<x86_64_Processor*>(GetCurrentProcessor());
     size_t SIMDSize = processor->GetCPUInfo()->SIMDInfo.XSAVESize;
 
-    x86_64_SignalFrame* frame = static_cast<x86_64_SignalFrame*>(__builtin_alloca(sizeof(x86_64_SignalFrame) + SIMDSize));
-
-    if (!UserRead(reinterpret_cast<void*>(userFrameAddr), frame, sizeof(x86_64_SignalFrame) + SIMDSize, proc))
-        return -EFAULT;
-
-    memcpy(regs, &frame->regs, sizeof(x86_64_Registers));
-    memcpy(extra->SIMDSaveRegion, reinterpret_cast<void*>((reinterpret_cast<uint64_t>(frame) + sizeof(x86_64_SignalFrame))), SIMDSize);
-    memcpy(blocked, &frame->blockedSignals, sizeof(sigset_t));
-
+    uint64_t cr3 = regs->CR3;
+    memcpy(regs, &kFrame->regs, sizeof(x86_64_Registers));
+    regs->CR3 = cr3; // never take CR3 from user memory
+    regs->RFLAGS = (regs->RFLAGS & 0x40CD5) | 0x202; // user may only set AC/OF/DF/TF/SF/ZF/AF/PF/CF
     regs->CS = x86_64_GDT_USER_CODE_SEGMENT | 3;
     regs->SS = x86_64_GDT_USER_DATA_SEGMENT | 3;
 
-    return ESUCCESS;
+    memcpy(extra->SIMDSaveRegion, reinterpret_cast<const uint8_t*>(kFrame) + sizeof(x86_64_SignalFrame), SIMDSize);
+    memcpy(blocked, &kFrame->blockedSignals, sizeof(sigset_t));
 }
 
 // from Scheduling/Scheduler.hpp

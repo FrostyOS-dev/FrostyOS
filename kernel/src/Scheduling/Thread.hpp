@@ -191,7 +191,6 @@ private:
     sigset_t m_pendingSignals;
     sigset_t m_returnSignals;
     bool m_hasReturnSignalMask;
-    bool m_inSignalHandler;
     spinlock_t m_signalLock;
 };
 
