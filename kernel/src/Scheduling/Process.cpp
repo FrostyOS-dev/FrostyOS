@@ -45,7 +45,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <tty/TTY.hpp>
 
 
-Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), m_VMM(vmm), m_Nice(nice), m_PID(-1), m_PPID(-1), m_nextTID(0), m_MainThread(nullptr), m_Threads(), m_cred({0, 0, 0, 0, 0, 0}), m_FDManager(nullptr), m_cwd(nullptr), m_state(ProcessState::ACTIVE), m_exitStatus(0), m_sigActions{}, m_pendingSignals{}, m_signalLock(SPINLOCK_DEFAULT_VALUE), m_stopSignal(0), m_waitEvents(0), m_continueNotify(0), m_exiting(false), m_PGID(-1), m_SID(-1), m_ctty(nullptr), m_hasExeced(false) {
+Process::Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice) : m_Mode(mode), m_VMM(vmm), m_Nice(nice), m_PID(-1), m_PPID(-1), m_nextTID(0), m_MainThread(nullptr), m_Threads(), m_cred({0, 0, 0, 0, 0, 0}), m_FDManager(nullptr), m_cwd(nullptr), m_state(ProcessState::ACTIVE), m_exitStatus(0), m_sigActions{}, m_pendingSignals{}, m_signalLock(SPINLOCK_DEFAULT_VALUE), m_stopSignal(0), m_waitEvents(0), m_continueNotify(0), m_exiting(false), m_PGID(-1), m_SID(-1), m_ctty(nullptr), m_hasExeced(false), m_umask(0022) {
 
 }
 
@@ -296,6 +296,8 @@ void Process::SetCWD(FS::VNode* cwd) {
 }
 
 bool Process::Fork(Process* other, uint64_t newMainReturn, CPU_Registers* regs) {
+    m_umask = other->GetUMask();
+
     memcpy(&m_sigActions, &other->m_sigActions, sizeof(sigaction_t) * NSIG);
     m_MainThread = new Thread();
     m_MainThread->SetParent(this);
@@ -333,6 +335,14 @@ int Process::GetExitStatus() const {
 
 void Process::SetExitStatus(int status) {
     m_exitStatus = status;
+}
+
+mode_t Process::SwapUMask(mode_t mask) {
+    return __atomic_exchange_n(&m_umask, mask, __ATOMIC_SEQ_CST);
+}
+
+mode_t Process::GetUMask() {
+    return __atomic_load_n(&m_umask, __ATOMIC_ACQUIRE);
 }
 
 EventWaitQueue& Process::GetChildWaitQueue() {

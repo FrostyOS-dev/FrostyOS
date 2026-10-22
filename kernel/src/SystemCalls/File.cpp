@@ -108,14 +108,15 @@ int sys_openat(int dirFD, const char* path, size_t pathLen, int flags, mode_t mo
             SplitPath(realPath, &parent, &name);
             
             bool open = false;
-            rc = FS::VFS_CreateFile(parent, name, dirVNode, proc->GetCred(), nullptr, &vnode);
+            mode_t createMode = mode & ~proc->GetUMask() & S_PERMMASK;
+            rc = FS::VFS_CreateFile(parent, name, dirVNode, proc->GetCred(), nullptr, &vnode, createMode);
             if ((flags & O_EXCL) == 0 && rc == -EEXIST) {
                 if (parent == realPath)
                     ((char*)name)[-1] = '/';
                 rc = FS::VFS_Open(realPath, flags, &vnode, dirVNode, proc->GetCred());
                 open = true;
-            }
-            created = true;
+            } else
+                created = (rc == 0);
 
             FS::UnrefVNode(dirVNode);
 
@@ -126,17 +127,7 @@ int sys_openat(int dirFD, const char* path, size_t pathLen, int flags, mode_t mo
 
             if (!open) {
                 vnode->Lock();
-                FS::VAttr attr;
-                rc = vnode->GetAttr(&attr);
-                if (rc >= 0) {
-                    attr.mode = mode & S_PERMMASK;
-                    if (const Credential& cred = proc->GetCred(); cred.euid != 0 && attr.gid != cred.egid)
-                        attr.mode &= (uint16_t)~S_ISGID;
-                    rc = vnode->SetAttr(attr);
-                }
-
-                if (rc >= 0)
-                    rc = vnode->Open(flags, proc->GetCred());
+                rc = vnode->Open(flags, proc->GetCred());
                 vnode->Unlock();
                 if (rc < 0) {
                     delete[] realPath;
@@ -430,7 +421,7 @@ int sys_symlinkat(int dirFD, const char* target, size_t targetLen, const char* l
     if (target == nullptr || targetLen == 0 || linkPath == nullptr || linkLen == 0)
         return -EINVAL;
 
-    if (targetLen > PATH_MAX || linkLen > NAME_MAX)
+    if (targetLen > PATH_MAX || linkLen > PATH_MAX)
         return -ENAMETOOLONG;
 
     Thread* current = Thread::GetCurrentThread();
@@ -829,34 +820,10 @@ int sys_mkdirat(int dirFD, const char* path, size_t pathLen, mode_t mode) {
     const char* name;
     SplitPath(kPath, &parent, &name);
 
-    FS::VNode* vnode = nullptr;
-    int rc = FS::VFS_CreateDir(parent, name, dirVNode, cred, nullptr, &vnode);
+    mode_t createMode = mode & ~proc->GetUMask() & (0777 | S_ISVTX);
+    int rc = FS::VFS_CreateDir(parent, name, dirVNode, cred, nullptr, nullptr, createMode);
     FS::UnrefVNode(dirVNode);
-
     delete[] kPath;
-
-    if (rc < 0)
-        return rc;
-
-    assert(vnode != nullptr);
-
-    FS::RefVNode(vnode);
-
-    FS::VAttr attr{};
-    vnode->Lock();
-    rc = vnode->GetAttr(&attr);
-    if (rc < 0) {
-        FS::UnrefVNode(vnode);
-        vnode->Unlock();
-        return rc;
-    }
-
-    attr.mode = (mode & (0777 | S_ISVTX)) | (attr.mode & S_ISGID);
-
-    rc = vnode->SetAttr(attr);
-    vnode->Unlock();
-    FS::UnrefVNode(vnode);
-
     return rc;
 }
 
@@ -1379,4 +1346,8 @@ int sys_faccessat(int dirfd, const char* path, size_t pathLen, int mode, int fla
 
     FS::UnrefVNode(vnode);
     return rc;
+}
+
+mode_t sys_umask(mode_t mode) {
+    return Thread::GetCurrentThread()->GetParent()->SwapUMask(mode & 0777);
 }

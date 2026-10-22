@@ -26,6 +26,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Memory/VMM.hpp>
 
+#include <SystemCalls/File.hpp>
 #include <SystemCalls/Signal.hpp>
 
 #include "Event.hpp"
@@ -116,6 +117,9 @@ public:
     int GetExitStatus() const;
     void SetExitStatus(int status);
 
+    mode_t SwapUMask(mode_t mask);
+    mode_t GetUMask();
+
     EventWaitQueue& GetChildWaitQueue();
 
     int64_t GetPGID() const;
@@ -183,6 +187,8 @@ private:
     int64_t m_SID;
     TTY* m_ctty;
     bool m_hasExeced;
+
+    mode_t m_umask;
 };
 
 extern Process* g_KProcess;

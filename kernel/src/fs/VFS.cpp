@@ -450,7 +450,11 @@ namespace FS {
         return rc;
     }
 
-    int VFS_CreateDir(const char* path, const char* name, VNode* cwd, const Credential& cred, VNode* vnode, VNode** outVNode) {
+    static bool InGroup(gid_t gid, const Credential& c) {
+        return gid == c.egid; // future proofing for suplementary groups
+    }
+
+    int VFS_CreateDir(const char* path, const char* name, VNode* cwd, const Credential& cred, VNode* vnode, VNode** outVNode, mode_t mode) {
         if (path == nullptr || name == nullptr)
             return -EINVAL;
 
@@ -508,7 +512,7 @@ namespace FS {
         }
 
         time_t time = HAL_GetUnixEpochTime();
-        VAttr attr = {VType::DIR, DEFAULT_DIR_MODE, cred.euid, cred.egid, vfs->GetType(), vfs->GetInodeNum(), 2, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
+        VAttr attr = {VType::DIR, (uint16_t)mode, cred.euid, cred.egid, vfs->GetType(), vfs->GetInodeNum(), 2, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
         InheritFromParent(attr, parent);
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
         parent->Unlock();
@@ -524,7 +528,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int VFS_CreateFile(const char* path, const char* name, VNode* cwd, const Credential& cred, VNode* vnode, VNode** outVNode) {
+    int VFS_CreateFile(const char* path, const char* name, VNode* cwd, const Credential& cred, VNode* vnode, VNode** outVNode, mode_t mode) {
         if (path == nullptr || name == nullptr)
             return -EINVAL;
 
@@ -582,8 +586,10 @@ namespace FS {
         }
 
         time_t time = HAL_GetUnixEpochTime();
-        VAttr attr = {VType::REG, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), vfs->GetInodeNum(), 1, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
+        VAttr attr = {VType::REG, (uint16_t)mode, cred.euid, cred.egid, vfs->GetType(), vfs->GetInodeNum(), 1, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
         InheritFromParent(attr, parent);
+        if (cred.euid != 0 && !InGroup(attr.gid, cred))
+            attr.mode &= (uint16_t)~S_ISGID;
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
         parent->Unlock();
         if (rc < 0) {
@@ -598,7 +604,7 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int VFS_CreateSymlink(const char* path, const char* name, const char* dest, VNode* cwd, const Credential& cred, VNode* vnode, VNode** outVNode) {
+    int VFS_CreateSymlink(const char* path, const char* name, const char* dest, VNode* cwd, const Credential& cred, VNode* vnode, VNode** outVNode, mode_t mode) {
         if (path == nullptr || name == nullptr)
             return -EINVAL;
 
@@ -656,7 +662,7 @@ namespace FS {
         }
 
         time_t time = HAL_GetUnixEpochTime();
-        VAttr attr = {VType::LNK, DEFAULT_FILE_MODE, cred.euid, cred.egid, vfs->GetType(), vfs->GetInodeNum(), 1, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
+        VAttr attr = {VType::LNK, (uint16_t)mode, cred.euid, cred.egid, vfs->GetType(), vfs->GetInodeNum(), 1, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
         InheritFromParent(attr, parent);
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
         if (rc < 0) {
@@ -858,10 +864,6 @@ namespace FS {
         memmove(buf, ptr, pathLen + 1);
 
         return ESUCCESS;
-    }
-
-    static bool InGroup(gid_t gid, const Credential& c) {
-        return gid == c.egid; // future proofing for suplementary groups
     }
 
     int VFS_Chmod(VNode* vnode, mode_t mode, const Credential& cred) {

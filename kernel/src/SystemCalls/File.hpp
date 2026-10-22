@@ -175,4 +175,6 @@ int sys_pipe(int* fds, int flags);
 
 int sys_faccessat(int dirfd, const char* path, size_t pathLen, int mode, int flags);
 
+mode_t sys_umask(mode_t mode);
+
 #endif /* _SYSCALL_FILE_HPP */
