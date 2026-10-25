@@ -31,6 +31,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Scheduling/Process.hpp>
 
+#include <tty/TTY.hpp>
+
 typedef uint64_t (*systemCall_t)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, CPU_Registers*);
 
 #pragma GCC diagnostic push
@@ -104,4 +106,24 @@ bool UserReadAtomic32(const uint32_t* userBuf, uint32_t* kBuf, Process* currentP
         return false;
     *kBuf = __atomic_load_n(userBuf, __ATOMIC_SEQ_CST);
     return true;
+}
+
+void sys_dbgprintln(const char* msg, size_t length) {
+    if (length == 0 || msg == nullptr || g_KTTY == nullptr)
+        return;
+
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+
+    char* kMsg = new char[length + 1];
+    if (kMsg == nullptr)
+        return;
+
+    if (!UserRead(msg, kMsg, length, proc))
+        return;
+
+    kMsg[length] = '\n';
+
+    g_KTTY->WriteDebug(kMsg, length + 1);
+
+    delete[] kMsg;
 }
