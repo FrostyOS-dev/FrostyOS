@@ -261,7 +261,7 @@ namespace FS {
     }
 
     int DevTempFSVNode::Resize(uint64_t newSize, const Credential& cred) {
-        return -EPERM;
+        return 0; // ignore resize
     }
 
     int DevTempFSVNode::Rename() {
