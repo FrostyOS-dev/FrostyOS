@@ -92,7 +92,7 @@ int DeviceManager::AddDevice(Device* dev, DeviceInfo** outInfo) {
     return 0;
 }
 
-int DeviceManager::CreateRootDir(DeviceInfo* info, const char* name) {
+int DeviceManager::CreateRootItem(DeviceInfo* info, const char* name, FS::VType type, mode_t mode, bool setDevice) {
     if (info == nullptr || name == nullptr)
         return -EINVAL;
 
@@ -103,42 +103,21 @@ int DeviceManager::CreateRootDir(DeviceInfo* info, const char* name) {
         return -ENOENT;
 
     FS::VNode* vnode = nullptr;
-    int rc = FS::VFS_CreateDir(".", name, m_fs->GetRoot(), m_cred, nullptr, &vnode);
+    int rc = FS::VFS_Create(".", name, type, mode, m_fs->GetRoot(), m_cred, nullptr, &vnode);
     if (rc < 0)
         return rc;
 
     info->hasVNode = true;
     info->rootVNode = static_cast<FS::DevTempFSVNode*>(vnode);
-    info->VNodeType = true; // directory
-
-    return 0;
-}
-
-int DeviceManager::CreateRootFile(DeviceInfo* info, const char* name) {
-    if (info == nullptr || name == nullptr)
-        return -EINVAL;
-
-    if (info->hasVNode)
-        return -EEXIST;
-
-    if (m_fs == nullptr)
-        return -ENOENT;
-
-    FS::VNode* vnode = nullptr;
-    int rc = FS::VFS_CreateFile(".", name, m_fs->GetRoot(), m_cred, nullptr, &vnode);
-    if (rc < 0)
-        return rc;
-
-    info->hasVNode = true;
-    info->rootVNode = static_cast<FS::DevTempFSVNode*>(vnode);
-    info->VNodeType = false; // file
+    info->VNodeType = (type == FS::VType::DIR);
     
-    info->rootVNode->SetDevice(info->dev);
+    if (setDevice)
+        info->rootVNode->SetDevice(info->dev);
 
     return 0;
 }
 
-int DeviceManager::CreateSubDir(DeviceInfo* info, const char* path, const char* name, FS::DevTempFSVNode* vnode, FS::DevTempFSVNode** outVNode) {
+int DeviceManager::CreateSubItem(DeviceInfo* info, const char* path, const char* name, FS::VType type, mode_t mode, bool setDevice, FS::DevTempFSVNode* vnode, FS::DevTempFSVNode** outVNode) {
     if (info == nullptr || name == nullptr || path == nullptr)
         return -EINVAL;
 
@@ -146,21 +125,7 @@ int DeviceManager::CreateSubDir(DeviceInfo* info, const char* path, const char* 
         return -ENOENT;
 
     FS::VNode* newVNode = nullptr;
-    int rc = FS::VFS_CreateDir(path, name, info->rootVNode, m_cred, vnode, &newVNode);
-    if (rc >= 0 && outVNode != nullptr)
-        *outVNode = static_cast<FS::DevTempFSVNode*>(newVNode);
-    return rc;
-}
-
-int DeviceManager::CreateSubFile(DeviceInfo* info, const char* path, const char* name, bool setDevice, FS::DevTempFSVNode* vnode, FS::DevTempFSVNode** outVNode) {
-    if (info == nullptr || name == nullptr || path == nullptr)
-        return -EINVAL;
-
-    if (m_fs == nullptr || !info->hasVNode || !info->VNodeType || path[0] == '/')
-        return -ENOENT;
-
-    FS::VNode* newVNode = nullptr;
-    int rc = FS::VFS_CreateFile(path, name, info->rootVNode, m_cred, vnode, &newVNode);
+    int rc = FS::VFS_Create(path, name, type, mode, info->rootVNode, m_cred, vnode, &newVNode);
     if (rc >= 0) {
         if (setDevice)
             static_cast<FS::DevTempFSVNode*>(newVNode)->SetDevice(info->dev);

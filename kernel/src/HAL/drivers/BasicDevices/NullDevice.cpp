@@ -36,7 +36,7 @@ int NullDevice::Init(DeviceManager::DeviceInfo* info) {
     if (info->manager == nullptr)
         return -EINVAL;
 
-    return info->manager->CreateRootFile(info, "null");
+    return info->manager->CreateRootItem(info, "null", FS::VType::CHR);
 }
 
 int NullDevice::Open(int flags, const Credential& cred) {

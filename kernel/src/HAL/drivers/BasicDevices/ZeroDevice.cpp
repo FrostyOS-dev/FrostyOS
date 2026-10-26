@@ -36,7 +36,7 @@ int ZeroDevice::Init(DeviceManager::DeviceInfo* info) {
     if (info->manager == nullptr)
         return -EINVAL;
 
-    return info->manager->CreateRootFile(info, "zero");
+    return info->manager->CreateRootItem(info, "zero", FS::VType::CHR);
 }
 
 int ZeroDevice::Open(int flags, const Credential& cred) {

@@ -30,6 +30,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <fs/DevTempFS/DevTempFS.hpp>
 
+#include <fs/VFS.hpp>
+
 #include <Graphics/Framebuffer.hpp>
 
 #include <tty/FBConsole.hpp>
@@ -77,7 +79,7 @@ namespace Video {
         if (vnode == nullptr)
             return -ENOMEM;
 
-        return m_info->manager->CreateSubFile(m_info, ".", name, false, vnode);
+        return m_info->manager->CreateSubItem(m_info, ".", name, FS::VType::CHR, DEFAULT_DEV_ITEM_MODE, false, vnode);
     }
 
     Display* VideoDevice::GetDisplay(uint64_t id) {
@@ -134,7 +136,7 @@ namespace Video {
         char name[16];
         snprintf(name, 16, "gpu%lu", id);
 
-        return info->manager->CreateRootDir(info, name);
+        return info->manager->CreateRootItem(info, name, FS::VType::DIR, DEFAULT_DIR_MODE);
     }
 
     FBVideoDevice* Video_CreateFBDevice() {

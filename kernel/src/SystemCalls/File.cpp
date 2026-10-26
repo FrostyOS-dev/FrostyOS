@@ -109,7 +109,7 @@ int sys_openat(int dirFD, const char* path, size_t pathLen, int flags, mode_t mo
             
             bool open = false;
             mode_t createMode = mode & ~proc->GetUMask() & S_PERMMASK;
-            rc = FS::VFS_CreateFile(parent, name, dirVNode, proc->GetCred(), nullptr, &vnode, createMode);
+            rc = FS::VFS_Create(parent, name, FS::VType::REG, createMode, dirVNode, proc->GetCred(), nullptr, &vnode);
             if ((flags & O_EXCL) == 0 && rc == -EEXIST) {
                 if (parent == realPath)
                     ((char*)name)[-1] = '/';
@@ -153,7 +153,7 @@ int sys_openat(int dirFD, const char* path, size_t pathLen, int flags, mode_t mo
     delete[] realPath;
 
     FS::VType type = vnode->GetType();
-    if (type != FS::VType::REG && type != FS::VType::DIR) {
+    if (type != FS::VType::REG && type != FS::VType::DIR && type != FS::VType::CHR && type != FS::VType::BLK) {
         FS::VFS_Close(vnode, proc->GetCred());
         return -ENOTSUP;
     } else if (type != FS::VType::DIR && (flags & O_DIRECTORY) > 0) {
@@ -169,7 +169,7 @@ int sys_openat(int dirFD, const char* path, size_t pathLen, int flags, mode_t mo
         }
     }
 
-    FileDescriptor* desc = new FileDescriptor(proc, type == FS::VType::REG ? FDType::File : FDType::Directory, vnode);
+    FileDescriptor* desc = new FileDescriptor(proc, type != FS::VType::DIR ? FDType::File : FDType::Directory, vnode);
     if (desc == nullptr) {
         FS::VFS_Close(vnode, proc->GetCred());
         return -ENOMEM;
@@ -490,7 +490,7 @@ int sys_symlinkat(int dirFD, const char* target, size_t targetLen, const char* l
     const char* name;
     SplitPath(kLinkPath, &parent, &name);
 
-    int rc = FS::VFS_CreateSymlink(parent, name, kTarget, dirVNode, proc->GetCred());
+    int rc = FS::VFS_Create(parent, name, FS::VType::LNK, DEFAULT_SYMLINK_MODE, dirVNode, proc->GetCred(), nullptr, nullptr, kTarget);
 
     FS::UnrefVNode(dirVNode);
     delete[] kTarget;
@@ -826,7 +826,7 @@ int sys_mkdirat(int dirFD, const char* path, size_t pathLen, mode_t mode) {
     SplitPath(kPath, &parent, &name);
 
     mode_t createMode = mode & ~proc->GetUMask() & (0777 | S_ISVTX);
-    int rc = FS::VFS_CreateDir(parent, name, dirVNode, cred, nullptr, nullptr, createMode);
+    int rc = FS::VFS_Create(parent, name, FS::VType::DIR, createMode, dirVNode, cred, nullptr, nullptr);
     FS::UnrefVNode(dirVNode);
     delete[] kPath;
     return rc;

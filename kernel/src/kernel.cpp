@@ -144,7 +144,7 @@ void Kernel_Stage2(void* data) {
     else
         PANIC("No initramfs!");
 
-    int rc = FS::VFS_CreateDir("/", "dev", nullptr, KCred);
+    int rc = FS::VFS_Create("/", "dev", FS::VType::DIR, DEFAULT_DIR_MODE, nullptr, KCred);
     if (rc < 0 && rc != -EEXIST)
         PANIC("Cannot create /dev");
 

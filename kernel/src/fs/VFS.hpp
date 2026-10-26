@@ -205,9 +205,7 @@ namespace FS {
     // followSymlink is only for the last path segment
     int VFS_LookupPath(const char* path, VNode** vnode, VFS** vfs, VNode* cwd, const Credential& cred, bool followSymlink = true);
 
-    int VFS_CreateDir(const char* path, const char* name, VNode* cwd, const Credential& cred, VNode* vnode = nullptr, VNode** outVNode = nullptr, mode_t mode = DEFAULT_DIR_MODE);
-    int VFS_CreateFile(const char* path, const char* name, VNode* cwd, const Credential& cred, VNode* vnode = nullptr, VNode** outVNode = nullptr, mode_t mode = DEFAULT_FILE_MODE);
-    int VFS_CreateSymlink(const char* path, const char* name, const char* dest, VNode* cwd, const Credential& cred, VNode* vnode = nullptr, VNode** outVNode = nullptr, mode_t mode = DEFAULT_SYMLINK_MODE);
+    int VFS_Create(const char* path, const char* name, VType type, mode_t mode, VNode* cwd, const Credential& cred, VNode* vnode = nullptr, VNode** outVNode = nullptr, const char* dest = nullptr);
 
     int VFS_Open(const char* path, int flags, VNode** out, VNode* cwd, const Credential& cred);
     int VFS_OpenExec(const char* path, VNode** out, VAttr* outAttr, VNode* cwd, const Credential& cred);

@@ -26,6 +26,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <frostyos/asm/ioctls.h>
 
+#include <fs/VFS.hpp>
+
 #include <Graphics/VGAFont.hpp>
 
 #include <HAL/drivers/DeviceManager.hpp>
@@ -91,7 +93,7 @@ int TTY::Init(DeviceManager::DeviceInfo* info) {
 
     m_info = info;
 
-    return info->manager->CreateRootFile(info, "console");
+    return info->manager->CreateRootItem(info, "console", FS::VType::CHR);
 }
 
 int TTY::Open(int flags, const Credential& cred) {

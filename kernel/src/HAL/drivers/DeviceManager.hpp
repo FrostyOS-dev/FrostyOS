@@ -22,6 +22,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <DataStructures/LinkedList.hpp>
 
+#include <fs/VFS.hpp>
+
 #include <Scheduling/Process.hpp>
 
 class Device;
@@ -36,6 +38,8 @@ enum class DeviceType {
     Device,
     Invalid
 };
+
+#define DEFAULT_DEV_ITEM_MODE 0666
 
 class DeviceManager {
 public:
@@ -55,18 +59,12 @@ public:
 
     int AddDevice(Device* dev, DeviceInfo** outInfo = nullptr);
 
-    int CreateRootDir(DeviceInfo* info, const char* name);
-    int CreateRootFile(DeviceInfo* info, const char* name);
+    int CreateRootItem(DeviceInfo* info, const char* name, FS::VType type, mode_t mode = DEFAULT_DEV_ITEM_MODE, bool setDevice = true);
 
     // For the following 2 functions:
     // Path must be relative within the previously created root dir for the device.
     // If vnode is non-null, it is used as the vnode for the new item, but is treated as uninitialised.
-
-    // Create a subdirectory for a device
-    int CreateSubDir(DeviceInfo* info, const char* path, const char* name, FS::DevTempFSVNode* vnode = nullptr, FS::DevTempFSVNode** outVNode = nullptr);
-
-    // Create a sub-file for a device
-    int CreateSubFile(DeviceInfo* info, const char* path, const char* name, bool setDevice = true, FS::DevTempFSVNode* vnode = nullptr, FS::DevTempFSVNode** outVNode = nullptr);
+    int CreateSubItem(DeviceInfo* info, const char* path, const char* name, FS::VType type, mode_t mode = DEFAULT_DEV_ITEM_MODE, bool setDevice = true, FS::DevTempFSVNode* vnode = nullptr, FS::DevTempFSVNode** outVNode = nullptr);
 
     void SetDevFS(FS::DevTempFS* fs);
     FS::DevTempFS* GetDevFS();

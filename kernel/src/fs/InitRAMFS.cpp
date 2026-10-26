@@ -100,7 +100,7 @@ static int LoadEntry(USTARItemHeader* header, uint64_t itemSize, char* longName,
     FS::VNode* vnode = nullptr;
     switch (header->type) {
     case '0':
-        rc = FS::VFS_CreateFile(parent, name, cwd, cred, nullptr, &vnode);
+        rc = FS::VFS_Create(parent, name, FS::VType::REG, DEFAULT_FILE_MODE, cwd, cred, nullptr, &vnode);
         break;
     case '2': {
         char target[sizeof(header->linkedName) + 1];
@@ -111,11 +111,11 @@ static int LoadEntry(USTARItemHeader* header, uint64_t itemSize, char* longName,
             target[targetLen] = 0;
             linkTarget = target;
         }
-        rc = FS::VFS_CreateSymlink(parent, name, linkTarget, cwd, cred, nullptr, &vnode);
+        rc = FS::VFS_Create(parent, name, FS::VType::LNK, DEFAULT_SYMLINK_MODE, cwd, cred, nullptr, &vnode, linkTarget);
         break;
     }
     case '5':
-        rc = FS::VFS_CreateDir(parent, name, cwd, cred, nullptr, &vnode);
+        rc = FS::VFS_Create(parent, name, FS::VType::DIR, DEFAULT_DIR_MODE, cwd, cred, nullptr, &vnode);
         break;
     default:
         dbgprintf("Unknown type %c. parent = %s, name = %s\n", header->type, parent, name);

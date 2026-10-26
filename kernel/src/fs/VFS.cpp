@@ -458,8 +458,8 @@ namespace FS {
         return gid == c.egid; // future proofing for suplementary groups
     }
 
-    int VFS_CreateDir(const char* path, const char* name, VNode* cwd, const Credential& cred, VNode* vnode, VNode** outVNode, mode_t mode) {
-        if (path == nullptr || name == nullptr)
+    int VFS_Create(const char* path, const char* name, VType type, mode_t mode, VNode* cwd, const Credential& cred, VNode* vnode, VNode** outVNode, const char* dest) {
+        if (path == nullptr || name == nullptr || (type == VType::LNK && dest == nullptr))
             return -EINVAL;
 
         VNode* parent = nullptr;
@@ -516,171 +516,26 @@ namespace FS {
         }
 
         time_t time = HAL_GetUnixEpochTime();
-        VAttr attr = {VType::DIR, (uint16_t)mode, cred.euid, cred.egid, vfs->GetType(), vfs->GetInodeNum(), 2, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
+        VAttr attr = {type, (uint16_t)mode, cred.euid, cred.egid, vfs->GetType(), vfs->GetInodeNum(), type == VType::DIR ? 2 : 1, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
         InheritFromParent(attr, parent);
-        rc = vnode->Create(parent, name, nameLen, &attr, cred);
-        parent->Unlock();
-        if (rc < 0) {
-            if (createdVNode)
-                delete vnode;
-            return rc;
-        }
-
-        if (outVNode != nullptr)
-            *outVNode = vnode;
-
-        return ESUCCESS;
-    }
-
-    int VFS_CreateFile(const char* path, const char* name, VNode* cwd, const Credential& cred, VNode* vnode, VNode** outVNode, mode_t mode) {
-        if (path == nullptr || name == nullptr)
-            return -EINVAL;
-
-        VNode* parent = nullptr;
-        VFS* vfs = nullptr;
-        int rc = VFS_LookupPath(path, &parent, &vfs, cwd, cred);
-        if (rc < 0)
-            return rc;
-
-        VNodeRef parentRef(parent);
-
-        rc = CheckCreate(parent, cred);
-        if (rc < 0)
-            return rc;
-
-        size_t nameLen = strlen(name);
-        if (nameLen > NAME_MAX)
-            return -ENAMETOOLONG;
-
-        if ((nameLen == 1 && name[0] == '.') || (nameLen == 2 && name[0] == '.' && name[1] == '.'))
-            return -EEXIST;
-
-        VNode* temp;
-        parent->Lock();
-        if (parent->IsUnlinked()) {
-            parent->Unlock();
-            return -ENOENT;
-        }
-
-        if (parent->Lookup(name, nameLen, &temp, cred) == 0) {
-            parent->Unlock();
-            return -EEXIST;
-        }
-
-        bool createdVNode = false;
-
-        if (vnode == nullptr) {
-            switch (vfs->GetType()) {
-            case FSType::TempFS:
-                vnode = new TempFSVNode(vfs);
-                break;
-            case FSType::DevTempFS:
-                vnode = new DevTempFSVNode(vfs, nullptr);
-                break;
-            default:
-                parent->Unlock();
-                return -ENOSYS;
-            }
-            createdVNode = true;
-        }
-
-        if (vnode == nullptr) {
-            parent->Unlock();
-            return -ENOMEM;
-        }
-
-        time_t time = HAL_GetUnixEpochTime();
-        VAttr attr = {VType::REG, (uint16_t)mode, cred.euid, cred.egid, vfs->GetType(), vfs->GetInodeNum(), 1, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
-        InheritFromParent(attr, parent);
-        if (cred.euid != 0 && !InGroup(attr.gid, cred))
+        if (type != VType::DIR && type != VType::LNK && cred.euid != 0 && !InGroup(attr.gid, cred))
             attr.mode &= (uint16_t)~S_ISGID;
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
-        parent->Unlock();
-        if (rc < 0) {
-            if (createdVNode)
-                delete vnode;
-            return rc;
-        }
 
-        if (outVNode != nullptr)
-            *outVNode = vnode;
-
-        return ESUCCESS;
-    }
-
-    int VFS_CreateSymlink(const char* path, const char* name, const char* dest, VNode* cwd, const Credential& cred, VNode* vnode, VNode** outVNode, mode_t mode) {
-        if (path == nullptr || name == nullptr)
-            return -EINVAL;
-
-        VNode* parent = nullptr;
-        VFS* vfs = nullptr;
-        int rc = VFS_LookupPath(path, &parent, &vfs, cwd, cred);
-        if (rc < 0)
-            return rc;
-
-        VNodeRef parentRef(parent);
-
-        rc = CheckCreate(parent, cred);
-        if (rc < 0)
-            return rc;
-
-        size_t nameLen = strlen(name);
-        if (nameLen > NAME_MAX)
-            return -ENAMETOOLONG;
-
-        if ((nameLen == 1 && name[0] == '.') || (nameLen == 2 && name[0] == '.' && name[1] == '.'))
-            return -EEXIST;
-
-        VNode* temp;
-        parent->Lock();
-        if (parent->IsUnlinked()) {
-            parent->Unlock();
-            return -ENOENT;
-        }
-
-        if (parent->Lookup(name, nameLen, &temp, cred) == 0) {
-            parent->Unlock();
-            return -EEXIST;
-        }
-
-        bool createdVNode = false;
-
-        if (vnode == nullptr) {
-            switch (vfs->GetType()) {
-            case FSType::TempFS:
-                vnode = new TempFSVNode(vfs);
-                break;
-            case FSType::DevTempFS:
-                vnode = new DevTempFSVNode(vfs, nullptr);
-                break;
-            default:
+        if (type == VType::LNK) {
+            if (rc < 0) {
                 parent->Unlock();
-                return -ENOSYS;
+                if (createdVNode)
+                    delete vnode;
+                return rc;
             }
-            createdVNode = true;
+            rc = vnode->Symlink(dest, strlen(dest), cred);
         }
 
-        if (vnode == nullptr) {
-            parent->Unlock();
-            return -ENOMEM;
-        }
-
-        time_t time = HAL_GetUnixEpochTime();
-        VAttr attr = {VType::LNK, (uint16_t)mode, cred.euid, cred.egid, vfs->GetType(), vfs->GetInodeNum(), 1, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
-        InheritFromParent(attr, parent);
-        rc = vnode->Create(parent, name, nameLen, &attr, cred);
-        if (rc < 0) {
-            parent->Unlock();
-            if (createdVNode)
-                delete vnode;
-            return rc;
-        }
-    
-        rc = vnode->Symlink(dest, strlen(dest), cred);
         parent->Unlock();
         if (rc < 0) {
             if (createdVNode)
-                delete vnode; // TODO: maybe more cleanup is required??
+                delete vnode;
             return rc;
         }
 
