@@ -21,10 +21,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "ACPI/Init.hpp"
 
-#include "HAL/drivers/BasicDevices/NullDevice.hpp"
-#include "HAL/drivers/BasicDevices/ZeroDevice.hpp"
+#include "drivers/BasicDevices/NullDevice.hpp"
+#include "drivers/BasicDevices/ZeroDevice.hpp"
 
-#include "HAL/drivers/Video/VideoDevice.hpp"
+#include "drivers/Video/VideoDevice.hpp"
 
 #include "drivers/DeviceManager.hpp"
 #include "drivers/PCI.hpp"
@@ -32,6 +32,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifdef __x86_64__
 #include <arch/x86_64/interrupts/IRQ.hpp>
 #endif
+
+#include <tty/TTY.hpp>
 
 void HAL_EarlyInit(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t memoryMapEntryCount, PagingMode pagingMode, uint64_t kernelVirtual, uint64_t kernelPhysical, void* RSDP) {
     g_BSP->Init(HHDMOffset, memoryMap, memoryMapEntryCount, pagingMode, kernelVirtual, kernelPhysical);
@@ -59,6 +61,8 @@ void HAL_InitialseDevices(FBConsole** newConsole) {
     if (g_ZeroDevice == nullptr || 0 != g_DeviceManager->AddDevice(g_ZeroDevice)) {
         PANIC("Zero device creation failed!");
     }
+
+    g_DeviceManager->AddDevice(g_KTTY);
 
     g_DeviceManager->InitDevices();
 

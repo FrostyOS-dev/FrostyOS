@@ -68,7 +68,11 @@ namespace FS {
         virtual int Rename() override;
         virtual int GetName(char* buf, size_t size, size_t* realSize) override; // copy the null-terminated name into buf
         virtual int Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) override;
+        virtual int Isatty() override;
         virtual bool HasChildren() override;
+
+        virtual EventWaitQueue* GetPollQueue(uint32_t events) override;
+        virtual uint32_t PollReady(uint32_t events) override;
 
         void SetDevice(Device* dev);
         Device* GetDevice();

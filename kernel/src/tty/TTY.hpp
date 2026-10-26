@@ -25,6 +25,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <HAL/drivers/Video/VideoDevice.hpp>
 
+#include <HAL/drivers/DeviceManager.hpp>
+
 #include <Scheduling/Event.hpp>
 
 #include "FBConsole.hpp"
@@ -55,7 +57,7 @@ class Process;
 
 typedef int (*termiosCallback)(void* data, termios_t* termios);
 
-class TTY {
+class TTY : public Device {
 public:
     TTY();
     TTY(TTYType type);
@@ -63,8 +65,22 @@ public:
 
     virtual void Init();
 
-    int Read(char* buf, size_t size, size_t* realCount = 0);
-    int Write(const char* buf, size_t size, bool flush = false);
+    int Init(DeviceManager::DeviceInfo* info) override;
+
+    int Open(int flags, const Credential& cred) override;
+    int Close(int flags, const Credential& cred) override;
+    int Read(void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, const Credential& cred) override;
+    int Write(const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, const Credential& cred) override;
+    int Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, const Credential& cred) override;
+    int Munmap() override;
+    int Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) override;
+    int Isatty() override;
+
+    virtual EventWaitQueue* GetPollQueue(uint32_t events) override;
+    virtual uint32_t PollReady(uint32_t events) override;
+
+    int Read(char* buf, size_t size, size_t* realCount = nullptr);
+    int Write(const char* buf, size_t size, bool flush = false, size_t* realCount = nullptr);
     int WriteDebug(const char* buf, size_t size);
 
     void HandleInput(char c); // Interrupt safe, only 1 user
@@ -153,6 +169,8 @@ protected:
     int64_t m_session;
     int64_t m_foregroundPGID;
     spinlock_t m_inputLock;
+
+    DeviceManager::DeviceInfo* m_info;
 
 private:
     TTYType m_type;

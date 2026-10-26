@@ -28,6 +28,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Graphics/VGAFont.hpp>
 
+#include <HAL/drivers/DeviceManager.hpp>
+
 #include <Scheduling/Event.hpp>
 #include <Scheduling/Scheduler.hpp>
 
@@ -53,11 +55,11 @@ static inline bool IsSpecialChar(char c, char special) {
     return special != '\0' && c == special;
 }
 
-TTY::TTY() : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termios(), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_internalBufferOffset(0), m_eofPending(0), m_session(-1), m_foregroundPGID(-1), m_type(TTYType::Invalid) {
+TTY::TTY() : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termios(), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_internalBufferOffset(0), m_eofPending(0), m_session(-1), m_foregroundPGID(-1), m_info(nullptr), m_type(TTYType::Invalid) {
     
 }
 
-TTY::TTY(TTYType type) : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termios(), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_internalBufferOffset(0), m_eofPending(0), m_session(-1), m_foregroundPGID(-1), m_type(type) {
+TTY::TTY(TTYType type) : m_inputBackend(nullptr), m_outputBackend(nullptr), m_debugBackend(nullptr), m_termios(), m_termiosCallback(nullptr), m_termiosCallbackData(nullptr), m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_internalBufferOffset(0), m_eofPending(0), m_session(-1), m_foregroundPGID(-1), m_info(nullptr), m_type(type) {
 
 }
 
@@ -79,6 +81,66 @@ void TTY::Init() {
     m_termios.c_cc[VSTART] = 0x11;
     m_termios.c_cc[VSTOP] = 0x13;
     m_termios.c_cc[VSUSP] = 0x1a;
+}
+
+int TTY::Init(DeviceManager::DeviceInfo* info) {
+    if (info->manager == nullptr)
+        return -ENODEV;
+    if (this != g_KTTY)
+        return -EIO;
+
+    m_info = info;
+
+    return info->manager->CreateRootFile(info, "console");
+}
+
+int TTY::Open(int flags, const Credential& cred) {
+    return ESUCCESS;
+}
+
+int TTY::Close(int flags, const Credential& cred) {
+    return ESUCCESS;
+}
+
+int TTY::Read(void* out, size_t size, int, uint64_t, size_t* bytesRead, const Credential& cred) {
+    return Read((char*)out, size, bytesRead);
+}
+
+int TTY::Write(const void* in, size_t size, int, uint64_t, size_t* bytesWritten, const Credential& cred) {
+    int rc = Write((const char*)in, size, true, bytesWritten);
+    *bytesWritten = rc < 0 ? 0 : size;
+    return rc;
+}
+
+int TTY::Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, const Credential& cred) {
+    return -ENOTSUP;
+}
+
+int TTY::Munmap() {
+    return -ENOTSUP;
+}
+
+int TTY::Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential&) {
+    return Ioctl(op, arg, result, proc);
+}
+
+int TTY::Isatty() {
+    return 0;
+}
+
+EventWaitQueue* TTY::GetPollQueue(uint32_t events) {
+    if ((events & (POLLIN | POLLRDNORM)) > 0)
+        return &m_inputWaitQueue;
+    return nullptr;
+}
+
+uint32_t TTY::PollReady(uint32_t events) {
+    uint32_t r = POLLOUT | POLLWRNORM;
+    if ((events & (POLLIN | POLLRDNORM)) > 0) {
+        if (!m_readBuffer.empty() || m_eofPending)
+            r |= POLLIN | POLLRDNORM;
+    }
+    return r & events;
 }
 
 int TTY::Read(char* buf, size_t size, size_t* realCount) {
@@ -137,8 +199,9 @@ int TTY::Read(char* buf, size_t size, size_t* realCount) {
     return 0;
 }
 
-int TTY::Write(const char* buf, size_t size, bool flush) {
+int TTY::Write(const char* buf, size_t size, bool flush, size_t* realCount) {
     int rc = 0;
+    size_t count = 0;
     for (size_t i = 0; i < size; i++) {
         if (buf[i] == '\n' && (m_termios.c_oflag & ONLCR) > 0) {
             char c = '\r';
@@ -150,9 +213,12 @@ int TTY::Write(const char* buf, size_t size, bool flush) {
         rc = InternalWrite(&buf[i], 1, false);
         if (rc < 0)
             break;
+        count++;
     }
     if (flush && m_outputBackend != nullptr)
         m_outputBackend->Flush();
+    if (realCount != nullptr)
+        *realCount = count;
     return rc;
 }
 
@@ -409,8 +475,6 @@ int TTY::Ioctl(uint64_t op, void* arg, int* result, Process* currentProc) {
     case FIONREAD:
         return ENOSYS;
     }
-
-    dbgprintf("Unrecognised ioctl: %lu\n", op);
 
     return EINVAL;
 }

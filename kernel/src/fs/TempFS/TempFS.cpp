@@ -419,7 +419,7 @@ namespace FS {
     }
 
     int TempFSVNode::Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) {
-        return ENOSYS;
+        return ENOTTY;
     }
 
     bool TempFSVNode::HasChildren() {

@@ -329,15 +329,20 @@ int sys_isatty(int fd) {
         return -EBADF;
     }
 
-    FDType type = desc->GetType();
-    desc->Unref();
-
-    switch (type) {
-    case FDType::TTY:
+    if (desc->GetType() == FDType::TTY) {
+        desc->Unref();
         return 0;
-    default:
+    }
+
+    FS::VNode* vnode = desc->GetVNode();
+    if (vnode == nullptr) {
+        desc->Unref();
         return -ENOTTY;
     }
+
+    int rc = vnode->Isatty();
+    desc->Unref();
+    return rc;
 }
 
 int sys_getdents(int fd, void* buf, size_t maxRead, size_t* bytesRead) {

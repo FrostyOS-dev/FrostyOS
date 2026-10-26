@@ -156,6 +156,10 @@ namespace FS {
         return CheckPermission(snapshot, mode, cred) ? ESUCCESS : -EACCES;
     }
 
+    int VNode::Isatty() {
+        return -ENOTTY;
+    }
+
     bool VNode::IsUnlinked() {
         return m_unlinked;
     }

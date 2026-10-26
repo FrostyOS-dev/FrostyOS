@@ -102,28 +102,6 @@ bool Process::Create(bool initAlloc) {
             Delete();
             return false;
         }
-        FileDescriptor* in = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYStream::IN);
-        FileDescriptor* out = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYStream::OUT);
-        FileDescriptor* err = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYStream::OUT);
-        FileDescriptor* debug = new FileDescriptor(this, FDType::TTY, g_CurrentTTY, TTYStream::DEBUG);
-        if (in == nullptr || out == nullptr || err == nullptr || debug == nullptr) {
-            delete in;
-            delete out;
-            delete err;
-            delete debug;
-            delete m_FDManager;
-            m_FDManager = nullptr;
-            Delete();
-            return false;
-        }
-        if (!m_FDManager->ReserveFD(stdin, in) || !m_FDManager->ReserveFD(stdout, out) || !m_FDManager->ReserveFD(stderr, err) || !m_FDManager->ReserveFD(stddebug, debug)) {
-            Delete();
-            return false;
-        }
-        if (in->Open(O_RDONLY) < 0 || out->Open(O_WRONLY) < 0 || err->Open(O_WRONLY) < 0 || debug->Open(O_WRONLY) < 0) {
-            Delete();
-            return false;
-        }
     }
     if (m_cwd == nullptr) {
         FS::VNode* vnode;

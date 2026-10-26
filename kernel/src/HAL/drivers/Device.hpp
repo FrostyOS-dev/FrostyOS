@@ -42,6 +42,10 @@ public:
     virtual int Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, const Credential& cred) { return -ENOTSUP; }
     virtual int Munmap() { return -ENOTSUP; }
     virtual int Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) { return -ENOTSUP; }
+    virtual int Isatty() { return -ENOTTY; }
+
+    virtual EventWaitQueue* GetPollQueue(uint32_t events) { return nullptr; }
+    virtual uint32_t PollReady(uint32_t events) { return events & (POLLIN | POLLRDNORM | POLLOUT | POLLWRNORM); }
 };
 
 #endif /* _HAL_DEVICE_HPP */

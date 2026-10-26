@@ -277,8 +277,27 @@ namespace FS {
     }
 
     int DevTempFSVNode::Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) {
-        CALL_DEV_OP(Ioctl, op, arg, result, proc, cred);
+        if (m_dev == nullptr)
+            return ENOTSUP;
+        return m_dev->Ioctl(op, arg, result, proc, cred);
     }
+
+    int DevTempFSVNode::Isatty() {
+        if (m_dev == nullptr)
+            return -ENOTTY;
+        return m_dev->Isatty();
+    }
+
+    EventWaitQueue* DevTempFSVNode::GetPollQueue(uint32_t events) {
+        if (m_dev == nullptr)
+            return nullptr;
+        return m_dev->GetPollQueue(events);
+    }
+
+    uint32_t DevTempFSVNode::PollReady(uint32_t events) {
+        CALL_DEV_OP(PollReady, events);
+    }
+
 
     bool DevTempFSVNode::HasChildren() {
         return m_children.getCount() != 0;

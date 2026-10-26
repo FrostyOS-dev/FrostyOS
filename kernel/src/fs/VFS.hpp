@@ -165,6 +165,7 @@ namespace FS {
         virtual int Rename() = 0;
         virtual int GetName(char* buf, size_t size, size_t* realSize) = 0;
         virtual int Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) = 0; // returns 0 on success, positive value on fail
+        virtual int Isatty();
         virtual bool HasChildren() = 0;
 
         virtual bool IsUnlinked();
