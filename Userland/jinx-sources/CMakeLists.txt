@@ -36,7 +36,7 @@ set(INSTALL_FIRST_PACKAGES
 # Define the primary target for building the packages
 add_custom_target(jinx-sources
     COMMAND ${JINX} build ${INSTALL_FIRST_PACKAGES}
-    COMMAND ${JINX} install -f ${INSTALL_FIRST_PACKAGES}
+    COMMAND ${JINX} install -f ${SYSROOT} ${INSTALL_FIRST_PACKAGES}
     COMMAND ${JINX} build ${ALWAYS_BUILD_PACKAGES}
     COMMAND ${JINX} update -b ${PACKAGES}
     COMMAND ${JINX} install -f ${SYSROOT} ${ALWAYS_BUILD_PACKAGES} ${PACKAGES}
