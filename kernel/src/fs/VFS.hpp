@@ -105,6 +105,13 @@ namespace FS {
         char name[NAME_MAX + 1];
     };
 
+    struct RenameEnd {
+        const char* parent;
+        const char* name;
+        VNode* cwd;
+        bool trailingSlash;
+    };
+
     class VFS {
     public:
         VFS();
@@ -162,7 +169,7 @@ namespace FS {
         virtual int Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, const Credential& cred) = 0;
         virtual int Munmap() = 0;
         virtual int Resize(uint64_t newSize, const Credential& cred) = 0;
-        virtual int Rename() = 0;
+        virtual int Rename(VNode* child, VNode* newParent, const char* newName, size_t newNameLen, VNode* replaced, const Credential& cred) = 0;
         virtual int GetName(char* buf, size_t size, size_t* realSize) = 0;
         virtual int Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) = 0; // returns 0 on success, positive value on fail
         virtual int Isatty();
@@ -226,6 +233,8 @@ namespace FS {
     int VFS_Truncate(VNode* vnode, uint64_t size, const Credential& cred, bool clearSID = true); // clearSID: allow clearing of the set-id and set-gid bits
 
     uint8_t VFS_GetPosixType(VType type);
+
+    int VFS_Rename(RenameEnd& from, RenameEnd& to, const Credential& cred);
 
     extern VFS* g_rootVFS;
 

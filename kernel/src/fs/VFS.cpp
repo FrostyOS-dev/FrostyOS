@@ -418,13 +418,14 @@ namespace FS {
                     return -ENOENT;
 
                 size_t remLen = strlen(after);
-                size_t prefixLen = targetLen + (remLen > 0 ? 1 : 0);
+                bool keepSlash = trailingSlash && remLen == 0;
+                size_t prefixLen = targetLen + ((remLen > 0 || keepSlash) ? 1 : 0);
                 if (prefixLen + remLen > PATH_MAX)
                     return -ENAMETOOLONG;
 
                 memmove(pathBuffer + prefixLen, after, remLen + 1);
                 memcpy(pathBuffer, target, targetLen);
-                if (remLen > 0)
+                if (remLen > 0 || keepSlash)
                     pathBuffer[targetLen] = '/';
 
                 rest = pathBuffer;
@@ -955,5 +956,167 @@ namespace FS {
 #undef TYPE_CASE
         }
         return DT_UNKNOWN;
+    }
+
+    static bool StickyDenies(const VAttr& dir, const VAttr& child, const Credential& c) {
+        return (dir.mode & S_ISVTX) > 0 && c.euid != 0 && c.euid != child.uid && c.euid != dir.uid;
+    }
+
+    int VFS_Rename(RenameEnd& from, RenameEnd& to, const Credential& cred) {
+        if (from.parent == nullptr || from.name == nullptr || to.parent == nullptr || to.name == nullptr)
+            return -EINVAL;
+
+        size_t oldNameLen = strlen(from.name);
+        size_t newNameLen = strlen(to.name);
+        if (oldNameLen == 0 || newNameLen == 0)
+            return -EBUSY; // path was "/"
+        if (oldNameLen > NAME_MAX || newNameLen > NAME_MAX)
+            return -ENAMETOOLONG;
+
+        auto isDot = [](const char* n, size_t len) {
+            return (len == 1 && n[0] == '.') || (len == 2 && n[0] == '.' && n[1] == '.');
+        };
+        if (isDot(from.name, oldNameLen) || isDot(to.name, newNameLen))
+            return -EBUSY;
+
+        NSLockGuard ns;
+
+        VNode* oldParent = nullptr;
+        VNode* newParent = nullptr;
+        VFS* vfs = nullptr;
+
+        int rc = LookupPathLocked(from.parent, &oldParent, &vfs, from.cwd, cred, true);
+        if (rc < 0)
+            return rc;
+        RefVNode(oldParent);
+        VNodeRef oldParentRef(oldParent);
+
+        rc = LookupPathLocked(to.parent, &newParent, &vfs, to.cwd, cred, true);
+        if (rc < 0)
+            return rc;
+        RefVNode(newParent);
+        VNodeRef newParentRef(newParent);
+
+        if (oldParent->GetVFS() != newParent->GetVFS())
+            return -EXDEV;
+
+        rc = CheckCreate(oldParent, cred);
+        if (rc < 0)
+            return rc;
+
+        if (newParent != oldParent) {
+            rc = CheckCreate(newParent, cred);
+            if (rc < 0)
+                return rc;
+        }
+
+        // Lock parents in address order
+        if (oldParent == newParent)
+            oldParent->Lock();
+        else if (oldParent < newParent) {
+            oldParent->Lock();
+            newParent->Lock();
+        } else {
+            newParent->Lock();
+            oldParent->Lock();
+        }
+
+        auto unlockParents = [&]() {
+            oldParent->Unlock();
+            if (newParent != oldParent)
+                newParent->Unlock();
+        };
+
+        if (oldParent->IsUnlinked() || newParent->IsUnlinked()) {
+            unlockParents();
+            return -ENOENT;
+        }
+
+        VNode* src = nullptr;
+        rc = oldParent->Lookup(from.name, oldNameLen, &src, cred);
+        if (rc < 0) {
+            unlockParents();
+            return rc;
+        }
+        RefVNode(src);
+        VNodeRef srcRef(src);
+
+        VNode* dst = nullptr;
+        if (newParent->Lookup(to.name, newNameLen, &dst, cred) < 0)
+            dst = nullptr;
+        if (dst != nullptr)
+            RefVNode(dst);
+        VNodeRef dstRef(dst); // Unref of nullptr is a no-op, but the guard is fine
+
+        if (src == dst) { // same object
+            unlockParents();
+            return ESUCCESS;
+        }
+
+        auto fail = [&](int err) {
+            unlockParents();
+            return err;
+        };
+
+        if (src->GetMountedVFS() != nullptr || (dst != nullptr && dst->GetMountedVFS() != nullptr))
+            return fail(-EBUSY);
+
+        VAttr oldPAttr, newPAttr, sattr;
+        oldParent->GetAttr(&oldPAttr);
+        newParent->GetAttr(&newPAttr);
+        src->GetAttr(&sattr);
+        bool srcIsDir = sattr.type == VType::DIR;
+
+        if (!srcIsDir && (from.trailingSlash || to.trailingSlash))
+            return fail(-ENOTDIR);
+
+        if (StickyDenies(oldPAttr, sattr, cred))
+            return fail(-EPERM);
+
+        if (srcIsDir) {
+            // newParent must not be src or inside src
+            for (VNode* n = newParent; n != nullptr;) {
+                if (n == src)
+                    return fail(-EINVAL);
+                VNode* up = n->GetParent();
+                if (up == nullptr && n->GetVFS() != nullptr)
+                    up = n->GetVFS()->GetCoveredVNode();
+                n = up;
+            }
+        }
+
+        if (dst != nullptr) {
+            if (dst == oldParent)
+                return fail(-ENOTEMPTY);
+
+            dst->Lock();
+            VAttr dattr;
+            dst->GetAttr(&dattr);
+            bool dstIsDir = dattr.type == VType::DIR;
+
+            int err = ESUCCESS;
+            if (srcIsDir && !dstIsDir)
+                err = -ENOTDIR;
+            else if (!srcIsDir && dstIsDir)
+                err = -EISDIR;
+            else if (dstIsDir && dst->HasChildren())
+                err = -ENOTEMPTY;
+            else if (StickyDenies(newPAttr, dattr, cred))
+                err = -EPERM;
+            if (err < 0) {
+                dst->Unlock();
+                return fail(err);
+            }
+        }
+
+        src->Lock();
+        rc = oldParent->Rename(src, newParent, to.name, newNameLen, dst, cred);
+        if (rc >= 0 && dst != nullptr)
+            dst->SetUnlinked(true);
+        src->Unlock();
+        if (dst != nullptr)
+            dst->Unlock();
+        unlockParents();
+        return rc;
     }
 }

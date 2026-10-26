@@ -85,7 +85,7 @@ namespace FS {
     }
 
     
-    DevTempFSVNode::DevTempFSVNode(VFS* vfs, Device* dev) : VNode(vfs), m_name(nullptr), m_nameLen(0), m_dev(dev), m_children() {
+    DevTempFSVNode::DevTempFSVNode(VFS* vfs, Device* dev) : VNode(vfs), m_name(nullptr), m_nameLen(0), m_linkDest(nullptr), m_linkLen(0), m_dev(dev), m_children() {
 
     }
 
@@ -264,8 +264,8 @@ namespace FS {
         return 0; // ignore resize
     }
 
-    int DevTempFSVNode::Rename() {
-        return -ENOSYS;
+    int DevTempFSVNode::Rename(VNode* child, VNode* newParent, const char* newName, size_t newNameLen, VNode* replaced, const Credential& cred) {
+        return -EPERM;
     }
 
     int DevTempFSVNode::GetName(char* buf, size_t size, size_t* realSize) {

@@ -1356,3 +1356,127 @@ int sys_faccessat(int dirfd, const char* path, size_t pathLen, int mode, int fla
 mode_t sys_umask(mode_t mode) {
     return Thread::GetCurrentThread()->GetParent()->SwapUMask(mode & 0777);
 }
+
+static void StripTrailingSlashs(char* path, bool* trailing) {
+    size_t len = strlen(path);
+    *trailing = false;
+    while (len > 1 && path[len - 1] == '/') {
+        path[--len] = 0;
+        *trailing = true;
+    }
+}
+
+int sys_renameat(uint64_t fds, const char* oldPath, size_t oldPathLen, const char* newPath, size_t newPathLen) {
+    if (oldPath == nullptr || oldPathLen == 0 || newPath == nullptr || newPathLen == 0)
+        return -ENOENT;
+
+    if (oldPathLen > PATH_MAX || newPathLen > PATH_MAX)
+        return -ENAMETOOLONG;
+
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+    FileDescriptorManager* mgr = proc->GetFDManager();
+    if (mgr == nullptr)
+        return -ENOSYS;
+
+    char* kOldPath = new char[oldPathLen + 1];
+    char* kNewPath = new char[newPathLen + 1];
+
+    if (kOldPath == nullptr || kNewPath == nullptr) {
+        if (kOldPath != nullptr)
+            delete[] kOldPath;
+        if (kNewPath != nullptr)
+            delete[] kNewPath;
+        return -ENOMEM;
+    }
+
+    if (!UserRead(oldPath, kOldPath, oldPathLen, proc) || !UserRead(newPath, kNewPath, newPathLen, proc)) {
+        delete[] kOldPath;
+        delete[] kNewPath;
+        return -EFAULT;
+    }
+
+    kOldPath[oldPathLen] = 0;
+    kNewPath[newPathLen] = 0;
+
+    FS::VNode* vnodes[2] = {nullptr, nullptr}; // 0 = old, 1 = new
+
+    int kFDs[2] = {(int)((fds >> 32) & UINT32_MAX), (int)(fds & UINT32_MAX)};
+    char* paths[2] = {kOldPath, kNewPath};
+    for (int i = 0; i < 2; i++) {
+        if (paths[i][0] == '/')
+            continue; // absolute path, skip the dirfd
+        if (kFDs[i] == AT_FDCWD) {
+            vnodes[i] = proc->GetCWDRef();
+            continue;
+        }
+        FileDescriptor* desc = mgr->Get(kFDs[i]);
+        if (desc == nullptr || !desc->isOpen() || desc->GetType() != FDType::Directory) {
+            if (i == 1 && vnodes[0] != nullptr)
+                FS::UnrefVNode(vnodes[0]);
+            if (desc != nullptr)
+                desc->Unref();
+            delete[] kOldPath;
+            delete[] kNewPath;
+            return -EBADF;
+        }
+
+        vnodes[i] = desc->GetVNode();
+        FS::RefVNode(vnodes[i]);
+        desc->Unref();
+    }
+
+    bool oldTrailing, newTrailing;
+    StripTrailingSlashs(kOldPath, &oldTrailing);
+    StripTrailingSlashs(kNewPath, &newTrailing);
+
+    const char* oldParent;
+    const char* oldName;
+    const char* newParent;
+    const char* newName;
+    SplitPath(kOldPath, &oldParent, &oldName);
+    SplitPath(kNewPath, &newParent, &newName);
+
+    FS::RenameEnd from = {oldParent, oldName, vnodes[0], oldTrailing};
+    FS::RenameEnd to   = {newParent, newName, vnodes[1], newTrailing};
+    int rc = VFS_Rename(from, to, proc->GetCred());
+
+    for (int i = 0; i < 2; i++)
+        FS::UnrefVNode(vnodes[i]);
+
+    delete[] kOldPath;
+    delete[] kNewPath;
+
+    return rc;
+}
+
+ssize_t sys_readlinkat(int dirfd, const char* path, size_t pathLen, void* buffer, size_t maxSize) {
+    if (path == nullptr || buffer == nullptr)
+        return -EFAULT;
+    if (maxSize == 0)
+        return -EINVAL;
+
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+
+    FS::VNode* vnode = nullptr;
+    int rc = ResolveVNodeAt(proc, dirfd, path, pathLen, AT_SYMLINK_NOFOLLOW, &vnode);
+    if (rc < 0)
+        return rc;
+
+    if (vnode->GetType() != FS::VType::LNK) {
+        FS::UnrefVNode(vnode);
+        return -EINVAL;
+    }
+
+    char target[PATH_MAX + 1];
+    rc = vnode->ReadLink(target, PATH_MAX + 1, proc->GetCred());
+    FS::UnrefVNode(vnode);
+    if (rc < 0)
+        return rc;
+
+    size_t len = strlen(target);
+    size_t n = len < maxSize ? len : maxSize;
+    if (!UserWrite(buffer, target, n, proc))
+        return -EFAULT;
+
+    return (ssize_t)n;
+}

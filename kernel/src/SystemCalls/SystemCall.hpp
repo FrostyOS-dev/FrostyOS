@@ -87,7 +87,9 @@ bool UserReadAtomic32(const uint32_t* userBuf, uint32_t* kBuf, Process* currentP
     SC(PIPE, pipe) \
     SC(FACCESSAT, faccessat) \
     SC(UMASK, umask) \
-    SC(DBGPRINTLN, dbgprintln)
+    SC(DBGPRINTLN, dbgprintln) \
+    SC(RENAMEAT, renameat) \
+    SC(READLINKAT, readlinkat)
 
 enum SystemCalls : uint64_t {
 #define ENUMERATE_CALL(u, l) SYS_##u,
@@ -95,7 +97,7 @@ enum SystemCalls : uint64_t {
 #undef ENUMERATE_CALL
 };
 
-#define SYSTEM_CALL_COUNT 55
+#define SYSTEM_CALL_COUNT 57
 
 void sys_dbgprintln(const char* msg, size_t length);
 

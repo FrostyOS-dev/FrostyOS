@@ -406,8 +406,55 @@ namespace FS {
         return ESUCCESS;
     }
 
-    int TempFSVNode::Rename() {
-        return -ENOSYS;
+    int TempFSVNode::Rename(VNode* child, VNode* newParent, const char* newName, size_t newNameLen, VNode* replaced, const Credential& cred) {
+        if (child == nullptr || newParent == nullptr || newName == nullptr || newNameLen == 0)
+            return -EINVAL;
+
+        TempFSVNode* node = static_cast<TempFSVNode*>(child);
+        TempFSVNode* dest = static_cast<TempFSVNode*>(newParent);
+        TempFSVNode* old = static_cast<TempFSVNode*>(replaced);
+
+        if (node->m_parent != this)
+            return -ENOENT;
+
+        char* nameCopy = new char[newNameLen + 1];
+        if (nameCopy == nullptr)
+            return -ENOMEM;
+
+        memcpy(nameCopy, newName, newNameLen);
+        nameCopy[newNameLen] = '\0';
+
+        if (old != nullptr) {
+            dest->m_children.lock();
+            dest->m_children.remove(old);
+            dest->m_children.unlock();
+            old->m_attr.nlinks = 0;
+            UnrefVNode(old); // directory entry's reference
+        }
+
+        if (dest != this) {
+            m_children.lock();
+            m_children.remove(node);
+            m_children.unlock();
+
+            dest->m_children.lock();
+            dest->m_children.insert(node);
+            dest->m_children.unlock();
+
+            RefVNode(dest);
+            node->m_parent = dest;
+            UnrefVNode(this);
+        }
+
+        delete[] node->m_name;
+        node->m_name = nameCopy;
+        node->m_nameLen = newNameLen;
+
+        time_t now = HAL_GetUnixEpochTime();
+        node->m_attr.ctime = { now, 0 };
+        m_attr.mtime = m_attr.ctime = {now, 0};
+        dest->m_attr.mtime = dest->m_attr.ctime = { now, 0 };
+        return ESUCCESS;
     }
 
     int TempFSVNode::GetName(char* buf, size_t size, size_t* realSize) {

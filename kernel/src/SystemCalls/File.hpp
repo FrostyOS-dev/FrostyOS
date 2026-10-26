@@ -177,4 +177,8 @@ int sys_faccessat(int dirfd, const char* path, size_t pathLen, int mode, int fla
 
 mode_t sys_umask(mode_t mode);
 
+int sys_renameat(uint64_t fds, const char* oldPath, size_t oldPathLen, const char* newPath, size_t newPathLen);
+
+ssize_t sys_readlinkat(int dirfd, const char* path, size_t pathLen, void* buffer, size_t maxSize);
+
 #endif /* _SYSCALL_FILE_HPP */
