@@ -16,51 +16,32 @@
 set(CMAKE_SYSTEM_NAME "Linux")
 set(CMAKE_SYSTEM_PROCESSOR x86-64)
 
+set(FROSTYOS_TOOLCHAIN_ROOT "" CACHE PATH "exported toolchain (…/usr/local)")
+set(FROSTYOS_SYSROOT "" CACHE PATH "jinx sysroot")
+list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES FROSTYOS_TOOLCHAIN_ROOT FROSTYOS_SYSROOT)
 
-set(CMAKE_C_COMPILER x86_64-frostyos-gcc)
-set(CMAKE_CXX_COMPILER x86_64-frostyos-g++)
+set(_tc ${FROSTYOS_TOOLCHAIN_ROOT}/bin/x86_64-frostyos-)
+set(CMAKE_C_COMPILER ${_tc}gcc)
+set(CMAKE_CXX_COMPILER ${_tc}g++)
+set(CMAKE_AR ${_tc}gcc-ar)
+set(CMAKE_RANLIB ${_tc}gcc-ranlib)
 
 set(CMAKE_C_COMPILER_FORCED true)
-set(CMAKE_C_COMPILER_WORKS true)
 set(CMAKE_CXX_COMPILER_FORCED true)
-set(CMAKE_CXX_COMPILER_WORKS true)
-
 set(CMAKE_ASM_NASM_COMPILER nasm)
-set(CMAKE_ASM_NASM_COMPILER_WORKS true)
 set(CMAKE_ASM_NASM_COMPILER_FORCED true)
+set(CMAKE_ASM_NASM_OBJECT_FORMAT elf64)
 
 set(CMAKE_C_STANDARD_LIBRARIES "")
 set(CMAKE_CXX_STANDARD_LIBRARIES "")
 set(CMAKE_C_IMPLICIT_LINK_LIBRARIES "")
-set(CMAKE_CXX_IMPLICIT_LINK_LIBRARIES "")
+set(CMAKE_C_IMPLICIT_LINK_LIBRARIES "")
 
+set(CMAKE_FIND_ROOT_PATH ${FROSTYOS_SYSROOT} ${CMAKE_BINARY_DIR}/stage)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
-
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-
-set(CMAKE_ASM_NASM_OBJECT_FORMAT elf64)
-
-set(CMAKE_AR x86_64-frostyos-gcc-ar)
-set(CMAKE_RANLIB x86_64-frostyos-gcc-ranlib)
-set(AR x86_64-frostyos-gcc-ar)
-set(RANLIB x86_64-frostyos-gcc-ranlib)
-
-find_program(HAS_x86_64_frostyos_nm x86_64-frostyos-nm)
-if(NOT HAS_x86_64_frostyos_nm)
-    message(FATAL_ERROR "Could not find x86_64-frostyos-nm")
-else()
-    set(NM x86_64-frostyos-nm)
-endif()
 
 set(FROSTYOS_ARCHITECTURE x86_64)
 set(FROSTYOS_BUILD_TARGET kernel)
-
-set(SYSROOT ${CMAKE_SOURCE_DIR}/root)
-
-set(FROSTYOS_INSTALL_PREFIX ${SYSROOT}/data)
-
 set(CMAKE_CXX_FLAGS "-fno-exceptions -fno-rtti")
-set(CMAKE_C_FLAGS "")
-
-

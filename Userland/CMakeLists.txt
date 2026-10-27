@@ -13,8 +13,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-add_custom_target(Userland)
+add_compile_options(--sysroot=${FROSTYOS_SYSROOT})
+add_link_options(--sysroot=${FROSTYOS_SYSROOT})
 
-add_dependencies(Userland jinx-sources)
-
-add_subdirectory(jinx-sources)
+function(frostyos_program name)
+    add_executable(${name} ${ARGN})
+    target_compile_features(${name} PRIVATE cxx_std_23)
+    install(TARGETS ${name} RUNTIME DESTINATION data/bin)
+    set_property(GLOBAL APPEND PROPERTY FROSTYOS_USERLAND_TARGETS ${name})
+endfunction()

@@ -266,24 +266,25 @@ target_link_libraries(kernel PRIVATE uacpi gcc)
 target_compile_definitions(kernel PRIVATE _IS_IN_KERNEL=1)
 
 if (FROSTYOS_BUILD_TARGET STREQUAL "kernel")
+    if (NOT FROSTYOS_HOST_TOOLS OR NOT FROSTYOS_BOOT)
+        message(FATAL_ERROR "FROSTYOS_HOST_TOOLS / FROSTYOS_BOOT unset: cofigure via the superbuild")
+    endif()
+    if (NOT CMAKE_NM OR NOT CMAKE_STRIP)
+        message(FATAL_ERROR "binutils not found next to ${CMAKE_C_COMPILER}")
+    endif()
 
-    add_custom_target(create_dist_dir ALL
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS
-    )
+    set(BUILDSYMBOLTABLE ${FROSTYOS_HOST_TOOLS}/bin/buildsymboltable)
 
-    add_dependencies(kernel limine_include create_dist_dir)
+    add_dependencies(kernel limine_include)
 
-    add_custom_target(install_kernel
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS
-        COMMAND ${CMAKE_SOURCE_DIR}/build-scripts/generate_symbol_map.sh ${CMAKE_NM} ${CMAKE_SOURCE_DIR} $<TARGET_FILE:kernel>
-        COMMAND ${CMAKE_STRIP} --strip-debug $<TARGET_FILE:kernel> -o ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/kernel.elf
-        BYPRODUCTS ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/kernel.elf ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/ksymbols.map ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS ${CMAKE_SOURCE_DIR}/dist/boot ${CMAKE_SOURCE_DIR}/dist
-    )
-
+    add_custom_command(
+        OUTPUT ${FROSTYOS_BOOT}/FrostyOS/kernel.elf ${FROSTYOS_BOOT}/FrostyOS/kymbols.map
+        COMMAND ${SHELL} -c "\"$0\" -C -f bsd -n \"$1\" | \"$2\" - > \"$3\""
+                ${CMAKE_NM} $<TARGET_FILE:kernel> ${BUILDSYMBOLTABLE} ${FROSTYOS_BOOT}/FrostyOS/ksymbols.map
+        COMMAND ${CMAKE_STRIP} --strip-debug $<TARGET_FILE:kernel> -o ${FROSTYOS_BOOT}/FrostyOS/kernel.elf
+        DEPENDS kernel ${BUILDSYMBOLTABLE}
+        VERBATIM)
+    add_custom_target(install_kernel DEPENDS ${FROSTYOS_BOOT}/FrostyOS/kernel.elf)
 endif()
 
-add_custom_target(install_kernel_headers
-    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_newer ${CMAKE_CURRENT_SOURCE_DIR}/headers/frostyos ${SYSROOT}/data/include/
-    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_newer ${CMAKE_CURRENT_SOURCE_DIR}/headers/frostyos/asm ${CMAKE_SOURCE_DIR}/Userland/jinx-sources/deps/mlibc/sysdeps/frostyos/include/asm
-    BYPRODUCTS ${CMAKE_SOURCE_DIR}/Userland/jinx-sources/deps/mlibc/sysdeps/frostyos/include/asm
-)
+install(DIRECTORY headers/frostyos/ DESTINATION data/include)

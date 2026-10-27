@@ -1,4 +1,4 @@
-# Copyright (©) 2024  Frosty515
+# Copyright (©) 2024-2026  Frosty515
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.26)
 
 project(FrostyOS-host-tools CXX C ASM_NASM)
 
@@ -32,9 +32,6 @@ if(NOT GXX)
     message(FATAL_ERROR "g++ not found")
 endif()
 
-set(CMAKE_C_COMPILER ${GCC})
-set(CMAKE_CXX_COMPILER ${GXX})
-set(CMAKE_ASM_NASM_COMPILER ${NASM})
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -62,4 +59,4 @@ set_target_properties(buildsymboltable PROPERTIES C_STANDARD 23)
 set_target_properties(buildsymboltable PROPERTIES C_STANDARD_REQUIRED ON)
 set_target_properties(buildsymboltable PROPERTIES C_EXTENSIONS OFF)
 
-install(TARGETS buildsymboltable DESTINATION ${CMAKE_SOURCE_DIR}/bin)
+install(TARGETS buildsymboltable DESTINATION bin)

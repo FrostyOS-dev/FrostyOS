@@ -1,12 +1,12 @@
 name=xbinutils
 version=2.45.1
-revision=2
+revision=3
 from_source=binutils
 imagedeps="build-essential gcc"
 hostdeps="automake autoconf"
 
 configure() {
-    ${source_dir}/configure --target=x86_64-frostyos --prefix=${prefix} --with-sysroot=${sysroot} --disable-nls --disable-werror --enable-shared --disable-gdb --enable-default-execstack=no
+    ${source_dir}/configure --target=x86_64-frostyos --prefix=${prefix} --with-sysroot=${sysroot} --disable-nls --disable-werror --disable-shared --disable-gdb --enable-default-execstack=no
 }
 
 build() {

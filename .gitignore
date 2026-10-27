@@ -1,13 +1,9 @@
 # Dirs
 toolchain/
-ovmf/
 build/
+bin/
 .cache/
 .vscode/
-depend/
-dist/
-iso/
-bin/
 test/
 
 # Files
@@ -16,3 +12,4 @@ compile_commands.json
 limine.h
 dump
 /root
+/.jinx-build/

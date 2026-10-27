@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Copyright (©) 2024-2026  Frosty515
 
@@ -18,47 +18,24 @@
 # Exit on error
 set -e
 
-# build the host system tools
-./build-scripts/build_tools.sh
+script_dir=$(cd "$(dirname "$0")" && pwd)
+root=$(cd "$script_dir/.." && pwd)
 
-# We have to check if the toolchain is up to date before building the OS
-# First we check if the $TOOLCHAIN_PREFIX is set, if not set it to toolchain/local
-if [ -z "$TOOLCHAIN_PREFIX" ]; then
-    TOOLCHAIN_PREFIX=$PWD/toolchain/local
-fi
+fail() { echo "error: $1" >&2; exit 1; }
 
-# Check if $SYSROOT is set, if not set it to root
-if [ -z "$SYSROOT" ]; then
-    SYSROOT=$PWD/root
-fi
+[ "$(id -u)" != 0 ] || fail "jinx refuses to run as root"
 
-if [ ! -e "$PWD/Userland/jinx-sources/sysroot" ]; then
-    mkdir -p $PWD/Userland/jinx-sources/sysroot
-fi
+need="cmake ninja nasm xorriso rsync unshare flock wget"
+[ "$1" = run-qemu ] && need="$need qemu-system-x86_64"
+for t in $need; do
+    command -v "$t" >/dev/null 2>&1 || fail "missing host tool: $t"
+done
 
-if [ ! -e "$SYSROOT" ]; then
-    ln -sf $PWD/Userland/jinx-sources/sysroot $SYSROOT
-fi
+unshare --user --map-root-user true 2>/dev/null \
+    || fail "unprivileged user namespaces are disabled (jinx needs them)"
 
-# Make the toolchain directory prefix, and install kernel and LibC headers
-mkdir -p $TOOLCHAIN_PREFIX
+cmake -S "$root/superbuild" -B "$root/build" -G Ninja ${FROSTYOS_BUILD_CONFIG:+-DFROSTYOS_BUILD_CONFIG="$FROSTYOS_BUILD_CONFIG"}
+cmake --build "$root/build" ${1:+--target "$1"}
 
-export TOOLCHAIN_PREFIX SYSROOT
-
-./build-scripts/build_toolchain.sh
-
-# Check if $FROSTYOS_BUILD_CONFIG is set, if not set it to Debug
-if [ -z "$FROSTYOS_BUILD_CONFIG" ]; then
-    FROSTYOS_BUILD_CONFIG=Debug
-fi
-
-# Check if build directory exists
-if [ -d "build" ]; then
-    cd build
-else
-    mkdir build
-    cd build
-fi
-
-cmake -GNinja -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DFROSTYOS_BUILD_CONFIG=$FROSTYOS_BUILD_CONFIG -DFROSTYOS_TOOLCHAIN_PREFIX=$FROSTYOS_TOOLCHAIN_PREFIX --toolchain=build-scripts/x86_64/toolchain.cmake ..
-ninja build_iso
+[ -e "$root/compile_commands.json" ] || [ -L "$root/compile_commands.json" ] \
+    || ln -s build/os/compile_commands.json "$root/compile_commands.json"

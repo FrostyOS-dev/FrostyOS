@@ -13,71 +13,93 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-cmake_minimum_required(VERSION 3.20)
-
+cmake_minimum_required(VERSION 3.26)
 project(FrostyOS C CXX ASM_NASM)
 
 include(${CMAKE_SOURCE_DIR}/build-scripts/utils.cmake)
 
-add_custom_target(build_boot
-	COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/dist/boot/EFI/BOOT
+set(FROSTYOS_BOOT ${CMAKE_BINARY_DIR}/dist/boot)
+set(FROSTYOS_STAGE ${CMAKE_BINARY_DIR}/stage)
+set(FROSTYOS_ROOTFS ${CMAKE_BINARY_DIR}/rootfs)
+set(FROSTYOS_ISO ${CMAKE_BINARY_DIR}/iso/boot.iso)
+set(CMAKE_INSTALL_PREFIX ${FROSTYOS_STAGE} CACHE PATH "" FORCE)
+
+file (MAKE_DIRECTORY ${FROSTYOS_BOOT}/FrostyOS ${FROSTYOS_BOOT}/EFI/BOOT)
+
+configure_file(${CMAKE_SOURCE_DIR}/build-scripts/${FROSTYOS_ARCHITECTURE}/limine.conf ${FROSTYOS_BOOT}/limine.conf)
+
+# Limine binaries
+add_custom_command(
+	OUTPUT ${FROSTYOS_BOOT}/EFI/BOOT/BOOTX64.EFI ${FROSTYOS_BOOT}/limine-uefi-cd.bin
 	COMMAND ${CMAKE_COMMAND} -DROOT_SOURCE_DIR=${CMAKE_SOURCE_DIR} -P ${CMAKE_SOURCE_DIR}/build-scripts/download_boot_files.cmake
 	COMMAND ${CMAKE_COMMAND} -E tar xJ ${CMAKE_BINARY_DIR}/limine-binary.tar.xz
-	COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/limine-binary/BOOTX64.EFI ${CMAKE_SOURCE_DIR}/dist/boot/EFI/BOOT/
-	COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/limine-binary/limine-uefi-cd.bin ${CMAKE_SOURCE_DIR}/dist/boot/
+	COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/limine-binary/BOOTX64.EFI ${FROSTYOS_BOOT}/EFI/BOOT/
+	COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/limine-binary/limine-uefi-cd.bin ${FROSTYOS_BOOT}/
 	COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/limine-binary
-	BYPRODUCTS ${CMAKE_BINARY_DIR}/limine-binary.tar.xz ${CMAKE_SOURCE_DIR}/dist/boot/EFI/BOOT/BOOTX64.EFI ${CMAKE_SOURCE_DIR}/dist/boot/limine-uefi-cd.bin ${CMAKE_SOURCE_DIR}/dist/boot/limine.conf ${CMAKE_SOURCE_DIR}/dist/boot/EFI/BOOT ${CMAKE_SOURCE_DIR}/dist/boot/EFI
-)
+	VERBATIM)
+add_custom_target(limine_boot DEPENDS ${FROSTYOS_BOOT}/EFI/BOOT/BOOTX64.EFI ${FROSTYOS_BOOT}/limine-uefi-cd.bin)
 
-add_dependencies(build_boot install_kernel)
-
-add_custom_target(build_initramfs
-	COMMAND ${CMAKE_COMMAND} -E chdir ${SYSROOT} /bin/sh -c "tar -c --no-auto-compress --hard-dereference --owner=0 --group=0 -f ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/initramfs.tar *"
-	BYPRODUCTS ${CMAKE_SOURCE_DIR}/dist/boot/FrostyOS/initramfs.tar
-)
-
-add_dependencies(build_initramfs install_kernel Userland)
-
-if (UNIX)
-	add_custom_target(update_ovmf
-		COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR} sh build-scripts/update_ovmf.sh
-		BYPRODUCTS ${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.fd
-	)
-
-	add_custom_target(build_iso
-		COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/iso
-		COMMAND xorriso -report_about SORRY -as mkisofs -quiet --efi-boot limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label ${CMAKE_SOURCE_DIR}/dist/boot -o ${CMAKE_SOURCE_DIR}/iso/boot.iso
-		BYPRODUCTS ${CMAKE_SOURCE_DIR}/iso/boot.iso ${CMAKE_SOURCE_DIR}/iso
-	)
-endif()
-
-add_dependencies(build_iso build_boot build_initramfs update_ovmf)
-
-if(FROSTYOS_BUILD_CONFIG STREQUAL "Debug")
-	add_custom_target(run-qemu
-		COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.4m.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/boot.iso,index=0,media=disk -m 1G -debugcon file:/dev/stdout -monitor stdio -M q35,accel=kvm -cpu host -chardev pty,id=serial0 -serial chardev:serial0
-		USES_TERMINAL
-	)
-else()
-	if(FROSTYOS_BUILD_CONFIG STREQUAL "Release")
-		add_custom_target(run-qemu
-			COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.4m.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/boot.iso,index=0,media=disk -m 1G -M q35,accel=kvm -cpu host -chardev pty,id=serial0 -serial chardev:serial0
-			USES_TERMINAL
-		)
-	else() # Default is Debug
-		add_custom_target(run-qemu
-			COMMAND qemu-system-x86_64 -drive if=pflash,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd,format=raw,readonly=on -drive if=pflash,file=${CMAKE_SOURCE_DIR}/ovmf/x86-64/OVMF_VARS.4m.fd,format=raw -drive format=raw,file=${CMAKE_SOURCE_DIR}/iso/boot.iso,index=0,media=disk -m 1G -debugcon file:/dev/stdout -monitor stdio -M q35,accel=kvm -cpu host -chardev pty,id=serial0 -serial chardev:serial0
-			USES_TERMINAL
-		)
-	endif()
-endif()
-
-add_dependencies(run-qemu build_iso)
-
-add_custom_target(limine_include
-	COMMAND ${CMAKE_COMMAND} -E remove ${CMAKE_SOURCE_DIR}/kernel/src/limine.h
+# Limine include
+add_custom_command(
+	OUTPUT ${CMAKE_SOURCE_DIR}/kernel/src/limine.h
 	COMMAND ${CMAKE_COMMAND} -DROOT_SOURCE_DIR=${CMAKE_SOURCE_DIR} -P ${CMAKE_SOURCE_DIR}/build-scripts/download_limine_include.cmake
-)
+	VERBATIM)
+add_custom_target(limine_include DEPENDS ${CMAKE_SOURCE_DIR}/kernel/src/limine.h)
+add_custom_target(limine_include_update
+	COMMAND ${CMAKE_COMMAND} -E remove ${CMAKE_SOURCE_DIR}/kernel/src/limine.h
+	COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target limine_include)
 
 add_subdirectory(kernel)
 add_subdirectory(Userland)
+
+get_property(_userland GLOBAL PROPERTY FROSTYOS_USERLAND_TARGETS)
+add_custom_target(stage COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${FROSTYOS_STAGE})
+if(_userland)
+	add_dependencies(stage ${_userland})
+endif()
+
+add_custom_target(image ALL
+	COMMAND ${CMAKE_SOURCE_DIR}/build-scripts/make_image.sh ${FROSTYOS_BOOT} ${FROSTYOS_ISO} ${FROSTYOS_ROOTFS}
+			${FROSTYOS_SYSROOT} ${CMAKE_SOURCE_DIR}/Userland/jinx-sources/base-files ${FROSTYOS_STAGE}
+	USES_TERMINAL VERBATIM)
+add_dependencies(image install_kernel limine_boot stage)
+
+set(_ovmf_dirs /usr/share/edk2/x64 /usr/share/edk2/ovmf /usr/share/OVMF /usr/share/qemu)
+
+find_file(OVMF_CODE
+	NAMES OVMF_CODE.4m.fd OVMF_CODE_4M.fd OVMF_CODE.fd
+	PATHS ${_ovmf_dirs}
+	NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
+
+find_file(OVMF_VARS_TEMPLATE
+	NAMES OVMF_VARS.4m.fd OVMF_VARS_4M.fd OVMF_VARS.fd
+	PATHS ${_ovmf_dirs}
+	NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
+
+if(NOT OVMF_CODE OR NOT OVMF_VARS_TEMPLATE)
+	message(FATAL_ERROR "OVMF firmware not found. Install edk2-ovmf, or pass -DOVMF_CODE=<path> -DOVMF_VARS_TEMPLATE=<path>")
+endif()
+
+set(OVMF_VARS ${CMAKE_BINARY_DIR}/OVMF_VARS.fd)
+add_custom_command(OUTPUT ${OVMF_VARS} COMMAND ${CMAKE_COMMAND} -E copy ${OVMF_VARS_TEMPLATE} ${OVMF_VARS})
+add_custom_target(ovmf_vars DEPENDS ${OVMF_VARS})
+
+execute_process(COMMAND test -w /dev/kvm RESULT_VARIABLE _kvm OUTPUT_QUIET ERROR_QUIET)
+if(_kvm EQUAL 0)
+	set(_machine -M q35,accel=kvm -cpu host)
+else()
+	set(_machine -M q35 -cpu max) # TCG fallback
+endif()
+
+set(QEMU_ARGS
+	-drive if=pflash,file=${OVMF_CODE},format=raw,readonly=on
+	-drive if=pflash,file=${OVMF_VARS},format=raw
+	-drive format=raw,file=${FROSTYOS_ISO},index=0,media=disk
+	-m 1G ${_machine}
+	-chardev pty,id=serial0 -serial chardev:serial0)
+if(NOT FROSTYOS_BUILD_CONFIG STREQUAL "Release")
+	list(APPEND QEMU_ARGS -debugcon file:/dev/stdout -monitor stdio)
+endif()
+
+add_custom_target(run-qemu COMMAND qemu-system-x86_64 ${QEMU_ARGS} USES_TERMINAL VERBATIM)
+add_dependencies(run-qemu image ovmf_vars)
