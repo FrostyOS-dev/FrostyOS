@@ -8,4 +8,4 @@
 	branch = frostyos
 [submodule "Userland/jinx-sources/jinx"]
 	path = Userland/jinx-sources/jinx
-	url = https://github.com/Mintsuki/Jinx
+	url = https://github.com/FrostyOS-dev/Jinx
