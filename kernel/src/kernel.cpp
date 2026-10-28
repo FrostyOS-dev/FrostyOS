@@ -27,6 +27,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <DataStructures/LinkedList.hpp>
 
+#include <Exec/ELF.hpp>
+
 #include <fs/TempFS/TempFS.hpp>
 
 #include <fs/InitRAMFS.hpp>
@@ -163,7 +165,10 @@ void Kernel_Stage2(void* data) {
         g_KFBConBackend.SetConsole(console);
     }
 
-    while (true) {
-        __asm__ volatile("hlt");
-    }
+    char const* argv[] = {"init", nullptr};
+    char const* env[] = {nullptr};
+    if (0 != CreateELFProcess("/data/bin/init", g_KProcess, (char**)argv, (char**)env))
+        PANIC("Failed to start init!");
+
+    Thread::ExitCurrentThread(0, true, false, false);
 }

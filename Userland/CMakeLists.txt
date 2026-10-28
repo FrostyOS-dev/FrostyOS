@@ -16,9 +16,12 @@
 add_compile_options(--sysroot=${FROSTYOS_SYSROOT})
 add_link_options(--sysroot=${FROSTYOS_SYSROOT})
 
+include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/kernel/headers/frostyos)
+
 function(frostyos_program name)
     add_executable(${name} ${ARGN})
-    target_compile_features(${name} PRIVATE cxx_std_23)
     install(TARGETS ${name} RUNTIME DESTINATION data/bin)
     set_property(GLOBAL APPEND PROPERTY FROSTYOS_USERLAND_TARGETS ${name})
 endfunction()
+
+add_subdirectory(ServiceManager)

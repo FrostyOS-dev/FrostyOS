@@ -278,7 +278,7 @@ if (FROSTYOS_BUILD_TARGET STREQUAL "kernel")
     add_dependencies(kernel limine_include)
 
     add_custom_command(
-        OUTPUT ${FROSTYOS_BOOT}/FrostyOS/kernel.elf ${FROSTYOS_BOOT}/FrostyOS/kymbols.map
+        OUTPUT ${FROSTYOS_BOOT}/FrostyOS/kernel.elf ${FROSTYOS_BOOT}/FrostyOS/ksymbols.map
         COMMAND ${SHELL} -c "\"$0\" -C -f bsd -n \"$1\" | \"$2\" - > \"$3\""
                 ${CMAKE_NM} $<TARGET_FILE:kernel> ${BUILDSYMBOLTABLE} ${FROSTYOS_BOOT}/FrostyOS/ksymbols.map
         COMMAND ${CMAKE_STRIP} --strip-debug $<TARGET_FILE:kernel> -o ${FROSTYOS_BOOT}/FrostyOS/kernel.elf
