@@ -80,6 +80,7 @@ if(FROSTYOS_ARCHITECTURE STREQUAL "x86_64")
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Memory/PAT.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Scheduling/Task.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/Scheduling/TaskUtil.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/8042PS2Controller.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/APTrampoline.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/ArchDefs.asm
         ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86_64/CMOS.cpp
@@ -135,6 +136,8 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/ACPI/uACPIAPI.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/BasicDevices/NullDevice.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/BasicDevices/ZeroDevice.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Input/PS2/PS2Controller.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Input/PS2/PS2Keyboard.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/FBVideo/FBDisplay.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/FBVideo/FBPager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/FBVideo/FBVideoDevice.cpp

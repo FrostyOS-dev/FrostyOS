@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Processor.hpp"
 #include "Time.hpp"
 
+#include "ACPI/FADT.hpp"
 #include "ACPI/Init.hpp"
 
 #include "drivers/BasicDevices/NullDevice.hpp"
@@ -28,6 +29,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "drivers/DeviceManager.hpp"
 #include "drivers/PCI.hpp"
+#include "drivers/Input/PS2/PS2Controller.hpp"
+
+#include <stdio.h>
+#include <string.h>
 
 #ifdef __x86_64__
 #include <arch/x86_64/interrupts/IRQ.hpp>
@@ -67,6 +72,15 @@ void HAL_InitialseDevices(FBConsole** newConsole) {
     g_DeviceManager->InitDevices();
 
     Video::Video_FullInit(newConsole);
+
+    if (FADT_DoesPS2ControllerExist()) {
+        PS2Controller* controller = new PS2Controller;
+        int rc = controller->Init();
+        if (rc < 0)
+            dbgprintf("PS2Controller init failed: %s\n", strerror(-rc));
+        else
+            g_PS2Controller = controller;
+    }
 }
 
 struct HAL_IntHandlerData {

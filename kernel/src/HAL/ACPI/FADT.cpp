@@ -32,6 +32,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <arch/x86_64/CMOS.hpp>
 #endif
 
+bool g_PS2ControllerExists = false;
+
 bool InitFADT() {
     uacpi_table table;
     uacpi_status rc = uacpi_table_find_by_signature(ACPI_FADT_SIGNATURE, &table);
@@ -44,7 +46,13 @@ bool InitFADT() {
 #ifdef __x86_64__
     if ((FADT->iapc_boot_arch & ACPI_IA_PC_NO_CMOS_RTC) == 0)
         x86_64_InitCMOS(FADT->century);
+    if ((FADT->iapc_boot_arch & ACPI_IA_PC_8042) != 0)
+        g_PS2ControllerExists = true;
 #endif
 
     return true;
+}
+
+bool FADT_DoesPS2ControllerExist() {
+    return g_PS2ControllerExists;
 }

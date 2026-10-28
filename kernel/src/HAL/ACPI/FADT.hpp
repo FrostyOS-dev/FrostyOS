@@ -20,4 +20,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 bool InitFADT();
 
+bool FADT_DoesPS2ControllerExist();
+
 #endif /* _HAL_FADT_HPP */
