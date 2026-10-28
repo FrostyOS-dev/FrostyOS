@@ -18,8 +18,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Init.hpp"
 #include "MCFG.hpp"
 
-#include "uacpi/types.h"
-
 #include <spinlock.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -39,6 +37,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <uacpi/kernel_api.h>
 #include <uacpi/status.h>
+#include <uacpi/types.h>
 
 #pragma GCC diagnostic pop
 
@@ -47,6 +46,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <HAL/Time.hpp>
 
 #include <Memory/PagingUtil.hpp>
+
+#include <Scheduling/Scheduler.hpp>
+#include <Scheduling/Semaphore.hpp>
+#include <Scheduling/Thread.hpp>
 
 uacpi_status uacpi_kernel_get_rsdp(uacpi_phys_addr* out_rsdp_address) {
     if (out_rsdp_address == nullptr)
@@ -73,11 +76,6 @@ void uacpi_kernel_unmap(void* virt_addr, size_t size) {
 void uacpi_kernel_log(uacpi_log_level level, const uacpi_char* format, ...) {
     va_list args;
     va_start(args, format);
-    uacpi_kernel_vlog(level, format, args);
-    va_end(args);
-}
-
-void uacpi_kernel_vlog(uacpi_log_level level, const uacpi_char* format, uacpi_va_list args) {
     switch (level) {
         case UACPI_LOG_DEBUG:
             puts("[uACPI DEBUG] ");
@@ -99,6 +97,7 @@ void uacpi_kernel_vlog(uacpi_log_level level, const uacpi_char* format, uacpi_va
     }
 
     vprintf(format, args);
+    va_end(args);
 }
 
 #ifndef UACPI_BAREBONES_MODE
@@ -231,28 +230,25 @@ void uacpi_kernel_stall(uacpi_u8 usec) {
 }
 
 void uacpi_kernel_sleep(uacpi_u64 msec) {
+    if (Scheduler::isRunning())
+        return Scheduler::SleepCurrentThread(msec);
     uint64_t nsec = msec * 1000000;
     uint64_t start = HAL_GetNSTicks();
     while (HAL_GetNSTicks() - start < nsec);
 }
 
-uacpi_handle uacpi_kernel_create_mutex(void) {
-    return kcalloc(1, 8);
+uacpi_handle uacpi_kernel_create_semaphore(uacpi_u32 initial_units) {
+    return new Semaphore(initial_units);
 }
 
-void uacpi_kernel_free_mutex(uacpi_handle handle) {
-    kfree(handle);
-}
-
-uacpi_handle uacpi_kernel_create_event() {
-    return kcalloc(1, 8);
-}
-
-void uacpi_kernel_free_event(uacpi_handle handle) {
-    kfree(handle);
+void uacpi_kernel_free_semaphore(uacpi_handle handle) {
+    delete (Semaphore*)handle;
 }
 
 uacpi_thread_id uacpi_kernel_get_thread_id() {
+    Thread* t = Thread::GetCurrentThread();
+    if (t != nullptr)
+        return (void*)t->GetTID();
     return 0;
 }
 
@@ -264,21 +260,15 @@ void uacpi_kernel_restore_interrupts(uacpi_interrupt_state state) {
     Processor::EnableInterrupts(state);
 }
 
-uacpi_status uacpi_kernel_acquire_mutex(uacpi_handle, uacpi_u16) {
+uacpi_status uacpi_kernel_wait_for_semaphore(uacpi_handle h, uacpi_u16 ms) {
+    Semaphore* sem = (Semaphore*)h;
+    sem->Wait(); // todo: timeout, non blocking attempt
     return UACPI_STATUS_OK;
 }
 
-void uacpi_kernel_release_mutex(uacpi_handle) {
-}
-
-uacpi_bool uacpi_kernel_wait_for_event(uacpi_handle, uacpi_u16) {
-    return UACPI_TRUE;
-}
-
-void uacpi_kernel_signal_event(uacpi_handle) {
-}
-
-void uacpi_kernel_reset_event(uacpi_handle) {
+void uacpi_kernel_signal_semaphore(uacpi_handle h) {
+    Semaphore* sem = (Semaphore*)h;
+    sem->Signal();
 }
 
 uacpi_status uacpi_kernel_handle_firmware_request(uacpi_firmware_request*) {
@@ -319,8 +309,15 @@ void uacpi_kernel_unlock_spinlock(uacpi_handle lock, uacpi_cpu_flags flags) {
     Processor::EnableInterrupts(flags);
 }
 
-uacpi_status uacpi_kernel_schedule_work(uacpi_work_type, uacpi_work_handler, uacpi_handle) {
-    return UACPI_STATUS_UNIMPLEMENTED;
+uacpi_handle uacpi_kernel_create_work_item(void) {
+    return kmalloc(1);
+}
+
+void uacpi_kernel_free_work_item(uacpi_handle h) {
+    kfree(h);
+}
+
+void uacpi_kernel_schedule_work(uacpi_work_type, uacpi_handle, uacpi_work_handler, uacpi_handle) {
 }
 
 uacpi_status uacpi_kernel_wait_for_work_completion() {
