@@ -15,6 +15,6 @@ touch "$stamp.start"
 if "$@"; then
     mv "$stamp.start" "$stamp"
 else
-    rem -f "$stamp.start"
+    rm -f "$stamp.start"
     exit 1
 fi
