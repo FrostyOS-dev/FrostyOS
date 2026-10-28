@@ -37,7 +37,7 @@ int dbgprintln(const char* msg) {
 #define ERROR2(msg) do { perror(msg); abort(); } while (0)
 
 int main(int argc, char** argv) {
-    if (argc < 1 || strcmp(argv[0], "init") != 0) {
+    if (argc < 1 || strcmp(argv[0], "init") != 0 || getpid() != 1) {
         fprintf(stderr, "ServiceManager must not be called directly\n");
         return 1;
     }
