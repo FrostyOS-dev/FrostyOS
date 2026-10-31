@@ -53,12 +53,12 @@ public:
         Device* dev;
         DeviceType type;
 
-        bool hasVNode;
-        bool VNodeType; // false for file, true for dir
-        FS::DevTempFSVNode* rootVNode;
+        bool hasVNode = false;
+        bool VNodeType = false; // false for file, true for dir
+        FS::DevTempFSVNode* rootVNode = nullptr;
 
         DeviceList subDevices;
-        DeviceInfo* parent;
+        DeviceInfo* parent = nullptr;
     };
 
     struct CreateParams {
@@ -80,6 +80,9 @@ public:
     int AddSubDevice(DeviceInfo* parent, Device* dev, DeviceInfo** outInfo = nullptr);
 
     int CreateRootItem(const CreateParams& params);
+    int CreateRootDir(const char* name, mode_t mode = DEFAULT_DIR_MODE, FS::DevTempFSVNode** outVNode = nullptr);
+
+    int CreateSymlink(const char* name, DeviceInfo* target, mode_t mode = DEFAULT_SYMLINK_MODE, FS::DevTempFSVNode** outVNode = nullptr, FS::DevTempFSVNode* cwd = nullptr, bool relative = true);
 
     // For the following 2 functions:
     // Path must be relative within the previously created root dir for the device.

@@ -143,6 +143,33 @@ int DeviceManager::CreateRootItem(const CreateParams& params) {
     return 0;
 }
 
+int DeviceManager::CreateRootDir(const char* name, mode_t mode, FS::DevTempFSVNode** outVNode) {
+    if (name == nullptr)
+        return -EINVAL;
+
+    FS::VNode* vnode = nullptr;
+    int rc = FS::VFS_Create(".", name, FS::VType::DIR, mode, m_fs->GetRoot(), m_cred, nullptr, &vnode);
+
+    if (rc >= 0 && outVNode != nullptr)
+        *outVNode = static_cast<FS::DevTempFSVNode*>(vnode);
+
+    return rc;
+}
+
+int DeviceManager::CreateSymlink(const char* name, DeviceInfo* target, mode_t mode, FS::DevTempFSVNode** outVNode, FS::DevTempFSVNode* cwd, bool relative) {
+    if (name == nullptr || target == nullptr)
+        return -EINVAL;
+    if (m_fs == nullptr || !target->hasVNode)
+        return -ENOENT;
+
+    FS::VNode* vnode = nullptr;
+    int rc = FS::VFS_CreateSymlinkTo(".", name, target->rootVNode, relative, cwd == nullptr ? m_fs->GetRoot() : cwd, m_cred, mode, &vnode);
+
+    if (rc >= 0 && outVNode != nullptr)
+        *outVNode = static_cast<FS::DevTempFSVNode*>(vnode);
+    return rc;
+}
+
 int DeviceManager::CreateSubItem(const char* path, const CreateParams& params) {
     return CreateSubItemWithDevice(path, params.info != nullptr ? params.info->dev : nullptr, params);
 }
