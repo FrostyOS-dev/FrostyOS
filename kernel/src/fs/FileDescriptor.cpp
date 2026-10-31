@@ -29,21 +29,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <SystemCalls/File.hpp>
 
 #include <tty/TTY.hpp>
-#include <tty/TTYBackend.hpp>
 
-FileDescriptor::FileDescriptor() : m_proc(nullptr), m_type(FDType::Invalid), m_offset(0), m_open(false), m_vnode(nullptr), m_tty(nullptr), m_ttyStream(TTYStream::INVALID), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(nullptr), m_pipeWriteEnd(false) {
-
-}
-
-FileDescriptor::FileDescriptor(Process* proc, FDType type, FS::VNode* vnode) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_vnode(vnode), m_tty(nullptr), m_ttyStream(TTYStream::INVALID), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(nullptr), m_pipeWriteEnd(false) {
+FileDescriptor::FileDescriptor() : m_proc(nullptr), m_type(FDType::Invalid), m_offset(0), m_open(false), m_vnode(nullptr), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(nullptr), m_pipeWriteEnd(false) {
 
 }
 
-FileDescriptor::FileDescriptor(Process* proc, FDType type, TTY* tty, TTYStream stream) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_vnode(nullptr), m_tty(tty), m_ttyStream(stream), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(nullptr), m_pipeWriteEnd(false) {
+FileDescriptor::FileDescriptor(Process* proc, FDType type, FS::VNode* vnode) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_vnode(vnode), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(nullptr), m_pipeWriteEnd(false) {
 
 }
 
-FileDescriptor::FileDescriptor(Process* proc, Pipe* pipe, bool writeEnd) : m_proc(proc), m_type(FDType::Pipe), m_offset(0), m_open(false), m_vnode(nullptr), m_tty(nullptr), m_ttyStream(TTYStream::INVALID), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(pipe), m_pipeWriteEnd(writeEnd) {
+FileDescriptor::FileDescriptor(Process* proc, Pipe* pipe, bool writeEnd) : m_proc(proc), m_type(FDType::Pipe), m_offset(0), m_open(false), m_vnode(nullptr), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(pipe), m_pipeWriteEnd(writeEnd) {
 
 }
 
@@ -60,11 +55,6 @@ void FileDescriptor::Init(Process* proc, FDType type, FS::VNode* vnode) {
 
 }
 
-void FileDescriptor::Init(Process* proc, FDType type, TTY* tty, TTYStream stream) {
-
-}
-
-
 int FileDescriptor::Open(int flags) {
     m_mutex.Lock();
     if (m_proc == nullptr) {
@@ -79,11 +69,6 @@ int FileDescriptor::Open(int flags) {
             return -EBADF;
         }
         break;
-    case FDType::TTY:
-        if ((flags & O_APPEND) == 0)
-            break;
-        m_mutex.Unlock();
-        return -EBADF;
     case FDType::Directory:
         if (m_vnode == nullptr) {
             m_mutex.Unlock();
@@ -134,6 +119,15 @@ int FileDescriptor::Read(void* buf, size_t count, size_t* realCount) {
         return m_pipe->Read(buf, count, realCount, (GetFlags() & O_NONBLOCK) > 0);
     }
 
+    if (IsDevice()) {
+        if (!m_open || !m_canRead)
+            return -EBADF;
+        size_t n = 0;
+        int rc = m_vnode->Read(buf, count, GetFlags() & O_NONBLOCK, 0, &n, m_cred);
+        *realCount = n;
+        return rc;
+    }
+
     m_mutex.Lock();
 
     if (!m_open) {
@@ -156,28 +150,10 @@ int FileDescriptor::Read(void* buf, size_t count, size_t* realCount) {
         }
         size_t bytesRead = 0;
         m_vnode->Lock();
-        rc = m_vnode->Read(buf, count, 0, m_offset, &bytesRead, m_cred);
+        rc = m_vnode->Read(buf, count, GetFlags() & O_NONBLOCK, m_offset, &bytesRead, m_cred);
         m_vnode->Unlock();
         m_offset += bytesRead;
         *realCount = bytesRead;
-        break;
-    }
-    case FDType::TTY: {
-        if (m_tty == nullptr || m_ttyStream == TTYStream::INVALID || !m_tty->CanRead(m_ttyStream)) {
-            m_mutex.Unlock();
-            return -EBADF;
-        }
-        size_t bytesRead = 0;
-        rc = m_tty->CheckBackgroundAccess(Thread::GetCurrentThread()->GetParent(), m_ttyStream == TTYStream::OUT);
-        if (rc < 0) {
-            *realCount = 0;
-            break;
-        }
-        m_tty->Lock(m_ttyStream);
-        m_tty->Read(static_cast<char*>(buf), count, &bytesRead);
-        m_tty->Unlock(m_ttyStream);
-        *realCount = bytesRead;
-        rc = ESUCCESS;
         break;
     }
     case FDType::Directory: {
@@ -203,6 +179,15 @@ int FileDescriptor::Write(const void* buf, size_t count, size_t* realCount) {
         if (!m_open || !m_canWrite)
             return -EBADF;
         return m_pipe->Write(buf, count, realCount, (GetFlags() & O_NONBLOCK) > 0);
+    }
+
+    if (IsDevice()) {
+        if (!m_open || !m_canWrite)
+            return -EBADF;
+        size_t n = 0;
+        int rc = m_vnode->Write(buf, count, GetFlags() & O_NONBLOCK, 0, &n, m_cred);
+        *realCount = n;
+        return rc;
     }
 
     m_mutex.Lock();
@@ -238,33 +223,12 @@ int FileDescriptor::Write(const void* buf, size_t count, size_t* realCount) {
             }
             offset = attr.size;
         }
-        rc = m_vnode->Write(buf, count, 0, offset, &bytesWritten, m_cred);
+        rc = m_vnode->Write(buf, count, GetFlags() & O_NONBLOCK, offset, &bytesWritten, m_cred);
         if (bytesWritten > 0)
             FS::VFS_ClearSetID(m_vnode, m_cred);
         m_vnode->Unlock();
         m_offset = offset + bytesWritten;
         *realCount = bytesWritten;
-        break;
-    }
-    case FDType::TTY: {
-        if (m_tty == nullptr || m_ttyStream == TTYStream::INVALID || !m_tty->CanWrite(m_ttyStream)) {
-            m_mutex.Unlock();
-            return -EBADF;
-        }
-        rc = m_tty->CheckBackgroundAccess(Thread::GetCurrentThread()->GetParent(), m_ttyStream == TTYStream::OUT);
-        if (rc < 0) {
-            *realCount = 0;
-            break;
-        }
-        // Ignore offset
-        m_tty->Lock(m_ttyStream);
-        if (m_ttyStream == TTYStream::DEBUG)
-            m_tty->WriteDebug(static_cast<const char*>(buf), count);
-        else
-            m_tty->Write(static_cast<const char*>(buf), count, true);
-        m_tty->Unlock(m_ttyStream);
-        *realCount = count;
-        rc = ESUCCESS;
         break;
     }
     case FDType::Directory: {
@@ -310,16 +274,6 @@ int FileDescriptor::Seek(int64_t offset, FDOffsetStart whence, int64_t* realOffs
             break;
         endOffset = attr.size;
         currentOffset = m_offset;
-        break;
-    }
-    case FDType::TTY: {
-        if (m_tty == nullptr) {
-            rc = -EBADF;
-            break;
-        }
-        endOffset = m_tty->GetMaxSeek();
-        currentOffset = m_tty->GetCurrentSeek();
-        rc = 0;
         break;
     }
     case FDType::Directory: {
@@ -396,13 +350,6 @@ int FileDescriptor::Seek(int64_t offset, FDOffsetStart whence, int64_t* realOffs
             rc = ESUCCESS;
             break;
         }
-        case FDType::TTY:
-            if (m_tty == nullptr) {
-                m_mutex.Unlock();
-                return -EBADF;
-            }
-            rc = -ESPIPE;
-            break;
         case FDType::Directory: {
             rc = -EBADF;
             break;
@@ -444,6 +391,12 @@ int FileDescriptor::GetDents(FS::Dentry* buf, size_t count, size_t* realCount) {
 }
 
 int FileDescriptor::Ioctl(uint64_t op, void* arg, int* result, Process* currentProc) {
+    if (IsDevice()) {
+        if (!m_open)
+            return EBADF;
+        return m_vnode->Ioctl(op, arg, result, currentProc, m_cred);
+    }
+
     m_mutex.Lock();
 
     if (!m_open) {
@@ -454,13 +407,6 @@ int FileDescriptor::Ioctl(uint64_t op, void* arg, int* result, Process* currentP
     int rc;
 
     switch (m_type) {
-    case FDType::TTY:
-        if (m_tty == nullptr) {
-            m_mutex.Unlock();
-            return EBADF;
-        }
-        rc = m_tty->Ioctl(op, arg, result, currentProc);
-        break;
     case FDType::File:
     case FDType::Directory:
         if (m_vnode == nullptr) {
@@ -482,8 +428,6 @@ int FileDescriptor::Ioctl(uint64_t op, void* arg, int* result, Process* currentP
 
 EventWaitQueue* FileDescriptor::GetPollQueue(uint32_t events) {
     switch (m_type) {
-    case FDType::TTY:
-        return m_tty != nullptr ? m_tty->GetPollQueue(m_ttyStream) : nullptr;
     case FDType::File:
     case FDType::Directory:
         return m_vnode != nullptr ? m_vnode->GetPollQueue(events) : nullptr;
@@ -497,8 +441,6 @@ uint32_t FileDescriptor::PollReady(uint32_t events) {
     if (!m_open)
         return POLLNVAL;
     switch (m_type) {
-    case FDType::TTY:
-        return m_tty != nullptr ? m_tty->PollReady(m_ttyStream, events) : 0;
     case FDType::File:
     case FDType::Directory:
         return m_vnode != nullptr ? m_vnode->PollReady(events) : 0;
@@ -529,12 +471,6 @@ FS::VNode* FileDescriptor::GetVNode() {
     return m_vnode;
 }
 
-TTY* FileDescriptor::GetTTY(TTYStream* stream) {
-    if (stream != nullptr)
-        *stream = m_ttyStream;
-    return m_tty;
-}
-
 void FileDescriptor::Ref() {
     __atomic_fetch_add(&m_refCount, 1, __ATOMIC_ACQ_REL);
 }
@@ -542,4 +478,8 @@ void FileDescriptor::Ref() {
 void FileDescriptor::Unref() {
     if (__atomic_fetch_sub(&m_refCount, 1, __ATOMIC_ACQ_REL) == 1)
         delete this;
+}
+
+bool FileDescriptor::IsDevice() {
+    return m_type == FDType::File && m_vnode != nullptr && m_vnode->GetType() == FS::VType::CHR;
 }

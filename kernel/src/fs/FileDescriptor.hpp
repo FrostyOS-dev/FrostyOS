@@ -23,13 +23,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Scheduling/Event.hpp>
 #include <Scheduling/Mutex.hpp>
-
-#include <tty/TTY.hpp>
-#include <tty/TTYBackend.hpp>
+#include <Scheduling/Process.hpp>
 
 enum class FDType {
     File,
-    TTY,
     Directory,
     Pipe,
     Invalid
@@ -54,12 +51,10 @@ class FileDescriptor {
 public:
     FileDescriptor();
     FileDescriptor(Process* proc, FDType type, FS::VNode* vnode);
-    FileDescriptor(Process* proc, FDType type, TTY* tty, TTYStream stream);
     FileDescriptor(Process* proc, Pipe* pipe, bool writeEnd);
     ~FileDescriptor();
 
     void Init(Process* proc, FDType type, FS::VNode* vnode);
-    void Init(Process* proc, FDType type, TTY* tty, TTYStream stream);
 
     int Open(int flags);
     bool isOpen() const;
@@ -81,12 +76,13 @@ public:
 
     FDType GetType() const;
     FS::VNode* GetVNode();
-    TTY* GetTTY(TTYStream* stream = nullptr);
 
     void Ref();
     void Unref();
 
 private:
+    bool IsDevice();
+
     Process* m_proc; // only used by Open()
     FDType m_type;
 
@@ -94,9 +90,6 @@ private:
     bool m_open;
 
     FS::VNode* m_vnode;
-
-    TTY* m_tty;
-    TTYStream m_ttyStream;
 
     Mutex m_mutex;
     uint64_t m_refCount;

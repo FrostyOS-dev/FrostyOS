@@ -329,11 +329,6 @@ int sys_isatty(int fd) {
         return -EBADF;
     }
 
-    if (desc->GetType() == FDType::TTY) {
-        desc->Unref();
-        return 0;
-    }
-
     FS::VNode* vnode = desc->GetVNode();
     if (vnode == nullptr) {
         desc->Unref();
@@ -703,44 +698,18 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
     int rc = ResolveVNodeAt(proc, fd, path, pathLen, flags, &vnode);
     if (rc == -ENOTSUP && fd != AT_FDCWD) { // TTY
         FileDescriptor* desc = manager->Get(fd);
-        if (desc == nullptr || !desc->isOpen() || (desc->GetType() != FDType::TTY && desc->GetType() != FDType::Pipe)) {
+        if (desc == nullptr || !desc->isOpen() || desc->GetType() != FDType::Pipe) {
             if (desc != nullptr)
                 desc->Unref();
             return -EBADF;
         }
 
-        if (desc->GetVNode() != nullptr) {
-            desc->Unref();
-            return rc;
-        }
-
-        if (desc->GetType() == FDType::Pipe) {
-            desc->Unref();
-            Stat buf;
-            memset(&buf, 0, sizeof(Stat));
-            buf.mode = 0600 | ((FS::VFS_GetPosixType(FS::VType::FIFO) & 0xF) << 12);
-            buf.blksize = PIPE_BUF;
-            return UserWrite(stat, &buf, sizeof(Stat), proc) ? ESUCCESS : -EFAULT;
-        }
-
-        if (desc->GetType() != FDType::TTY) {
-            desc->Unref();
-            return -EBADF;
-        }
         desc->Unref();
-
         Stat buf;
         memset(&buf, 0, sizeof(Stat));
-
-        // dev, rdev, ino, nlink, uid, gid, atime, mtime, ctime, size, blocks are all 0
-
-        buf.mode = 0600 | ((FS::VFS_GetPosixType(FS::VType::CHR) & 0xF) << 12);
-        buf.blksize = TTY_INTERNAL_BUFFER_SIZE;
-
-        if (!UserWrite(stat, &buf, sizeof(Stat), proc))
-            return -EFAULT;
-
-        return ESUCCESS;
+        buf.mode = 0600 | ((FS::VFS_GetPosixType(FS::VType::FIFO) & 0xF) << 12);
+        buf.blksize = PIPE_BUF;
+        return UserWrite(stat, &buf, sizeof(Stat), proc) ? ESUCCESS : -EFAULT;
     }
     if (rc < 0)
         return rc;
