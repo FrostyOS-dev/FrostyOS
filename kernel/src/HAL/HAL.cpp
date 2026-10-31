@@ -63,7 +63,7 @@ void HAL_Stage2() {
     }
 }
 
-void HAL_InitialseDevices(FBConsole** newConsole) {
+void HAL_InitialiseDevices(FBConsole** newConsole) {
     g_NullDevice = new NullDevice;
     if (g_NullDevice == nullptr || 0 != g_DeviceManager->AddDevice(g_NullDevice)) {
         PANIC("Null device creation failed!");

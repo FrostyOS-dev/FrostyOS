@@ -151,7 +151,7 @@ void Kernel_Stage2(void* data) {
     g_DeviceManager->SetCred(KCred);
 
     FBConsole* console = nullptr;
-    HAL_InitialseDevices(&console);
+    HAL_InitialiseDevices(&console);
     if (console != nullptr)
         KTTY.SetConsole(console);
 
