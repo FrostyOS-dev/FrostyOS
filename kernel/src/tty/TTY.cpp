@@ -40,6 +40,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <SystemCalls/SystemCall.hpp>
 
 #define TTY_WRITE_CHUNK_SIZE 64
+#define IOCTL_TTY_GET_NAME 0x464F5354474E
 
 TTY* g_CurrentTTY = nullptr;
 TTY* g_KTTY = nullptr;
@@ -67,14 +68,12 @@ void TTY::Init() {
 int TTY::Init(DeviceManager::DeviceInfo* info) {
     if (info->manager == nullptr)
         return -ENODEV;
-    if (this != g_KTTY)
-        return -EIO;
 
     m_info = info;
 
     DeviceManager::CreateParams params{};
     params.info = info;
-    params.name = "console";
+    params.name = GetName();
     params.type = FS::VType::CHR;
     return info->manager->CreateRootItem(params);
 }
@@ -245,6 +244,15 @@ int TTY::Ioctl(size_t op, void* arg, int* result, Process* proc, const Credentia
     case FIONREAD: {
         int count = m_readBuffer.size();
         if (!UserWrite(arg, &count, sizeof(count), proc))
+            return EFAULT;
+        *result = 0;
+        return ESUCCESS;
+    }
+    case IOCTL_TTY_GET_NAME: {
+        const char* name = GetName();
+        if (name == nullptr)
+            return EIO;
+        if (!UserWrite(arg, name, strlen(name) + 1, proc))
             return EFAULT;
         *result = 0;
         return ESUCCESS;

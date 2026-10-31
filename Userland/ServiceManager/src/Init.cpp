@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    int fd = open("/dev/console", O_RDWR | O_NOCTTY);
+    int fd = open("/dev/tty0", O_RDWR | O_NOCTTY);
     if (fd < 0)
         ERROR("Open of console failed!");
 

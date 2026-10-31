@@ -34,6 +34,8 @@ public:
     void SetConsole(FBConsole* console);
     FBConsole* GetConsole();
 
+    const char* GetName() override;
+
 protected:
     void PutChars(const char* s, size_t n) override;
     void FlushHW() override;
@@ -83,6 +85,9 @@ private:
     uint64_t m_savedX;
     uint64_t m_savedY;
     FBConsole* m_console;
+
+    uint64_t m_id;
+    char m_name[24];
 };
 
 #endif /* _TTY_GRAPHICAL_HPP */

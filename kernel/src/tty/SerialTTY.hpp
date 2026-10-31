@@ -30,6 +30,8 @@ public:
     void SetSerialDevice(SerialDevice* dev);
     SerialDevice* GetSerialDevice();
 
+    const char* GetName() override;
+
 protected:
     void PutChars(const char* s, size_t n) override;
     int GetSize(winsize_t*) override;
@@ -37,7 +39,10 @@ protected:
 
 private:
     SerialDevice* m_dev;
-    uint64_t m_winSizePacked =0;
+    uint64_t m_winSizePacked = 0;
+
+    uint64_t m_id;
+    char m_name[24];
 };
 
 #endif /* _TTY_SERIAL_HPP */

@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdint.h>
 #include <stdio.h>
 
+#include <HAL/drivers/DeviceManager.hpp>
 #include <HAL/drivers/SerialDevice.hpp>
 
 #include <tty/SerialTTY.hpp>
@@ -120,6 +121,9 @@ int x86_64_SerialPort::Init() {
     x86_64_UnmaskGSI(m_irq->irq0);
 
     printf("COM%d: %d baud, 8 bit charlen, 1 stop bit, no parity\n", m_id, SERIAL_DEFAULT_BAUD);
+
+    if (g_DeviceManager != nullptr)
+        g_DeviceManager->AddDevice(m_TTY);
 
     return ESUCCESS;
 }

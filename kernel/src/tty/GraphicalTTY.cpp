@@ -26,6 +26,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Graphics/VGAFont.hpp>
 
+uint64_t g_nextGraphicalTTYID = 0;
+
 // Standard VGA-style Linux Console Colors
 #define ANSI_COLOR_BLACK   Colour(0x00, 0x00, 0x00)
 #define ANSI_COLOR_RED     Colour(0xAA, 0x00, 0x00)
@@ -92,14 +94,20 @@ static inline uint8_t ClampColour(int v) {
     return v < 0 ? 0 : (v > 255 ? 255 : static_cast<uint8_t>(v));
 }
 
-GraphicalTTY::GraphicalTTY() : TTY(TTYType::Graphical), m_savedX(0), m_savedY(0), m_console(nullptr) {
+GraphicalTTY::GraphicalTTY() : TTY(TTYType::Graphical), m_savedX(0), m_savedY(0), m_console(nullptr), m_id(-1), m_name() {
     ResetEscapeState();
     ResetAttributes();
+
+    m_id = __atomic_fetch_add(&g_nextGraphicalTTYID, 1, __ATOMIC_RELAXED);
+    snprintf(m_name, sizeof(m_name), "tty%lu", m_id);
 }
 
-GraphicalTTY::GraphicalTTY(FBConsole* console) : TTY(TTYType::Graphical), m_savedX(0), m_savedY(0), m_console(console) {
+GraphicalTTY::GraphicalTTY(FBConsole* console) : TTY(TTYType::Graphical), m_savedX(0), m_savedY(0), m_console(console), m_id(-1), m_name() {
     ResetEscapeState();
     ResetAttributes();
+
+    m_id = __atomic_fetch_add(&g_nextGraphicalTTYID, 1, __ATOMIC_RELAXED);
+    snprintf(m_name, sizeof(m_name), "tty%lu", m_id);
 }
 
 GraphicalTTY::~GraphicalTTY() {
@@ -112,6 +120,10 @@ void GraphicalTTY::SetConsole(FBConsole* console) {
 
 FBConsole* GraphicalTTY::GetConsole() {
     return m_console;
+}
+
+const char* GraphicalTTY::GetName() {
+    return m_name;
 }
 
 void GraphicalTTY::PutChars(const char* s, size_t n) {

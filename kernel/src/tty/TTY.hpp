@@ -121,6 +121,8 @@ public:
 
     void ResetTerminalState();
 
+    virtual const char* GetName() = 0;
+
 protected:
     virtual void PutChars(const char* s, size_t n) = 0;
     virtual void FlushHW() {}

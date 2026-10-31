@@ -21,8 +21,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <HAL/drivers/SerialDevice.hpp>
 
-SerialTTY::SerialTTY(SerialDevice* dev) : TTY(TTYType::Serial), m_dev(dev) {
+uint64_t g_nextSerialTTYID = 0;
 
+SerialTTY::SerialTTY(SerialDevice* dev) : TTY(TTYType::Serial), m_dev(dev), m_id(-1), m_name() {
+    m_id = __atomic_fetch_add(&g_nextSerialTTYID, 1, __ATOMIC_RELAXED);
+    snprintf(m_name, sizeof(m_name), "ttyS%lu", m_id);
 }
 
 SerialTTY::~SerialTTY() {
@@ -35,6 +38,10 @@ void SerialTTY::SetSerialDevice(SerialDevice* dev) {
 
 SerialDevice* SerialTTY::GetSerialDevice() {
     return m_dev;
+}
+
+const char* SerialTTY::GetName() {
+    return m_name;
 }
 
 void SerialTTY::PutChars(const char* s, size_t n) {
