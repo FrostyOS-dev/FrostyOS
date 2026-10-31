@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <atomic>
 #include <cstdint>
 #include <spinlock.h>
+#include <type_traits>
 
 #include "LinkedList.hpp"
 
@@ -119,7 +120,7 @@ public:
 
     bool push(const T& item) {
         const size_t currentHead = head_.load(std::memory_order_relaxed);
-        const size_t currentTail = head_.load(std::memory_order_acquire);
+        const size_t currentTail = tail_.load(std::memory_order_acquire);
 
         if (currentHead - currentTail >= Capacity)
             return false; // Buffer is full
@@ -162,6 +163,189 @@ public:
     constexpr size_t capacity() const {
         return Capacity;
     }
+};
+
+template <typename T, size_t Capacity>
+class MPSCRingBuffer {
+    static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be a power of 2");
+    static_assert(Capacity > 0, "Capacity must be greater than 0");
+    static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+
+public:
+    MPSCRingBuffer() { spinlock_init(&m_producerLock); }
+    ~MPSCRingBuffer() = default;
+
+    MPSCRingBuffer(const MPSCRingBuffer&) = delete;
+    MPSCRingBuffer& operator=(const MPSCRingBuffer&) = delete;
+
+    // For Producer
+    bool push(const T& item) {
+        ProducerGuard guard(&m_producerLock);
+
+        const size_t head = m_head.load(std::memory_order_relaxed);
+        const size_t tail = m_tail.load(std::memory_order_acquire);
+
+        if (head - tail >= Capacity) {
+            m_dropped.fetch_add(1, std::memory_order_relaxed);
+            return false;
+        }
+
+        m_buffer[head & Mask] = item;
+        m_head.store(head + 1, std::memory_order_release);
+        return true;
+    }
+
+    // For consumer
+
+    T* front() {
+        const size_t tail = m_tail.load(std::memory_order_relaxed);
+        const size_t head = m_head.load(std::memory_order_acquire);
+        if (tail == head)
+            return nullptr;
+        return &m_buffer[tail & Mask];
+    }
+
+    void pop_front() {
+        const size_t tail = m_tail.load(std::memory_order_relaxed);
+        m_tail.store(tail + 1, std::memory_order_release);
+    }
+
+    bool pop(T& item) {
+        const size_t tail = m_tail.load(std::memory_order_relaxed);
+        const size_t head = m_head.load(std::memory_order_acquire);
+        if (tail == head)
+            return false;
+
+        item = m_buffer[tail & Mask];
+        m_tail.store(tail + 1, std::memory_order_release);
+        return true;
+    }
+
+    // Either, lockless
+
+    bool empty() const {
+        return m_head.load(std::memory_order_acquire) == m_tail.load(std::memory_order_acquire);
+    }
+
+    size_t size() const {
+        const size_t t = m_tail.load(std::memory_order_acquire);
+        const size_t h = m_head.load(std::memory_order_acquire);
+        return h - t;
+    }
+
+    bool full() const { return size() >= Capacity; }
+
+    size_t dropped() const { return m_dropped.load(std::memory_order_relaxed); }
+
+    constexpr size_t capacity() const { return Capacity; }
+
+private:
+    static constexpr size_t Mask = Capacity - 1;
+
+    struct ProducerGuard {
+        spinlock_t* lock;
+        int intState;
+        
+        explicit ProducerGuard(spinlock_t* l) : lock(l) {
+            intState = Processor::DisableInterrupts();
+            spinlock_acquire(lock);
+        }
+        ~ProducerGuard() {
+            spinlock_release(lock);
+            Processor::EnableInterrupts(intState);
+        }
+
+        ProducerGuard(const ProducerGuard&) = delete;
+        ProducerGuard& operator=(const ProducerGuard&) = delete;
+    };
+
+    T m_buffer[Capacity];
+
+    // Producer-side:
+    alignas(64) std::atomic<size_t> m_head{0};
+    spinlock_t m_producerLock;
+    std::atomic<size_t> m_dropped{0};
+
+    // Consumer-side:
+    alignas(64) std::atomic<size_t> m_tail{0};
+};
+
+template <typename T, size_t Capacity>
+class BlockingRingBuffer {
+    static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be a power of 2");
+    static_assert(Capacity > 0, "Capacity must be greater than 0");
+
+public:
+    BlockingRingBuffer() = default;
+    ~BlockingRingBuffer() = default;
+
+    BlockingRingBuffer(const BlockingRingBuffer&) = delete;
+    BlockingRingBuffer& operator=(const BlockingRingBuffer&) = delete;
+
+    // Producer
+
+    void push(const T& item) {
+        m_freeSlots.Wait();
+        Store(item);
+    }
+
+    bool try_push(const T& item) {
+        if (!m_freeSlots.TryWait())
+            return false;
+        Store(item);
+        return true;
+    }
+
+    // Consumers
+
+    void pop(T& item) {
+        m_items.Wait();
+        Load(item);
+    }
+
+    bool try_pop(T& item) {
+        if (!m_items.TryWait())
+            return false;
+        Load(item);
+        return true;
+    }
+
+    // Observers
+
+    size_t size() const {
+        return m_head.load(std::memory_order_relaxed) - m_tail.load(std::memory_order_relaxed);
+    }
+    bool empty() const { return size() == 0; }
+    bool full() const { return size() >= Capacity; }
+    constexpr size_t capacity() const { return Capacity; }
+
+private:
+    static constexpr size_t Mask = Capacity - 1;
+
+    void Store(const T& item) {
+        const size_t head = m_head.load(std::memory_order_relaxed);
+        m_buffer[head & Mask] = item;
+        m_head.store(head + 1, std::memory_order_relaxed);
+        m_items.Signal();
+    }
+
+    void Load(T& item) {
+        m_consumerLock.Lock();
+        const size_t tail = m_tail.load(std::memory_order_relaxed);
+        item = m_buffer[tail & Mask];
+        m_tail.store(tail + 1, std::memory_order_relaxed);
+        m_consumerLock.Unlock();
+        m_freeSlots.Signal();
+    }
+
+    T m_buffer[Capacity];
+
+    alignas(64) std::atomic<size_t> m_head{0};
+    alignas(64) std::atomic<size_t> m_tail{0};
+
+    Mutex m_consumerLock;
+    Semaphore m_items{0, Capacity};
+    Semaphore m_freeSlots{Capacity, Capacity};
 };
 
 #endif /* _BUFFER_HPP */
