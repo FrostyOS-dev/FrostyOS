@@ -18,6 +18,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "PS2Controller.hpp"
 #include "PS2Keyboard.hpp"
 
+#include "../../DeviceManager.hpp"
+
 #include <bit>
 #include <errno.h>
 #include <stdint.h>
@@ -263,8 +265,20 @@ int PS2Controller::Init(DeviceManager::DeviceInfo* info) {
     rc = WriteData(std::bit_cast<uint8_t>(config));
     if (rc < 0)
         return rc;
+
+    DeviceManager::CreateParams params{};
+    params.info = info;
+    params.name = "ps2";
+    params.type = FS::VType::DIR;
+    params.mode = DEFAULT_DIR_MODE;
+    rc = g_DeviceManager->CreateRootItem(params);
+
+    if (rc >= 0 && m_devices[0] != nullptr)
+        rc = g_DeviceManager->AddSubDevice(info, m_devices[0]);
+    if (rc >= 0 && m_devices[1] != nullptr)
+        rc = g_DeviceManager->AddSubDevice(info, m_devices[1]);
     
-    return 0;
+    return rc;
 }
 
 int PS2Controller::InitialiseDevice(bool channel) { // false = 1, true = 2

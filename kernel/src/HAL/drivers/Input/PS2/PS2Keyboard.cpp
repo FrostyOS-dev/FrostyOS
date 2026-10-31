@@ -21,6 +21,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "../InputDevice.hpp"
 #include "../InputEvent.hpp"
 
+#include "../../DeviceManager.hpp"
+
+#include <string.h>
+
 #include <HAL/HAL.hpp>
 
 #ifdef __x86_64__
@@ -259,8 +263,19 @@ int PS2Keyboard::Init() {
 }
 
 int PS2Keyboard::Init(DeviceManager::DeviceInfo* info) {
-    (void)info;
-    return Init();
+    if (info == nullptr)
+        return -EIO;
+
+    char name[9];
+    memcpy(name, "channel", 7);
+    name[7] = m_channel ? '1' : '0';
+    name[8] = 0;
+
+    DeviceManager::CreateParams params{};
+    params.info = info;
+    params.name = name;
+    params.type = FS::VType::CHR;
+    return g_DeviceManager->CreateRootItem(params);
 }
 
 bool PS2Keyboard::HandleIRQ() {
