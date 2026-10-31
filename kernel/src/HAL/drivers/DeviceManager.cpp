@@ -17,6 +17,10 @@ extern "C" {
 DeviceManager deviceManager;
 DeviceManager* g_DeviceManager = &deviceManager;
 
+DeviceManager::DeviceManager() : m_fs(0), m_cred(), m_lastID(0), m_devices() {
+
+}
+
 void DeviceManager::ProbeDevices() {
     PCIDriver** drivers = &__pci_drivers_start;
     uint64_t driversCount = (reinterpret_cast<uint64_t>(&__pci_drivers_end) - reinterpret_cast<uint64_t>(&__pci_drivers_start)) / sizeof(PCIDriver*);
@@ -38,14 +42,13 @@ void DeviceManager::ProbeDevices() {
                 info->dev = dev;
                 info->type = DeviceType::PCIDevice;
                 info->manager = this;
+                info->parent = nullptr;
 
-                m_devicesLock.Lock();
-
-                info->id = m_lastID;
-                m_lastID++;
-
+                info->id = __atomic_fetch_add(&m_lastID, 1, __ATOMIC_RELAXED);
+                
+                m_devices.lock();
                 m_devices.insert(info);
-                m_devicesLock.Unlock();
+                m_devices.unlock();
                 break;
             }
             delete info;
@@ -54,17 +57,7 @@ void DeviceManager::ProbeDevices() {
 }
 
 int DeviceManager::InitDevices() {
-    int rc = 0;
-    m_devicesLock.Lock();
-    m_devices.Enumerate([&](DeviceInfo* info, void*) -> bool {
-        if (info == nullptr || info->dev == nullptr)
-            return true;
-
-        rc = info->dev->Init(info);
-        return rc == 0;
-    }, nullptr);
-    m_devicesLock.Unlock();
-    return rc;
+    return InitDeviceList(m_devices);
 }
 
 int DeviceManager::AddDevice(Device* dev, DeviceInfo** outInfo) {
@@ -78,13 +71,13 @@ int DeviceManager::AddDevice(Device* dev, DeviceInfo** outInfo) {
     info->manager = this;
     info->dev = dev;
     info->type = DeviceType::Device;
+    info->parent = nullptr;
 
-    m_devicesLock.Lock();
-    info->id = m_lastID;
-    m_lastID++;
-
+    info->id = __atomic_fetch_add(&m_lastID, 1, __ATOMIC_RELAXED);
+    
+    m_devices.lock();
     m_devices.insert(info);
-    m_devicesLock.Unlock();
+    m_devices.unlock();
 
     if (outInfo != nullptr)
         *outInfo = info;
@@ -92,20 +85,49 @@ int DeviceManager::AddDevice(Device* dev, DeviceInfo** outInfo) {
     return 0;
 }
 
-int DeviceManager::CreateRootItem(CreateParams& params) {
+int DeviceManager::AddSubDevice(DeviceInfo* parent, Device* dev, DeviceInfo** outInfo) {
+    if (parent == nullptr || dev == nullptr)
+        return -EINVAL;
+
+    DeviceInfo* info = new DeviceInfo;
+    if (info == nullptr)
+        return -ENOMEM;
+
+    info->manager = this;
+    info->dev = dev;
+    info->type = DeviceType::Device;
+    info->parent = parent;
+
+    info->id = __atomic_fetch_add(&m_lastID, 1, __ATOMIC_RELAXED);
+
+    parent->subDevices.lock();
+    parent->subDevices.insert(info);
+    parent->subDevices.unlock();
+
+    if (outInfo != nullptr)
+        *outInfo = info;
+
+    return 0;
+}
+
+int DeviceManager::CreateRootItem(const CreateParams& params) {
     if (params.info == nullptr || params.name == nullptr)
         return -EINVAL;
 
-    DeviceInfo*& info = params.info;
+    DeviceInfo* const& info = params.info;
 
     if (info->hasVNode)
         return -EEXIST;
+
+    if (info->parent != nullptr && !info->parent->hasVNode) // parent must have a vnode
+        return -ENOENT;
 
     if (m_fs == nullptr)
         return -ENOENT;
 
     FS::VNode* vnode = nullptr;
-    int rc = FS::VFS_Create(".", params.name, params.type, params.mode, m_fs->GetRoot(), m_cred, params.vnode, &vnode);
+    FS::VNode* cwd = info->parent == nullptr ? m_fs->GetRoot() : info->parent->rootVNode;
+    int rc = FS::VFS_Create(".", params.name, params.type, params.mode, cwd, m_cred, params.vnode, &vnode);
     if (rc < 0)
         return rc;
 
@@ -121,15 +143,15 @@ int DeviceManager::CreateRootItem(CreateParams& params) {
     return 0;
 }
 
-int DeviceManager::CreateSubItem(const char* path, CreateParams& params) {
+int DeviceManager::CreateSubItem(const char* path, const CreateParams& params) {
     return CreateSubItemWithDevice(path, params.info != nullptr ? params.info->dev : nullptr, params);
 }
 
-int DeviceManager::CreateSubItemWithDevice(const char* path, Device* dev, CreateParams& params) {
+int DeviceManager::CreateSubItemWithDevice(const char* path, Device* dev, const CreateParams& params) {
     if (params.info == nullptr || params.name == nullptr || path == nullptr)
         return -EINVAL;
 
-    DeviceInfo*& info = params.info;
+    DeviceInfo* const& info = params.info;
 
     if (m_fs == nullptr || !info->hasVNode || !info->VNodeType || path[0] == '/')
         return -ENOENT;
@@ -156,4 +178,21 @@ FS::DevTempFS* DeviceManager::GetDevFS() {
 
 void DeviceManager::SetCred(const Credential& cred) {
     m_cred = cred;
+}
+
+int DeviceManager::InitDeviceList(DeviceList& list) {
+    int rc = 0;
+    list.lock();
+    list.Enumerate([&](DeviceInfo* info, void*) -> bool {
+        if (info == nullptr || info->dev == nullptr)
+            return true;
+
+        rc = info->dev->Init(info);
+        if (rc < 0)
+            return true; // don't init sub devices if the parent failed
+        rc = InitDeviceList(info->subDevices);
+        return true; // ignore init failures
+    }, nullptr);
+    list.unlock();
+    return rc;
 }

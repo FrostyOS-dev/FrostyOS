@@ -43,6 +43,10 @@ enum class DeviceType {
 
 class DeviceManager {
 public:
+    struct DeviceInfo;
+
+    typedef LinkedList::RearInsertLinkedList<DeviceInfo> DeviceList;
+
     struct DeviceInfo {
         uint64_t id;
         DeviceManager* manager;
@@ -52,6 +56,9 @@ public:
         bool hasVNode;
         bool VNodeType; // false for file, true for dir
         FS::DevTempFSVNode* rootVNode;
+
+        DeviceList subDevices;
+        DeviceInfo* parent;
     };
 
     struct CreateParams {
@@ -64,18 +71,21 @@ public:
         FS::DevTempFSVNode** outVNode = nullptr;
     };
 
+    DeviceManager();
+
     void ProbeDevices();
     int InitDevices();
 
     int AddDevice(Device* dev, DeviceInfo** outInfo = nullptr);
+    int AddSubDevice(DeviceInfo* parent, Device* dev, DeviceInfo** outInfo = nullptr);
 
-    int CreateRootItem(CreateParams& params);
+    int CreateRootItem(const CreateParams& params);
 
     // For the following 2 functions:
     // Path must be relative within the previously created root dir for the device.
     // If vnode is non-null, it is used as the vnode for the new item, but is treated as uninitialised.
-    int CreateSubItem(const char* path, CreateParams& params);
-    int CreateSubItemWithDevice(const char* path, Device* dev, CreateParams& params);
+    int CreateSubItem(const char* path, const CreateParams& params);
+    int CreateSubItemWithDevice(const char* path, Device* dev, const CreateParams& params);
 
     void SetDevFS(FS::DevTempFS* fs);
     FS::DevTempFS* GetDevFS();
@@ -83,12 +93,13 @@ public:
     void SetCred(const Credential& cred);
 
 private:
+    int InitDeviceList(DeviceList& list);
+
     FS::DevTempFS* m_fs;
     Credential m_cred;
 
     uint64_t m_lastID; // protected by the devices lock
-    LinkedList::LockableLinkedList<DeviceInfo> m_devices;
-    Mutex m_devicesLock;
+    DeviceList m_devices;
 };
 
 extern DeviceManager* g_DeviceManager;
