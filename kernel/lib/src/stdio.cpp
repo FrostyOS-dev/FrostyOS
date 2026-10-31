@@ -15,15 +15,13 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "stdio.h"
-
 #include <assert.h>
-#include <string.h> // just used for strlen function
 #include <errno.h>
+#include <stdio.h>
+#include <string.h>
 #include <util.h>
 
 #include <tty/TTY.hpp>
-#include <tty/TTYBackend.hpp>
 
 #define max(a, b) ((a) > (b) ? (a) : (b))
 #define min(a, b) ((a) < (b) ? (a) : (b))
@@ -73,10 +71,6 @@ int internal_close(fd_t file) {
 }
 
 long internal_seek(fd_t file, long offset) {
-    if (g_CurrentTTY != nullptr) {
-        g_CurrentTTY->Seek(offset);
-        return offset;
-    }
     return -ENOSYS;
 }
 
