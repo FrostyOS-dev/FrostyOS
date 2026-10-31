@@ -213,6 +213,7 @@ namespace FS {
     int VFS_LookupPath(const char* path, VNode** vnode, VFS** vfs, VNode* cwd, const Credential& cred, bool followSymlink = true);
 
     int VFS_Create(const char* path, const char* name, VType type, mode_t mode, VNode* cwd, const Credential& cred, VNode* vnode = nullptr, VNode** outVNode = nullptr, const char* dest = nullptr);
+    int VFS_CreateSymlinkTo(const char* path, const char* name, VNode* target, bool relative, VNode* cwd, const Credential& cred, mode_t mode = DEFAULT_SYMLINK_MODE, VNode** outVNode = nullptr);
 
     int VFS_Open(const char* path, int flags, VNode** out, VNode* cwd, const Credential& cred);
     int VFS_OpenExec(const char* path, VNode** out, VAttr* outAttr, VNode* cwd, const Credential& cred);
@@ -222,6 +223,7 @@ namespace FS {
     int VFS_MapFile(void* hint, size_t length, VMM::Protection prot, int flags, bool user, VNode* vnode, uint64_t offset, void** addr, VMM::VMM* vmm, const Credential& cred);
 
     int VFS_BuildPath(VNode* vnode, char* buf, size_t size, const Credential& cred);
+    int VFS_BuildRelativePath(VNode* fromDir, VNode* to, char* buf, size_t size, const Credential& cred);
 
     int VFS_Chmod(VNode* vnode, mode_t mode, const Credential& cred);
     int VFS_Chown(VNode* vnode, uid_t uid, gid_t gid, const Credential& cred);

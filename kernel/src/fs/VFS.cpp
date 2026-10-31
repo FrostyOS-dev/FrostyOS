@@ -522,28 +522,47 @@ namespace FS {
         if (type != VType::DIR && type != VType::LNK && cred.euid != 0 && !InGroup(attr.gid, cred))
             attr.mode &= (uint16_t)~S_ISGID;
         rc = vnode->Create(parent, name, nameLen, &attr, cred);
-
-        if (type == VType::LNK) {
-            if (rc < 0) {
-                parent->Unlock();
-                if (createdVNode)
-                    delete vnode;
-                return rc;
-            }
-            rc = vnode->Symlink(dest, strlen(dest), cred);
-        }
-
-        parent->Unlock();
         if (rc < 0) {
+            parent->Unlock();
             if (createdVNode)
                 delete vnode;
             return rc;
         }
 
+        if (type == VType::LNK) {
+            rc = vnode->Symlink(dest, strlen(dest), cred);
+            if (rc < 0) {
+                parent->Unlink(vnode, cred);
+                return rc;
+            }
+        }
+
+        parent->Unlock();
+
         if (outVNode != nullptr)
             *outVNode = vnode;
 
         return ESUCCESS;
+    }
+
+    int VFS_CreateSymlinkTo(const char* path, const char* name, VNode* target, bool relative, VNode* cwd, const Credential& cred, mode_t mode, VNode** outVNode) {
+        if (path == nullptr || name == nullptr || target == nullptr)
+            return -EINVAL;
+
+        VNode* dir = nullptr;
+        VFS* vfs = nullptr;
+        int rc = VFS_LookupPath(path, &dir, &vfs, cwd, cred);
+        if (rc < 0)
+            return rc;
+        VNodeRef dirRef(dir);
+
+        char dest[PATH_MAX + 1];
+        rc = relative ? VFS_BuildRelativePath(dir, target, dest, sizeof(dest), cred) : VFS_BuildPath(target, dest, sizeof(dest), cred);
+
+        if (rc < 0)
+            return rc;
+
+        return VFS_Create(".", name, VType::LNK, mode, dir, cred, nullptr, outVNode, dest);
     }
 
     int VFS_Open(const char* path, int flags, VNode** out, VNode* cwd, const Credential& cred) {
@@ -662,6 +681,53 @@ namespace FS {
         return ESUCCESS;
     }
 
+    static VNode* CanonNode(VNode* n) { // canonical form: outermost covered vnode
+        while (n != nullptr) {
+            VFS* v = n->GetVFS();
+            if (v == nullptr || n != v->GetRoot())
+                break;
+            VNode* covered = v->GetCoveredVNode();
+            if (covered == nullptr)
+                break; // global root
+            n = covered;
+        }
+        return n;
+    }
+
+    static VNode* ParentNode(VNode* n) { // parent of canonical node, also canonical
+        VNode* p = n->GetParent();
+        return p == nullptr ? nullptr : CanonNode(p);
+    }
+
+    static int NodeDepth(VNode* n, VNode* root) {
+        int d = 0;
+        while (n != root) {
+            n = ParentNode(n);
+            if (n == nullptr || ++d > PATH_MAX)
+                return -1;
+        }
+        return d;
+    }
+
+    static int PrependPathUpTo(VNode* node, VNode* ancestor, char* buf, char*& ptr) {
+        while (node != ancestor) {
+            char nameBuf[NAME_MAX + 1];
+            size_t nameLen = 0;
+            int rc = node->GetName(nameBuf, NAME_MAX + 1, &nameLen);
+            if (rc < 0)
+                return rc;
+            if (ptr - buf < static_cast<ptrdiff_t>(nameLen + 1))
+                return -ERANGE;
+            ptr -= nameLen;
+            memcpy(ptr, nameBuf, nameLen);
+            *--ptr = '/';
+            node = ParentNode(node);
+            if (node == nullptr)
+                return -ENOENT;
+        }
+        return ESUCCESS;
+    }
+
     int VFS_BuildPath(VNode* vnode, char* buf, size_t size, const Credential& cred) {
         if (vnode == nullptr || buf == nullptr || size == 0)
             return -EINVAL;
@@ -669,11 +735,13 @@ namespace FS {
         NSLockGuard ns;
         if (vnode->IsUnlinked())
             return -ENOENT;
-
         if (g_rootVFS == nullptr || g_rootVFS->GetRoot() == nullptr)
             return -ENOSYS;
 
-        if (vnode == g_rootVFS->GetRoot()) { // Fast path: the VNode is the absolute root
+        VNode* root = g_rootVFS->GetRoot();
+        VNode* node = CanonNode(vnode);
+
+        if (node == root) { // Fast path: the VNode is the absolute root
             if (size < 2)
                 return -ERANGE;
             buf[0] = '/';
@@ -684,45 +752,83 @@ namespace FS {
         // Start writing from the end of the buffer
         char* ptr = buf + size - 1;
         *ptr = '\0';
-
-        VNode* current = vnode;
-
-        while (current != g_rootVFS->GetRoot()) {
-            char nameBuf[NAME_MAX + 1];
-            size_t nameLen = 0;
-
-            int rc = current->GetName(nameBuf, NAME_MAX + 1, &nameLen);
-            if (rc < 0)
-                return rc;
-
-            if (ptr - buf < static_cast<ptrdiff_t>(nameLen + 1))
-                return -ERANGE;
-
-            ptr -= nameLen;
-            memcpy(ptr, nameBuf, nameLen);
-
-            ptr--;
-            *ptr = '/';
-
-            // Move up the tree
-            VNode* parent = current->GetParent();
-
-            if (parent == nullptr) { // No parent, maybe root of a mounted VFS?
-                VFS* vfs = current->GetVFS();
-                if (vfs != nullptr)
-                    parent = vfs->GetCoveredVNode();
-
-                if (parent == nullptr) // still no parent, disconnected vnode
-                    return -ENOENT;
-            }
-
-            current = parent;
-        }
+        int rc = PrependPathUpTo(node, root, buf, ptr);
+        if (rc < 0)
+            return rc;
 
         // Shift the completely built path to the start of buf
-        size_t pathLen = static_cast<size_t>((buf + size - 1) - ptr);
-        memmove(buf, ptr, pathLen + 1);
+        memmove(buf, ptr, static_cast<size_t>((buf + size - 1) - ptr) + 1);
+        return ESUCCESS;
+    }
 
+    int VFS_BuildRelativePath(VNode* fromDir, VNode* to, char* buf, size_t size, const Credential& cred) {
+        if (fromDir == nullptr || to == nullptr || buf == nullptr || size == 0)
+            return -EINVAL;
+
+        NSLockGuard ns;
+        if (fromDir->IsUnlinked() || to->IsUnlinked())
+            return -ENOENT;
+        if (g_rootVFS == nullptr || g_rootVFS->GetRoot() == nullptr)
+            return -ENOSYS;
+
+        VNode* root = g_rootVFS->GetRoot();
+        VNode* a = CanonNode(fromDir);
+        VNode* b = CanonNode(to);
+
+        int da = NodeDepth(a, root);
+        int db = NodeDepth(b, root);
+        if (da < 0 || db < 0)
+            return -ENOENT;
+
+        size_t ups = 0;
+        VNode* x = a;
+        VNode* y = b;
+        
+        while (da > db) {
+            x = ParentNode(x);
+            da--;
+            ups++;
+        }
+
+        while (db > da) {
+            y = ParentNode(y);
+            db--;
+        }
+
+        while (x != y) {
+            x = ParentNode(x);
+            y = ParentNode(y);
+            ups++;
+        }
+
+        char tail[PATH_MAX + 1];
+        char* tp = tail + PATH_MAX;
+        *tp = '\0';
+        int rc = PrependPathUpTo(b, x, tail, tp);
+        if (rc < 0)
+            return rc;
+        size_t tailLen = static_cast<size_t>((tail + PATH_MAX) - tp);
+
+        size_t pos = 0;
+        auto put = [&](const char* s, size_t n) -> bool {
+            if (pos + n + 1 > size)
+                return false;
+            memcpy(buf + pos, s, n);
+            pos += n;
+            return true;
+        };
+
+        bool ok = true;
+        if (ups == 0)
+            ok = tailLen == 0 ? put(".", 1) : put(tp + 1, tailLen - 1);
+        else {
+            for (size_t i = 0; ok && i < ups; i++)
+                ok = (i == 0 || put("/", 1)) && put("..", 2);
+            ok = ok && put(tp, tailLen);
+        }
+        if (!ok)
+            return -ERANGE;
+        buf[pos] = '\0';
         return ESUCCESS;
     }
 
