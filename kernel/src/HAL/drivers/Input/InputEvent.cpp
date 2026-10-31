@@ -15,13 +15,18 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "InputDevice.hpp"
 #include "InputEvent.hpp"
+
+#include "../DeviceManager.hpp"
 
 #include <Function.hpp>
 #include <stdint.h>
 
 #include <DataStructures/AVLTree.hpp>
 #include <DataStructures/LinkedList.hpp>
+
+#include <fs/VFS.hpp>
 
 #include <Scheduling/Thread.hpp>
 
@@ -35,7 +40,7 @@ namespace Input {
         static_cast<EventManager*>(data)->WorkerThreadMain();
     }
 
-    EventManager::EventManager() : m_nextEventSourceID(0), m_eventSources() {
+    EventManager::EventManager() : m_nextEventSourceID(0), m_eventSources(), m_pendingEvents(), m_eventSemaphore(), m_workerThread(nullptr), m_rootVNode(nullptr) {
 
     }
 
@@ -50,6 +55,28 @@ namespace Input {
 
         g_EventManager = this;
         return true;
+    }
+
+    int EventManager::FullInit() {
+        int rc = g_DeviceManager->CreateRootDir("input", DEFAULT_DIR_MODE, &m_rootVNode);
+        if (rc < 0)
+            return rc;
+
+        m_eventSources.lock();
+        m_eventSources.forEach([&](EventSourceID id, EventSource* s) -> bool {
+            if (s == nullptr || s->device == nullptr)
+                return true;
+
+            char name[32];
+            int len = snprintf(name, 32, "event%lu", static_cast<uint64_t>(id));
+            if (len == 0)
+                return true; // no name, skip it
+
+            rc = g_DeviceManager->CreateSymlink(name, s->device->GetInfo(), DEFAULT_SYMLINK_MODE, &s->vnode, m_rootVNode);
+            return rc == 0;
+        });
+        m_eventSources.unlock();
+        return rc;
     }
 
     EventSourceID EventManager::RegisterEventSource(EventSourceType type, InputDevice* device) {
@@ -145,6 +172,8 @@ namespace Input {
             return false;
 
         EventSource* s = FindSource(l.m_sourceID);
+        if (s == nullptr)
+            return false;
         s->lock.Lock();
 
         if (l.m_prev != nullptr)

@@ -77,13 +77,15 @@ void HAL_InitialseDevices(FBConsole** newConsole) {
     {
         using namespace Input;
         EventManager* mgr = new EventManager;
-        if (!mgr->Init())
+        if (!mgr->Init() || g_EventManager == nullptr)
             PANIC("Input EventManager init failed!");
     }
 
     g_DeviceManager->AddDevice(g_KTTY);
 
     g_DeviceManager->InitDevices();
+
+    Input::g_EventManager->FullInit();
 
     Video::Video_FullInit(newConsole);
 

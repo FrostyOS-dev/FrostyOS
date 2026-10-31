@@ -24,6 +24,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <DataStructures/AVLTree.hpp>
 #include <DataStructures/Buffer.hpp>
 
+#include <fs/DevTempFS/DevTempFS.hpp>
+
 #include <Scheduling/Mutex.hpp>
 #include <Scheduling/Semaphore.hpp>
 
@@ -80,6 +82,7 @@ namespace Input {
         ~EventManager();
 
         bool Init();
+        int FullInit(); // initialise nodes in the devfs
 
         EventSourceID RegisterEventSource(EventSourceType type, InputDevice* device);
         InputDevice* GetDevice(EventSourceID id, EventSourceType* type = nullptr);
@@ -102,6 +105,7 @@ namespace Input {
             EventSourceID id;
             EventSourceType type;
             InputDevice* device;
+            FS::DevTempFSVNode* vnode = nullptr;
             Mutex lock; // protects only the listener list
             EventListener* head = nullptr;
             EventListener* tail = nullptr;
@@ -116,6 +120,8 @@ namespace Input {
         Semaphore m_eventSemaphore;
 
         Thread* m_workerThread;
+
+        FS::DevTempFSVNode* m_rootVNode;
     };
 
     bool InitTTYEvents();

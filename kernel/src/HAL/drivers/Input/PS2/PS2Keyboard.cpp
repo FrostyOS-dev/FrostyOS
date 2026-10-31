@@ -266,6 +266,8 @@ int PS2Keyboard::Init(DeviceManager::DeviceInfo* info) {
     if (info == nullptr)
         return -EIO;
 
+    m_info = info;
+
     char name[9];
     memcpy(name, "channel", 7);
     name[7] = m_channel ? '1' : '0';

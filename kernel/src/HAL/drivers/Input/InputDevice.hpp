@@ -29,8 +29,8 @@ enum class InputDeviceType {
 
 class InputDevice : public Device {
 public:
-    InputDevice() : m_deviceType(InputDeviceType::Unknown), m_eventSourceID(UINT64_MAX) {}
-    InputDevice(InputDeviceType type) : m_deviceType(InputDeviceType::Keyboard), m_eventSourceID(UINT64_MAX) {}
+    InputDevice() : m_info(nullptr), m_deviceType(InputDeviceType::Unknown), m_eventSourceID(UINT64_MAX) {}
+    InputDevice(InputDeviceType type) : m_info(nullptr), m_deviceType(type), m_eventSourceID(UINT64_MAX) {}
     virtual ~InputDevice() override {};
 
     virtual int Init(DeviceManager::DeviceInfo* info) override = 0;
@@ -43,7 +43,12 @@ public:
         m_deviceType = type;
     }
 
+    virtual DeviceManager::DeviceInfo* GetInfo() {
+        return m_info;
+    }
+
 protected:
+    DeviceManager::DeviceInfo* m_info;
     InputDeviceType m_deviceType;
     Input::EventSourceID m_eventSourceID;
 };
