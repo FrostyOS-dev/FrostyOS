@@ -15,27 +15,29 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _TTY_SERIAL_BACKEND_HPP
-#define _TTY_SERIAL_BACKEND_HPP
+#ifndef _TTY_SERIAL_HPP
+#define _TTY_SERIAL_HPP
 
-#include "../TTYBackend.hpp"
+#include "TTY.hpp"
 
-#include <HAL/drivers/SerialDevice.hpp>
+class SerialDevice;
 
-class TTYBackendSerial : public TTYBackend {
+class SerialTTY : public TTY {
 public:
-    TTYBackendSerial();
-    TTYBackendSerial(SerialDevice* dev);
-
-    char ReadChar() override;
-    bool ReadCharNoBlock(char* out) override;
-
-    void WriteChar(char c) override;
+    SerialTTY(SerialDevice* dev);
+    ~SerialTTY() override;
 
     void SetSerialDevice(SerialDevice* dev);
+    SerialDevice* GetSerialDevice();
+
+protected:
+    void PutChars(const char* s, size_t n) override;
+    int GetSize(winsize_t*) override;
+    int SetSize(const winsize_t*) override;
 
 private:
-    SerialDevice* m_device;
+    SerialDevice* m_dev;
+    uint64_t m_winSizePacked =0;
 };
 
-#endif /* _TTY_SERIAL_BACKEND_HPP */
+#endif /* _TTY_SERIAL_HPP */

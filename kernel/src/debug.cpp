@@ -41,6 +41,12 @@ int64_t debug_puts(const char* str) {
 #endif
 }
 
+int64_t debug_write(const char* buf, size_t n) {
+    for (size_t i = 0; i < n; i++)
+        debug_putc(buf[i]);
+    return n;
+}
+
 #ifdef __cplusplus
 }
 #endif

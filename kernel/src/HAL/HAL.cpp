@@ -25,17 +25,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "drivers/BasicDevices/NullDevice.hpp"
 #include "drivers/BasicDevices/ZeroDevice.hpp"
 
+#include "drivers/Input/PS2/PS2Controller.hpp"
+
+#include "drivers/Input/InputEvent.hpp"
+
 #include "drivers/Video/VideoDevice.hpp"
 
 #include "drivers/DeviceManager.hpp"
 #include "drivers/PCI.hpp"
-#include "drivers/Input/PS2/PS2Controller.hpp"
-
-#include <stdio.h>
-#include <string.h>
 
 #ifdef __x86_64__
 #include <arch/x86_64/interrupts/IRQ.hpp>
+
+#include <arch/x86_64/interrupts/APIC/IOAPIC.hpp>
 #endif
 
 #include <tty/TTY.hpp>
@@ -54,6 +56,11 @@ void HAL_Stage2() {
     PCI_Walk();
 
     g_DeviceManager->ProbeDevices();
+
+    if (FADT_DoesPS2ControllerExist()) {
+        g_PS2Controller = new PS2Controller;
+        g_DeviceManager->AddDevice(g_PS2Controller);
+    }
 }
 
 void HAL_InitialseDevices(FBConsole** newConsole) {
@@ -67,20 +74,20 @@ void HAL_InitialseDevices(FBConsole** newConsole) {
         PANIC("Zero device creation failed!");
     }
 
+    {
+        using namespace Input;
+        EventManager* mgr = new EventManager;
+        if (!mgr->Init())
+            PANIC("Input EventManager init failed!");
+    }
+
     g_DeviceManager->AddDevice(g_KTTY);
 
     g_DeviceManager->InitDevices();
 
     Video::Video_FullInit(newConsole);
 
-    if (FADT_DoesPS2ControllerExist()) {
-        PS2Controller* controller = new PS2Controller;
-        int rc = controller->Init();
-        if (rc < 0)
-            dbgprintf("PS2Controller init failed: %s\n", strerror(-rc));
-        else
-            g_PS2Controller = controller;
-    }
+    Input::InitTTYEvents();
 }
 
 struct HAL_IntHandlerData {
@@ -94,15 +101,22 @@ struct HAL_IntHandlerData {
 void HAL_GSIHandlerWrapper(x86_64_ISR_Frame* frame, void* ctx) {
     HAL_IntHandlerData* handler = static_cast<HAL_IntHandlerData*>(ctx);
     if (handler != nullptr)
-        handler->handler(ctx);
+        handler->handler(handler->ctx);
 }
 
-void* HAL_RegisterIntHandler(uint32_t GSI, GSIHandler_t handler, void* ctx) {
+void* HAL_RegisterIntHandler(uint32_t GSI, GSIHandler_t handler, void* ctx, bool unmask) {
     HAL_IntHandlerData* data = new HAL_IntHandlerData{GSI, handler, ctx};
-    if (x86_64_RegisterGSIHandler(GSI, HAL_GSIHandlerWrapper, data))
+    if (x86_64_RegisterGSIHandler(GSI, HAL_GSIHandlerWrapper, data)) {
+        if (unmask)
+            x86_64_UnmaskGSI(GSI);
         return data;
+    }
     delete data;
     return nullptr;
+}
+
+void* HAL_RegisterLegacyIntHandler(uint8_t irq, GSIHandler_t handler, void* ctx, bool unmask) {
+    return HAL_RegisterIntHandler(x86_64_GetGSIFromSource(irq), handler, ctx, unmask);
 }
 
 bool HAL_RemoveIntHandler(void* data) {

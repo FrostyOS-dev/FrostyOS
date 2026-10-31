@@ -18,27 +18,28 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _TTY_HPP
 #define _TTY_HPP
 
+#include <spinlock.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #include <DataStructures/Buffer.hpp>
 
-#include <HAL/drivers/Video/VideoDevice.hpp>
-
+#include <HAL/drivers/Device.hpp>
 #include <HAL/drivers/DeviceManager.hpp>
+
+#include <HAL/Processor.hpp>
 
 #include <Scheduling/Event.hpp>
 
-#include "FBConsole.hpp"
 #include "Termios.hpp"
-#include "TTYBackend.hpp"
 
 #define DEBUG_MIRRORING_DEFAULT_ENABLED true
 
-#define ANSI_MAX_PARAMS 16
-
 #define TTY_INTERNAL_BUFFER_SIZE 512
 #define TTY_READ_BUFFER_SIZE 4096
+
+#define TTY_ENTRY_EOL 0x100
+#define TTY_ENTRY_EOF 0x200
 
 enum class TTYStream {
     IN,
@@ -53,6 +54,12 @@ enum class TTYType {
     Invalid
 };
 
+enum class TTYAccess {
+    Read,
+    Write,
+    Change
+};
+
 class Process;
 
 typedef int (*termiosCallback)(void* data, termios_t* termios);
@@ -63,7 +70,7 @@ public:
     TTY(TTYType type);
     virtual ~TTY();
 
-    virtual void Init();
+    void Init();
 
     int Init(DeviceManager::DeviceInfo* info) override;
 
@@ -79,32 +86,11 @@ public:
     virtual EventWaitQueue* GetPollQueue(uint32_t events) override;
     virtual uint32_t PollReady(uint32_t events) override;
 
-    int Read(char* buf, size_t size, size_t* realCount = nullptr);
+    int Read(char* buf, size_t size, size_t* realCount = nullptr, bool nonBlock = false);
     int Write(const char* buf, size_t size, bool flush = false, size_t* realCount = nullptr);
     int WriteDebug(const char* buf, size_t size);
 
-    void HandleInput(char c); // Interrupt safe, only 1 user
-
-    void SetCursor(uint64_t x, uint64_t y);
-    void GetCursor(uint64_t& x, uint64_t& y);
-
-    void SetInputBackend(TTYBackend* backend);
-    void SetOutputBackend(TTYBackend* backend);
-    void SetDebugBackend(TTYBackend* backend);
-
-    TTYBackend* GetInputBackend() const;
-    TTYBackend* GetOutputBackend() const;
-    TTYBackend* GetDebugBackend() const;
-
-    void Seek(uint64_t pos);
-    virtual uint64_t GetMaxSeek() const; // returns UINT64_MAX if unknown
-    virtual uint64_t GetCurrentSeek() const; // returns UINT64_MAX if unknown
-
-    // reads/writes from/to arg are assumed to be from/to a usermode region
-    int Ioctl(uint64_t op, void* arg, int* result, Process* currentProc);
-
-    virtual int SetSize(const winsize_t* size);
-    virtual int GetSize(winsize_t* size);
+    void InputBytes(const char* data, size_t n);
 
     void FlushOutput();
 
@@ -120,119 +106,69 @@ public:
     TTYType GetType() const;
     void SetType(TTYType type);
 
-    void SetTermiosCallback(termiosCallback callback, void* data);
-
-    EventWaitQueue* GetPollQueue(TTYStream s);
-    uint32_t PollReady(TTYStream s, uint32_t events);
-
     static bool CanRead(TTYStream stream);
     static bool CanWrite(TTYStream stream);
 
     int64_t GetSession() const;
     int64_t GetForegroundPGID() const;
     bool AttachSession(Process* leader);
+    bool TryAttachSession(Process* leader);
     void DetachSession();
-    int CheckBackgroundAccess(Process* proc, bool write);
+    int CheckBackgroundAccess(Process* proc, TTYAccess kind);
+
+    bool ApplicationCursorKeys() const;
+    void SetApplicationCursorKeys(bool on);
+
+    void ResetTerminalState();
 
 protected:
-    virtual int InternalWrite(const char* buf, size_t size, bool flush = false);
+    virtual void PutChars(const char* s, size_t n) = 0;
+    virtual void FlushHW() {}
+    virtual uint64_t GetColumn() { return 0; }
+    virtual int OnTermiosChanged(const termios_t&) { return 0; }
+    virtual int GetSize(winsize_t*) = 0;
+    virtual int SetSize(const winsize_t*) = 0;
+    virtual void ResetOutputState() {}
 
     uint8_t EchoChar(char c); // echo c per termios flags, returns columns occupied
     bool EraseBufferedChar(); // remove last char of the pending line and erase its echo
-    uint64_t GetOutputColumn();
-
-    bool TakePendingEOF();
 
     void HandleInputLocked(char c);
     void ApplyTermios(const termios_t& t, bool flushInput);
     void FlushInput();
     void FlushInputLocked();
+    void CommitLineLocked();
+    void RetagPendingAsLineLocked();
 
-    TTYBackend* m_inputBackend;
-    TTYBackend* m_outputBackend;
-    TTYBackend* m_debugBackend;
-    termios_t m_termios;
-    termiosCallback m_termiosCallback;
-    void* m_termiosCallbackData;
+    termios_t DefaultTermios();
+
     bool m_debugMirroring;
+
+    termios_t m_termios;
 
     char m_internalBuffer[TTY_INTERNAL_BUFFER_SIZE];
     uint8_t m_internalWidths[TTY_INTERNAL_BUFFER_SIZE];
     uint64_t m_internalBufferOffset;
-    uint32_t m_eofPending;
 
     // interrupt-safe SPMC ringbuffer
-    RingBuffer<char, TTY_READ_BUFFER_SIZE> m_readBuffer;
+    RingBuffer<uint16_t, TTY_READ_BUFFER_SIZE> m_readBuffer;
+    Mutex m_readLock;
 
     EventWaitQueue m_inputWaitQueue;
 
     int64_t m_session;
     int64_t m_foregroundPGID;
+
     spinlock_t m_inputLock;
+    mutable spinlock_t m_outputLock;
+    mutable int m_outputIntState;
 
     DeviceManager::DeviceInfo* m_info;
 
+    bool m_appCursor = false;
+
 private:
     TTYType m_type;
-};
-
-class GraphicalTTY : public TTY {
-public:
-    GraphicalTTY();
-    GraphicalTTY(FBConsole* console);
-    ~GraphicalTTY() override;
-
-    uint64_t GetMaxSeek() const override;
-    uint64_t GetCurrentSeek() const override;
-    
-    int SetSize(const winsize_t* size) override;
-    int GetSize(winsize_t* size) override;
-    
-    void SetConsole(FBConsole* console);
-    FBConsole* GetConsole();
-
-protected:
-    int InternalWrite(const char* buf, size_t size, bool flush = false) override;
-
-private:
-    enum class EscState : uint8_t {
-        Ground,
-        Escape,
-        CSI,
-        OSC,
-        OSCEscape,
-        Charset
-    };
-
-    struct EscapeState {
-        EscState state;
-        int params[ANSI_MAX_PARAMS];
-        int paramCount;
-        int current;
-        bool hasCurrent;
-        bool ignore;
-        char privateMarker;
-    } m_escapeState;
-
-    struct TextAttributes {
-        Colour fg;
-        Colour bg;
-        int fgBase;
-        bool bold;
-        bool reverse;
-    } m_attr;
-
-    void ResetEscapeState();
-    void ResetAttributes();
-    void ApplyAttributes();
-    void ProcessChar(char c);
-    void PushParam();
-    void ExecuteCSI(char final);
-    void HandleSGR();
-
-    uint64_t m_savedX;
-    uint64_t m_savedY;
-    FBConsole* m_console;
 };
 
 extern TTY* g_CurrentTTY;

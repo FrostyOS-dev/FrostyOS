@@ -118,6 +118,22 @@ Thread* Thread::GetCurrentThread() {
     return thread;
 }
 
+Thread* Thread::CreateKernelThread(ThreadEntryPoint entry) {
+    Thread* t = new Thread(entry, g_KProcess);
+    if (!t->Init()) {
+        delete t;
+        return nullptr;
+    }
+    g_KProcess->AddThread(t);
+    Scheduler::ScheduleThread(t);
+    return t;
+}
+
+[[noreturn]] void Thread::ExitCurrentKernelThread() {
+    ExitCurrentThread(0, true, false, false);
+    PANIC("Failed to exit current kernel thread");
+}
+
 void Thread::SetEntryPoint(ThreadEntryPoint entryPoint) {
     m_EntryPoint = entryPoint;
 }

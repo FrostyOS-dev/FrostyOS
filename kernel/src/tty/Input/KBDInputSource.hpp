@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024-2026  Frosty515
+Copyright (©) 2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,14 +15,27 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "DebugBackend.hpp"
+#ifndef _TTY_KBD_INPUT_SOURCE_HPP
+#define _TTY_KBD_INPUT_SOURCE_HPP
 
-#include <debug.h>
+#include "KBDTranslator.hpp"
 
-TTYBackendDebug::TTYBackendDebug() : TTYBackend(TTYBackendType::Debug) {
-    
-}
+#include <HAL/drivers/Input/InputEvent.hpp>
 
-void TTYBackendDebug::WriteChar(char c) {
-    debug_putc(c);
-}
+class KeyboardInputSource {
+public:
+    KeyboardInputSource(Input::EventSourceID source);
+    ~KeyboardInputSource();
+
+private:
+    static bool GenericEventHandler(const Input::Event* e, void* ctx);
+
+    bool EventHandler(const Input::Event* e);
+
+    Input::EventSourceID m_source;
+    Input::EventListener m_eventListener;
+
+    KBDTranslator m_translator;
+};
+
+#endif /* _TTY_KBD_INPUT_SOURCE_HPP */

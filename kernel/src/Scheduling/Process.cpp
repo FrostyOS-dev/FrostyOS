@@ -41,7 +41,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <SystemCalls/File.hpp>
 #include <SystemCalls/Signal.hpp>
 
-#include <tty/TTYBackend.hpp>
 #include <tty/TTY.hpp>
 
 

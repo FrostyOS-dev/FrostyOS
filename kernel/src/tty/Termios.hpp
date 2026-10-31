@@ -25,6 +25,7 @@ typedef unsigned int speed_t;
 typedef unsigned int tcflag_t;
 
 #define ISIG    0000001
+#define OPOST   0000001
 #define ICANON  0000002
 #define ONLCR   0000004
 #define ECHO    0000010

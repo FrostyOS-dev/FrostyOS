@@ -44,10 +44,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <Scheduling/Scheduler.hpp>
 #include <Scheduling/Thread.hpp>
 
-#include <tty/backends/DebugBackend.hpp>
-#include <tty/backends/FBConsoleBackend.hpp>
-
 #include <tty/FBConsole.hpp>
+#include <tty/GraphicalTTY.hpp>
 #include <tty/TTY.hpp>
 
 #ifdef __x86_64__
@@ -58,9 +56,6 @@ KernelParams g_kernelParams;
 
 Colour g_KBackgroundColour;
 Colour g_KForegroundColour;
-
-TTYBackendFBConsole g_KFBConBackend;
-TTYBackendDebug g_KDebugBackend;
 
 GraphicalTTY KTTY;
 
@@ -84,11 +79,8 @@ void StartKernel() {
     g_KForegroundColour = Colour(255, 255, 255);
 
     assert(0 == FBConsole_EarlyInit(&g_kernelParams.framebuffer));
-    g_KFBConBackend.Init(g_KFBConsole);
 
     KTTY.Init();
-    KTTY.SetOutputBackend(&g_KFBConBackend);
-    KTTY.SetDebugBackend(&g_KDebugBackend);
     KTTY.SetConsole(g_KFBConsole);
 
     g_CurrentTTY = &KTTY;
@@ -160,15 +152,13 @@ void Kernel_Stage2(void* data) {
 
     FBConsole* console = nullptr;
     HAL_InitialseDevices(&console);
-    if (console != nullptr) {
+    if (console != nullptr)
         KTTY.SetConsole(console);
-        g_KFBConBackend.SetConsole(console);
-    }
 
     char const* argv[] = {"init", nullptr};
     char const* env[] = {nullptr};
     if (0 != CreateELFProcess("/data/bin/init", g_KProcess, (char**)argv, (char**)env))
         PANIC("Failed to start init!");
 
-    Thread::ExitCurrentThread(0, true, false, false);
+    Thread::ExitCurrentKernelThread();
 }

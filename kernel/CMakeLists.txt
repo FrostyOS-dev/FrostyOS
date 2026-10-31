@@ -138,6 +138,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/BasicDevices/ZeroDevice.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Input/PS2/PS2Controller.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Input/PS2/PS2Keyboard.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Input/InputEvent.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/FBVideo/FBDisplay.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/FBVideo/FBPager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/FBVideo/FBVideoDevice.cpp
@@ -172,12 +173,12 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Signal.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/SystemCall.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Time.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/DebugBackend.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/FBConsoleBackend.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/backends/SerialBackend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/Input/KBDInputSource.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/Input/KBDTranslator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/FBConsole.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/GraphicalTTY.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/SerialTTY.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/Termios.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTYBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/TTY.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/debug.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/kernel.cpp

@@ -33,6 +33,10 @@ public:
         m_semaphore.Signal();
     }
 
+    inline bool TryLock() {
+        return m_semaphore.TryWait();
+    }
+
 private:
     Semaphore m_semaphore;
 };

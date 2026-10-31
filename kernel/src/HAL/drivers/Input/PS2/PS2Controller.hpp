@@ -21,27 +21,53 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stddef.h>
 #include <stdint.h>
 
+#include "../InputDevice.hpp"
+
 #include "../../Device.hpp"
+
+class PS2Controller;
+
+class PS2Device : public InputDevice {
+public:
+    PS2Device(InputDeviceType type, PS2Controller* controller, bool channel) : InputDevice(type), m_controller(controller), m_channel(channel) {}
+    virtual ~PS2Device() {}
+
+    virtual int Init() = 0;
+    virtual int Init(DeviceManager::DeviceInfo* info) override = 0;
+
+    bool GetChannel() const { return m_channel; }
+
+protected:
+    bool DataAvailable();
+    uint8_t ReadData();
+
+    PS2Controller* m_controller;
+    bool m_channel;
+};
 
 class PS2Controller : public Device {
 public:
     PS2Controller();
     ~PS2Controller();
 
-    int Init() override;
-    int Destroy() override;
+    int Init(DeviceManager::DeviceInfo* info) override;
+
+    static uint8_t GetStatus();
+    static int ReadData(uint8_t* out, size_t attempts = 100000);
 
 private:
     int InitialiseDevice(bool channel); // false = 1, true = 2
     int SendCommandToDevice(bool channel, uint8_t command, bool expectAck);
     int ShouldResend();
 
-    int SendCommand(uint8_t command);
-    int ReadData(uint8_t* out, size_t attempts = 100000);
-    int WriteData(uint8_t data);
-    uint8_t GetStatus();
-    void Flush();
+    int Disable(bool channel);
+    int Enable(bool channel);
 
+    static int SendCommand(uint8_t command);
+    static int WriteData(uint8_t data);
+    static void Flush();
+
+    PS2Device* m_devices[2];
 };
 
 extern PS2Controller* g_PS2Controller;

@@ -18,6 +18,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _DRIVERS_INPUT_DEVICE_HPP
 #define _DRIVERS_INPUT_DEVICE_HPP
 
+#include "InputEvent.hpp"
+
 #include "../Device.hpp"
 
 enum class InputDeviceType {
@@ -27,12 +29,11 @@ enum class InputDeviceType {
 
 class InputDevice : public Device {
 public:
-    InputDevice() : m_deviceType(InputDeviceType::Unknown) {}
-    InputDevice(InputDeviceType type) : m_deviceType(InputDeviceType::Keyboard) {}
+    InputDevice() : m_deviceType(InputDeviceType::Unknown), m_eventSourceID(UINT64_MAX) {}
+    InputDevice(InputDeviceType type) : m_deviceType(InputDeviceType::Keyboard), m_eventSourceID(UINT64_MAX) {}
     virtual ~InputDevice() override {};
 
-    virtual int Init() override = 0;
-    virtual int Destroy() override = 0;
+    virtual int Init(DeviceManager::DeviceInfo* info) override = 0;
 
     inline InputDeviceType GetType() const {
         return m_deviceType;
@@ -44,6 +45,7 @@ public:
 
 protected:
     InputDeviceType m_deviceType;
+    Input::EventSourceID m_eventSourceID;
 };
 
 #endif /* _DRIVERS_INPUT_DEVICE_HPP */

@@ -30,6 +30,7 @@ public:
     ~Semaphore();
 
     void Wait();
+    bool TryWait();
     void Signal();
 
 private:

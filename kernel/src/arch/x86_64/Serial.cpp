@@ -27,9 +27,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <HAL/drivers/SerialDevice.hpp>
 
-#include <tty/TTY.hpp>
-
-#include <tty/backends/SerialBackend.hpp>
+#include <tty/SerialTTY.hpp>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
@@ -112,6 +110,8 @@ int x86_64_SerialPort::Init() {
     WritePort(PORT_INTERRUPT_ENABLE, INTERRUPT_ENABLE_DATA_AVAILABLE);
     WritePort(PORT_MODEM_CONTROL, MODEM_CONTROL_DTR | MODEM_CONTROL_RTS | MODEM_CONTROL_OUT1 | MODEM_CONTROL_OUT2);
 
+    m_TTY = new SerialTTY(this);
+
     if (!x86_64_RegisterGSIHandler(m_irq->irq0, x86_64_SerialIRQHandler, this)) {
         WritePort(PORT_INTERRUPT_ENABLE, INTERRUPT_ENABLE_NONE);
         return -ENODEV;
@@ -120,13 +120,6 @@ int x86_64_SerialPort::Init() {
     x86_64_UnmaskGSI(m_irq->irq0);
 
     printf("COM%d: %d baud, 8 bit charlen, 1 stop bit, no parity\n", m_id, SERIAL_DEFAULT_BAUD);
-
-    if (m_id == 0) {
-        g_defaultSerialDevice = this;
-        TTYBackendSerial* serialBackend = new TTYBackendSerial(g_defaultSerialDevice);
-        m_TTY = g_KTTY;
-        g_KTTY->SetInputBackend(serialBackend);
-    }
 
     return ESUCCESS;
 }
@@ -192,7 +185,7 @@ void x86_64_SerialPort::ProcessData() {
     while (HasData()) {
         uint8_t c = ReadPort(PORT_RX);
         if (m_TTY != nullptr)
-            m_TTY->HandleInput(c);
+            m_TTY->InputBytes((const char*)&c, 1);
     }
 }
 

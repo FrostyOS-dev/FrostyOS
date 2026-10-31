@@ -75,6 +75,17 @@ void Semaphore::Wait() {
     }
 }
 
+bool Semaphore::TryWait() {
+    int intState = Processor::DisableInterrupts();
+    spinlock_acquire(&m_lock);
+    bool acquired = (m_value > 0);
+    if (acquired)
+        m_value--;
+    spinlock_release(&m_lock);
+    Processor::EnableInterrupts(intState);
+    return acquired;
+}
+
 void Semaphore::Signal() {
     int intState = Processor::DisableInterrupts();
     spinlock_acquire(&m_lock);
@@ -84,7 +95,8 @@ void Semaphore::Signal() {
             Thread* thread = m_waitingThreads.popFront();
             thread->yieldCallback = {};
             thread->sleepRemainingTime = 0;
-            assert(Scheduler::AddExistingThread(thread));
+            bool ok = Scheduler::AddExistingThread(thread);
+            assert(ok);
         }
     }
     spinlock_release(&m_lock);

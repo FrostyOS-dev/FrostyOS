@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "PS2Controller.hpp"
+#include "PS2Keyboard.hpp"
 
 #include <bit>
 #include <errno.h>
@@ -23,6 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdio.h>
 
 #include <HAL/HAL.hpp>
+#include <HAL/Time.hpp>
 
 #ifdef __x86_64__
 #include <arch/x86_64/8042PS2Controller.hpp>
@@ -65,7 +67,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define PS2_DEVICE_RESPONSE_ACK 0xFA
 #define PS2_DEVICE_RESPONSE_ECHO 0xEE
 #define PS2_DEVICE_RESPONSE_RESEND 0xFE
-#define PS2_DEVICE_RESPONSE_RESET 0xAA
+#define PS2_DEVICE_RESPONSE_SELF_TEST_PASS 0xAA
+#define PS2_DEVICE_RESPONSE_FAILURE 0xFC
 
 #define PS2_RESPONSE_SELF_TEST_PASS 0x55
 
@@ -90,6 +93,26 @@ struct [[gnu::packed]] PS2Status {
     uint8_t unknown1 : 2;
 };
 
+static bool RepeatUntil(FunctionRef<bool(void)> func, size_t ms) {
+    size_t deadline = HAL_GetNSTicks() + ms * 1'000'000;
+    while (HAL_GetNSTicks() < deadline) {
+        if (func())
+            return true;
+    }
+    return false;
+}
+
+bool PS2Device::DataAvailable() {
+    PS2Status status = std::bit_cast<PS2Status>(m_controller->GetStatus());
+    return status.outputFull && status.dataFromPort2 == m_channel; // channel is true for port 2
+}
+
+uint8_t PS2Device::ReadData() {
+    uint8_t data;
+    assert(0 == m_controller->ReadData(&data));
+    return data;
+}
+
 PS2Controller::PS2Controller() {
 
 }
@@ -98,17 +121,14 @@ PS2Controller::~PS2Controller() {
 
 }
 
-int PS2Controller::Init() {
+int PS2Controller::Init(DeviceManager::DeviceInfo* info) {
     // Disable the controller
     int rc = SendCommand(PS2_CMD_DISABLE_PORT_1);
     if (rc < 0)
         return rc;
-    printf("Port 1 disabled\n");
     rc = SendCommand(PS2_CMD_DISABLE_PORT_2);
     if (rc < 0)
         return rc;
-
-    printf("Ports disabled!\n");
 
     // Flush the output buffer
     Flush();
@@ -136,8 +156,6 @@ int PS2Controller::Init() {
     if (rc < 0)
         return rc;
 
-    printf("Config wrote\n");
-
     // Test the controller
     rc = SendCommand(PS2_CMD_SELF_TEST);
     if (rc < 0)
@@ -145,12 +163,8 @@ int PS2Controller::Init() {
     rc = ReadData(&data);
     if (rc < 0)
         return rc;
-    if (data != PS2_RESPONSE_SELF_TEST_PASS) {
-        printf("Self test failed! Received: %x\n", data);
+    if (data != PS2_RESPONSE_SELF_TEST_PASS)
         return -ENODEV;
-    }
-
-    printf("Self test passed\n");
 
     // write the config again
     rc = SendCommand(PS2_CMD_WRITE_CONFIG_BYTE);
@@ -160,11 +174,8 @@ int PS2Controller::Init() {
     if (rc < 0)
         return rc;
 
-    printf("Config re-wrote\n");
-
     // check if it is actually dual channel
     if (isDualChannel) {
-        printf("Checking for dual channel\n");
         rc = SendCommand(PS2_CMD_ENABLE_PORT_2);
         if (rc < 0)
             return rc;
@@ -183,8 +194,6 @@ int PS2Controller::Init() {
                 return rc;
         }
     }
-
-    printf("Testing channels\n");
 
     // test channels
 
@@ -207,14 +216,54 @@ int PS2Controller::Init() {
         }
     }
 
-    printf("channel1: %s, channel2: %s\n", channel1Works ? "true" : "false", channel2Works ? "true" : "false");
+    if (channel1Works) {
+        rc = InitialiseDevice(false);
+        if (rc < 0)
+            return rc;
+    }
 
+    if (channel2Works) {
+        rc = InitialiseDevice(true);
+        if (rc < 0)
+            return rc;
+    }
+
+    for (int i = 0; i < 2; i++) {
+        if (m_devices[i] == nullptr)
+            continue;
+        rc = m_devices[i]->Init();
+        if (rc < 0)
+            return rc;
+    }
+
+    if (channel1Works) { // only enable channel 1 for now
+        rc = Enable(false);
+        if (rc < 0)
+            return rc;
+        rc = SendCommandToDevice(false, PS2_DEVICE_CMD_ENABLE_SCANNING, true);
+        if (rc < 0)
+            return rc;
+    }
+
+    rc = SendCommand(PS2_CMD_READ_CONFIG_BYTE);
+    if (rc < 0)
+        return rc;
+    rc = ReadData(&data);
+    if (rc < 0)
+        return rc;
+
+    config = std::bit_cast<PS2Config>(data);
+    config.port1IRQEnabled = channel1Works;
+    config.port1TranslationEnabled = channel1Works;
+    config.port1ClockDisabled = !channel1Works;
+
+    rc = SendCommand(PS2_CMD_WRITE_CONFIG_BYTE);
+    if (rc < 0)
+        return rc;
+    rc = WriteData(std::bit_cast<uint8_t>(config));
+    if (rc < 0)
+        return rc;
     
-
-    return 0;
-}
-
-int PS2Controller::Destroy() {
     return 0;
 }
 
@@ -240,8 +289,95 @@ int PS2Controller::InitialiseDevice(bool channel) { // false = 1, true = 2
         return rc;
 
     while (true) {
-        
+        if (!RepeatUntil([]() -> bool {
+            return std::bit_cast<PS2Status>(GetStatus()).outputFull;
+        }, 30))
+            return -ENODEV;
+
+        uint8_t ackOrResend = 0;
+        rc = ReadData(&ackOrResend, 2500);
+        if (ackOrResend == PS2_DEVICE_RESPONSE_RESEND)
+            return -ENODEV; // likely timed out, no device present
+
+        if (ackOrResend == PS2_DEVICE_RESPONSE_ACK)
+            break;
+
+        // random garbage byte
     }
+
+
+    while (true) {
+        if (!RepeatUntil([]() -> bool {
+            return std::bit_cast<PS2Status>(GetStatus()).outputFull;
+        }, 2000)) // allow up to 2 seconds for reset
+            return -ETIME;
+
+        uint8_t data;
+        rc = ReadData(&data, 100);
+        if (rc < 0 || data == PS2_DEVICE_RESPONSE_FAILURE)
+            return rc < 0 ? rc : -EIO;
+
+        if (data == PS2_DEVICE_RESPONSE_SELF_TEST_PASS) {
+            
+            while (true) { // flush any garbage bytes
+                RepeatUntil([]() -> bool {
+                    return std::bit_cast<PS2Status>(GetStatus()).outputFull;
+                }, 30);
+                if (ReadData(&data, 100) == -ETIME)
+                    break;
+            }
+
+            break;
+        }
+    }
+
+    rc = SendCommandToDevice(channel, PS2_DEVICE_CMD_DISABLE_SCANNING, true);
+    if (rc < 0)
+        return rc;
+
+    // Found a valid device, now identify it
+    rc = SendCommandToDevice(channel, PS2_DEVICE_CMD_IDENTIFY, true);
+    if (rc < 0)
+        return rc;
+
+    uint8_t id[2];
+    uint64_t idBytes = 0;
+
+    while (true) {
+        RepeatUntil([]() -> bool {
+            return std::bit_cast<PS2Status>(GetStatus()).outputFull;
+        }, 30);
+
+        uint8_t idByte = 0;
+        if (ReadData(&idByte, 100) == -ETIME)
+            break;
+
+        if (idBytes == 0) {
+            if (idByte != 0x00 && idByte != 0x03 && idByte != 0x04 && idByte != 0xAB)
+                continue;
+
+            id[0] = idByte;
+        } else {
+            if (idByte != 0x41 && idByte != 0xC1 && idByte != 0x83)
+                continue;
+
+            id[1] = idByte;
+        }
+
+        if (idBytes++ == 1)
+            break;
+    }
+
+    Disable(channel);
+
+    bool type = idBytes == 1; // false for keyboard, true for mouse
+
+    if (!type) { // keyboard
+        assert(!channel); // keyboard is only supported on channel 1
+        m_devices[channel ? 1 : 0] = new PS2Keyboard(this, channel);
+    }
+
+    return 0;
 }
 
 int PS2Controller::SendCommandToDevice(bool channel, uint8_t command, bool expectAck) {
@@ -259,6 +395,9 @@ int PS2Controller::SendCommandToDevice(bool channel, uint8_t command, bool expec
         rc = WriteData(command);
         if (rc < 0)
             return rc;
+
+        if (!expectAck)
+            return 0;
 
         resendCounter--;
         rc = ShouldResend();
@@ -286,6 +425,18 @@ int PS2Controller::ShouldResend() {
         if (data == PS2_DEVICE_RESPONSE_RESEND)
             return true;
     }
+}
+
+int PS2Controller::Disable(bool channel) {
+    int rc = SendCommand(channel ? PS2_CMD_DISABLE_PORT_2 : PS2_CMD_DISABLE_PORT_1);
+    Flush();
+    return rc;
+}
+
+int PS2Controller::Enable(bool channel) {
+    int rc = SendCommand(channel ? PS2_CMD_ENABLE_PORT_2 : PS2_CMD_ENABLE_PORT_1);
+    Flush();
+    return rc;
 }
 
 #ifdef __x86_64__

@@ -18,5 +18,32 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _DRIVERS_PS2_KEYBOARD_HPP
 #define _DRIVERS_PS2_KEYBOARD_HPP
 
+#include "PS2Controller.hpp"
+
+class PS2Keyboard : public PS2Device {
+public:
+    PS2Keyboard(PS2Controller* controller, bool channel);
+    ~PS2Keyboard() override;
+
+    int Init() override;
+    int Init(DeviceManager::DeviceInfo* info) override;
+
+    bool HandleIRQ();
+
+private:
+    enum State {
+        NORMAL,
+
+        E0,
+        PRINT_SCREEN,
+        E0_REPEAT,
+
+        E1,
+        PAUSE1,
+        PAUSE2,
+        E1_REPEAT,
+        PAUSE3
+    } m_state;
+};
 
 #endif /* _DRIVERS_PS2_KEYBOARD_HPP */

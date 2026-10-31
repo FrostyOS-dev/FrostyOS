@@ -74,6 +74,8 @@ public:
 
     static bool ExitCurrentThread(uint64_t code, bool deleteThis, bool deleteParent, bool removeProc);
     static Thread* GetCurrentThread();
+    static Thread* CreateKernelThread(ThreadEntryPoint entry);
+    [[noreturn]] static void ExitCurrentKernelThread();
 
     void SetEntryPoint(ThreadEntryPoint entryPoint);
     ThreadEntryPoint GetEntryPoint() const;
