@@ -92,9 +92,11 @@ int DeviceManager::AddDevice(Device* dev, DeviceInfo** outInfo) {
     return 0;
 }
 
-int DeviceManager::CreateRootItem(DeviceInfo* info, const char* name, FS::VType type, mode_t mode, bool setDevice) {
-    if (info == nullptr || name == nullptr)
+int DeviceManager::CreateRootItem(CreateParams& params) {
+    if (params.info == nullptr || params.name == nullptr)
         return -EINVAL;
+
+    DeviceInfo*& info = params.info;
 
     if (info->hasVNode)
         return -EEXIST;
@@ -103,35 +105,43 @@ int DeviceManager::CreateRootItem(DeviceInfo* info, const char* name, FS::VType 
         return -ENOENT;
 
     FS::VNode* vnode = nullptr;
-    int rc = FS::VFS_Create(".", name, type, mode, m_fs->GetRoot(), m_cred, nullptr, &vnode);
+    int rc = FS::VFS_Create(".", params.name, params.type, params.mode, m_fs->GetRoot(), m_cred, params.vnode, &vnode);
     if (rc < 0)
         return rc;
 
     info->hasVNode = true;
     info->rootVNode = static_cast<FS::DevTempFSVNode*>(vnode);
-    info->VNodeType = (type == FS::VType::DIR);
+    info->VNodeType = (params.type == FS::VType::DIR);
     
-    if (setDevice)
+    if (params.setDevice)
         info->rootVNode->SetDevice(info->dev);
+    if (params.outVNode != nullptr)
+        *params.outVNode = static_cast<FS::DevTempFSVNode*>(vnode);
 
     return 0;
 }
 
-int DeviceManager::CreateSubItem(DeviceInfo* info, const char* path, const char* name, FS::VType type, mode_t mode, bool setDevice, FS::DevTempFSVNode* vnode, FS::DevTempFSVNode** outVNode) {
-    if (info == nullptr || name == nullptr || path == nullptr)
+int DeviceManager::CreateSubItem(const char* path, CreateParams& params) {
+    return CreateSubItemWithDevice(path, params.info != nullptr ? params.info->dev : nullptr, params);
+}
+
+int DeviceManager::CreateSubItemWithDevice(const char* path, Device* dev, CreateParams& params) {
+    if (params.info == nullptr || params.name == nullptr || path == nullptr)
         return -EINVAL;
+
+    DeviceInfo*& info = params.info;
 
     if (m_fs == nullptr || !info->hasVNode || !info->VNodeType || path[0] == '/')
         return -ENOENT;
 
     FS::VNode* newVNode = nullptr;
-    int rc = FS::VFS_Create(path, name, type, mode, info->rootVNode, m_cred, vnode, &newVNode);
+    int rc = FS::VFS_Create(path, params.name, params.type, params.mode, info->rootVNode, m_cred, params.vnode, &newVNode);
     if (rc >= 0) {
-        if (setDevice)
-            static_cast<FS::DevTempFSVNode*>(newVNode)->SetDevice(info->dev);
+        if (params.setDevice)
+            static_cast<FS::DevTempFSVNode*>(newVNode)->SetDevice(dev);
 
-        if (outVNode != nullptr)
-            *outVNode = static_cast<FS::DevTempFSVNode*>(newVNode);
+        if (params.outVNode != nullptr)
+            *params.outVNode = static_cast<FS::DevTempFSVNode*>(newVNode);
     }
     return rc;
 }

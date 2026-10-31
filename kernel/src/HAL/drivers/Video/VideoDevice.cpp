@@ -79,7 +79,13 @@ namespace Video {
         if (vnode == nullptr)
             return -ENOMEM;
 
-        return m_info->manager->CreateSubItem(m_info, ".", name, FS::VType::CHR, DEFAULT_DEV_ITEM_MODE, false, vnode);
+        DeviceManager::CreateParams params{};
+        params.info = m_info;
+        params.name = name;
+        params.type = FS::VType::CHR;
+        params.setDevice = false;
+        params.vnode = vnode;
+        return m_info->manager->CreateSubItem(".", params);
     }
 
     Display* VideoDevice::GetDisplay(uint64_t id) {
@@ -136,7 +142,13 @@ namespace Video {
         char name[16];
         snprintf(name, 16, "gpu%lu", id);
 
-        return info->manager->CreateRootItem(info, name, FS::VType::DIR, DEFAULT_DIR_MODE);
+        DeviceManager::CreateParams params{};
+        params.info = info;
+        params.name = name;
+        params.type = FS::VType::DIR;
+        params.mode = DEFAULT_DIR_MODE;
+        params.setDevice = false;
+        return info->manager->CreateRootItem(params);
     }
 
     FBVideoDevice* Video_CreateFBDevice() {

@@ -72,7 +72,11 @@ int TTY::Init(DeviceManager::DeviceInfo* info) {
 
     m_info = info;
 
-    return info->manager->CreateRootItem(info, "console", FS::VType::CHR);
+    DeviceManager::CreateParams params{};
+    params.info = info;
+    params.name = "console";
+    params.type = FS::VType::CHR;
+    return info->manager->CreateRootItem(params);
 }
 
 int TTY::Open(int flags, const Credential& cred) {

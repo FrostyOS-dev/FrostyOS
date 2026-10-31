@@ -17,8 +17,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "NullDevice.hpp"
 
+#include "../DeviceManager.hpp"
+
 #include <errno.h>
 #include <string.h>
+
+#include <fs/VFS.hpp>
 
 NullDevice* g_NullDevice = nullptr;
 
@@ -36,7 +40,11 @@ int NullDevice::Init(DeviceManager::DeviceInfo* info) {
     if (info->manager == nullptr)
         return -EINVAL;
 
-    return info->manager->CreateRootItem(info, "null", FS::VType::CHR);
+    DeviceManager::CreateParams params{};
+    params.info = info;
+    params.name = "null";
+    params.type = FS::VType::CHR;
+    return info->manager->CreateRootItem(params);
 }
 
 int NullDevice::Open(int flags, const Credential& cred) {

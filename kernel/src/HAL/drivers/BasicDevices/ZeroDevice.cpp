@@ -17,8 +17,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "ZeroDevice.hpp"
 
+#include "../DeviceManager.hpp"
+
 #include <errno.h>
 #include <string.h>
+
+#include <fs/VFS.hpp>
 
 ZeroDevice* g_ZeroDevice = nullptr;
 
@@ -36,7 +40,11 @@ int ZeroDevice::Init(DeviceManager::DeviceInfo* info) {
     if (info->manager == nullptr)
         return -EINVAL;
 
-    return info->manager->CreateRootItem(info, "zero", FS::VType::CHR);
+    DeviceManager::CreateParams params{};
+    params.info = info;
+    params.name = "zero";
+    params.type = FS::VType::CHR;
+    return info->manager->CreateRootItem(params);
 }
 
 int ZeroDevice::Open(int flags, const Credential& cred) {

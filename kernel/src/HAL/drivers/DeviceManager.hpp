@@ -54,17 +54,28 @@ public:
         FS::DevTempFSVNode* rootVNode;
     };
 
+    struct CreateParams {
+        DeviceInfo* info;
+        const char* name;
+        FS::VType type;
+        mode_t mode = DEFAULT_DEV_ITEM_MODE;
+        bool setDevice = true;
+        FS::DevTempFSVNode* vnode = nullptr;
+        FS::DevTempFSVNode** outVNode = nullptr;
+    };
+
     void ProbeDevices();
     int InitDevices();
 
     int AddDevice(Device* dev, DeviceInfo** outInfo = nullptr);
 
-    int CreateRootItem(DeviceInfo* info, const char* name, FS::VType type, mode_t mode = DEFAULT_DEV_ITEM_MODE, bool setDevice = true);
+    int CreateRootItem(CreateParams& params);
 
     // For the following 2 functions:
     // Path must be relative within the previously created root dir for the device.
     // If vnode is non-null, it is used as the vnode for the new item, but is treated as uninitialised.
-    int CreateSubItem(DeviceInfo* info, const char* path, const char* name, FS::VType type, mode_t mode = DEFAULT_DEV_ITEM_MODE, bool setDevice = true, FS::DevTempFSVNode* vnode = nullptr, FS::DevTempFSVNode** outVNode = nullptr);
+    int CreateSubItem(const char* path, CreateParams& params);
+    int CreateSubItemWithDevice(const char* path, Device* dev, CreateParams& params);
 
     void SetDevFS(FS::DevTempFS* fs);
     FS::DevTempFS* GetDevFS();
