@@ -18,12 +18,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _FROSTYOS_ASM_VIDEO_H
 #define _FROSTYOS_ASM_VIDEO_H
 
+#include "types.h"
+
 #define FOSV_GET_DISPLAY_INFO 0x46564400
 #define FOSV_GET_DISPLAY_MODE 0x46564401
 #define FOSV_SET_DISPLAY_MODE 0x46564402
-
-typedef unsigned int _u32;
-typedef unsigned long int _u64;
 
 enum FOSV_PixelFormat {
     FOSV_PIXFORM_RGB565   = 0x46565000,

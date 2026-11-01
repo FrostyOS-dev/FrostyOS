@@ -211,6 +211,7 @@ namespace Input {
                 if (l->m_fn(&e, l->m_ctx))
                     break;
             s->lock.Unlock();
+            s->device->AddUserEvent(e);
         }
     }
 
