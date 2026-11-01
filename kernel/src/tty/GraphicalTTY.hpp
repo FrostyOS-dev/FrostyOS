@@ -72,6 +72,7 @@ private:
         bool bold;
         bool reverse;
     } m_attr;
+    TextAttributes m_savedAttr;
 
     void ResetEscapeState();
     void ResetAttributes();
@@ -81,6 +82,8 @@ private:
     void ExecuteCSI(char final);
     void HandleSGR();
     void SoftReset();
+    void SaveCursor();
+    void RestoreCursor();
 
     uint64_t m_savedX;
     uint64_t m_savedY;

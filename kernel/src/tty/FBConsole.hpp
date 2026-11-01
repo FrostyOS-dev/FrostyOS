@@ -32,6 +32,12 @@ struct FBConsoleCell {
     bool dirty;
 };
 
+enum class FBCursorStyle : uint8_t {
+    Block,
+    Underline,
+    Bar
+};
+
 class FBConsole {
 public:
     FBConsole();
@@ -64,6 +70,8 @@ public:
     void Scroll(uint64_t n);
     void ScrollDown(uint64_t n);
     bool SetScrollRegion(uint64_t top, uint64_t bottom);
+    uint64_t GetScrollTop() const;
+    uint64_t GetScrollBottom() const;
 
     void InsertLines(uint64_t n);
     void DeleteLines(uint64_t n);
@@ -92,6 +100,11 @@ public:
     void EraseInLine(int mode); // 0 = cursor to end, 1 = start to cursor, 2 = whole line
     void EraseInDisplay(int mode); // 0 = cursor to end, 1 = start to cursor, 2/3 = whole screen
 
+    void SetCursorVisible(bool visible);
+    bool IsCursorVisible() const;
+    void SetCursorStyle(FBCursorStyle style);
+    FBCursorStyle GetCursorStyle() const;
+
 private:
     void SetCell(size_t index, char c);
     void BlankCells(size_t start, size_t count);
@@ -100,6 +113,8 @@ private:
     void ResetScrollRegion();
     uint64_t CursorRow() const;
     uint64_t CursorCol() const;
+
+    void DrawCursor();
 
     Video::FBDisplay* m_display;
     FrameBuffer* m_frameBuffer;
@@ -115,6 +130,12 @@ private:
     bool m_wrapPending;
     uint64_t m_scrollTop;
     uint64_t m_scrollBottom;
+
+    bool m_cursorVisible;
+    FBCursorStyle m_cursorStyle;
+    bool m_cursorDrawn;
+    uint64_t m_cursorDrawnRow;
+    uint64_t m_cursorDrawnCol;
 };
 
 extern FBConsole* g_KFBConsole;

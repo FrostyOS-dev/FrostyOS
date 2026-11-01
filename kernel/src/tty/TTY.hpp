@@ -37,6 +37,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define TTY_INTERNAL_BUFFER_SIZE 512
 #define TTY_READ_BUFFER_SIZE 4096
+#define TTY_REPLY_BUFFER_SIZE 32
 
 #define TTY_ENTRY_EOL 0x100
 #define TTY_ENTRY_EOF 0x200
@@ -140,9 +141,13 @@ protected:
     void FlushInput();
     void FlushInputLocked();
     void CommitLineLocked();
+    void CommitPartialLineLocked();
     void RetagPendingAsLineLocked();
 
     termios_t DefaultTermios();
+
+    void QueueReply(const char* s, size_t n);
+    size_t TakeReplies(char* out, size_t max);
 
     bool m_debugMirroring;
 
@@ -164,6 +169,9 @@ protected:
     spinlock_t m_inputLock;
     mutable spinlock_t m_outputLock;
     mutable int m_outputIntState;
+
+    char m_replyBuffer[TTY_REPLY_BUFFER_SIZE];
+    size_t m_replyLen;
 
     DeviceManager::DeviceInfo* m_info;
 

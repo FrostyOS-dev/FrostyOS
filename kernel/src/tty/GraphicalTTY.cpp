@@ -97,6 +97,7 @@ static inline uint8_t ClampColour(int v) {
 GraphicalTTY::GraphicalTTY() : TTY(TTYType::Graphical), m_savedX(0), m_savedY(0), m_console(nullptr), m_id(-1), m_name() {
     ResetEscapeState();
     ResetAttributes();
+    m_savedAttr = m_attr;
 
     m_id = __atomic_fetch_add(&g_nextGraphicalTTYID, 1, __ATOMIC_RELAXED);
     snprintf(m_name, sizeof(m_name), "tty%lu", m_id);
@@ -105,6 +106,7 @@ GraphicalTTY::GraphicalTTY() : TTY(TTYType::Graphical), m_savedX(0), m_savedY(0)
 GraphicalTTY::GraphicalTTY(FBConsole* console) : TTY(TTYType::Graphical), m_savedX(0), m_savedY(0), m_console(console), m_id(-1), m_name() {
     ResetEscapeState();
     ResetAttributes();
+    m_savedAttr = m_attr;
 
     m_id = __atomic_fetch_add(&g_nextGraphicalTTYID, 1, __ATOMIC_RELAXED);
     snprintf(m_name, sizeof(m_name), "tty%lu", m_id);
@@ -268,11 +270,11 @@ void GraphicalTTY::ProcessChar(char c) {
             es.state = EscState::Charset;
             break;
         case '7':
-            m_console->GetCursor(m_savedX, m_savedY);
+            SaveCursor();
             es.state = EscState::Ground;
             break;
         case '8':
-            m_console->SetCursor(m_savedX, m_savedY);
+            RestoreCursor();
             es.state = EscState::Ground;
             break;
         case 'c': // full reset
@@ -363,17 +365,38 @@ void GraphicalTTY::PushParam() {
 
 void GraphicalTTY::ExecuteCSI(char final) {
     EscapeState& es = m_escapeState;
+
     if (es.intermediate != 0) {
-        if (es.intermediate == '!' && final == 'p' && es.privateMarker == 0)
+        if (es.privateMarker != 0)
+            return;
+        if (es.intermediate == '!' && final == 'p')
             SoftReset();
+        else if (es.intermediate == ' ' && final == 'q') {
+            int ps = es.paramCount > 0 ? es.params[0] : 0;
+            FBCursorStyle style = FBCursorStyle::Block;
+            if (ps == 3 || ps == 4)
+                style = FBCursorStyle::Underline;
+            else if (ps == 5 || ps == 6)
+                style = FBCursorStyle::Bar;
+            m_console->SetCursorStyle(style); // blinking variants render as steady
+        }
         return;
     }
 
     if (es.privateMarker != 0) {
-        if (es.privateMarker == '?' && (final == 'h' || final == 'l'))
-            for (int i = 0; i < es.paramCount; i++)
-                if (es.params[i] == 1)
-                    SetApplicationCursorKeys(final == 'h');
+        if (es.privateMarker == '?' && (final == 'h' || final == 'l')) {
+            bool on = (final == 'h');
+            for (int i = 0; i < es.paramCount; i++) {
+                switch (es.params[i]) {
+                case 1:
+                    SetApplicationCursorKeys(on);
+                    break;
+                case 25:
+                    m_console->SetCursorVisible(on);
+                    break;
+                }
+            }
+        }
         return;
     }
 
@@ -390,18 +413,22 @@ void GraphicalTTY::ExecuteCSI(char final) {
     uint64_t col = MIN(x / CHAR_WIDTH, cols - 1);
     uint64_t row = MIN(y / CHAR_HEIGHT, rows - 1);
     uint64_t n = CSIParam(params, count, 0, 1);
+    uint64_t top = m_console->GetScrollTop();
+    uint64_t bottom = m_console->GetScrollBottom();
+    uint64_t upLimit = (row >= top) ? top : 0;
+    uint64_t downLimit = (row <= bottom) ? bottom : rows - 1;
     int mode = (count > 0) ? params[0] : 0;
     bool move = true;
 
     switch (final) {
-    case 'A': row = (n > row) ? 0 : row - n; break;
+    case 'A': row = (row - upLimit <= n) ? upLimit : row - n; break;
     case 'B':
-    case 'e': row = MIN(row + n, rows - 1); break;
+    case 'e': row = (downLimit - row <= n) ? downLimit : row + n; break;
     case 'C':
     case 'a': col = MIN(col + n, cols - 1); break;
     case 'D': col = (n > col) ? 0 : col - n; break;
-    case 'E': row = MIN(row + n, rows - 1); col = 0; break;
-    case 'F': row = (n > row) ? 0 : row - n; col = 0; break;
+    case 'E': row = (downLimit - row <= n) ? downLimit : row + n; col = 0; break;
+    case 'F': row = (row - upLimit <= n) ? upLimit : row - n; col = 0; break;
     case 'G':
     case '`': col = MIN(n - 1, cols - 1); break;
     case 'd': row = MIN(n - 1, rows - 1); break;
@@ -410,8 +437,29 @@ void GraphicalTTY::ExecuteCSI(char final) {
         row = MIN(n - 1, rows - 1);
         col = MIN(static_cast<uint64_t>(CSIParam(params, count, 1, 1)) - 1, cols -1);
         break;
-    case 's': m_console->GetCursor(m_savedX, m_savedY); move = false; break;
-    case 'u': m_console->SetCursor(m_savedX, m_savedY); move = false; break;
+    case 's': SaveCursor(); move = false; break;
+    case 'u': RestoreCursor(); move = false; break;
+    case 'I': col = MIN(((col / 8) + n) * 8, cols - 1); break;
+    case 'Z': {
+        uint64_t left = (col + 7) / 8;
+        col = (n >= left ? 0 : left - n) * 8;
+        break;
+    }
+    case 'n':
+        if (mode == 5)
+            QueueReply("\x1b[0n", 4);
+        else if (mode == 6) {
+            char r[24];
+            int len = snprintf(r, sizeof(r), "\x1b[%lu;%luR", row + 1, col + 1);
+            QueueReply(r, len);
+        }
+        move = false;
+        break;
+    case 'c':
+        if (mode == 0)
+            QueueReply("\x1b[?6c", 5);
+        move = false;
+        break;
     case 'J': m_console->EraseInDisplay(mode); move = false; break;
     case 'K': m_console->EraseInLine(mode); move = false; break;
     case 'm': HandleSGR(); move = false; break;
@@ -493,5 +541,20 @@ void GraphicalTTY::SoftReset() {
     ResetAttributes();
     ApplyAttributes();
     SetApplicationCursorKeys(false);
+    if (m_console == nullptr)
+        return;
     m_console->SetScrollRegion(0, m_console->GetNumberOfRows() - 1);
+    m_console->SetCursorVisible(true);
+    m_console->SetCursorStyle(FBCursorStyle::Block);
+}
+
+void GraphicalTTY::SaveCursor() {
+    m_console->GetCursor(m_savedX, m_savedY);
+    m_savedAttr = m_attr;
+}
+
+void GraphicalTTY::RestoreCursor() {
+    m_console->SetCursor(m_savedX, m_savedY);
+    m_attr = m_savedAttr;
+    ApplyAttributes();
 }

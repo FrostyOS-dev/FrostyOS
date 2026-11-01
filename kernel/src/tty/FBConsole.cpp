@@ -29,11 +29,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <HAL/drivers/Video/FBVideo/FBDisplay.hpp>
 #include <HAL/drivers/Video/FBVideo/FBVideoDevice.hpp>
 
-FBConsole::FBConsole() : m_display(nullptr), m_frameBuffer(nullptr), m_bg(), m_fg(), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_buffer(nullptr), m_wrapPending(false), m_scrollTop(0), m_scrollBottom(0) {
+FBConsole::FBConsole() : m_display(nullptr), m_frameBuffer(nullptr), m_bg(), m_fg(), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_buffer(nullptr), m_wrapPending(false), m_scrollTop(0), m_scrollBottom(0), m_cursorVisible(true), m_cursorStyle(FBCursorStyle::Block), m_cursorDrawn(false), m_cursorDrawnRow(0), m_cursorDrawnCol(0) {
 
 }
 
-FBConsole::FBConsole(Video::FBDisplay* display, Colour bg, Colour fg) : m_display(display), m_frameBuffer(nullptr), m_bg(bg), m_fg(fg), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_buffer(nullptr), m_wrapPending(false), m_scrollTop(0), m_scrollBottom(0) {
+FBConsole::FBConsole(Video::FBDisplay* display, Colour bg, Colour fg) : m_display(display), m_frameBuffer(nullptr), m_bg(bg), m_fg(fg), m_cursorX(0), m_cursorY(0), m_numberOfRows(0), m_numberOfColumns(0), m_buffer(nullptr), m_wrapPending(false), m_scrollTop(0), m_scrollBottom(0), m_cursorVisible(true), m_cursorStyle(FBCursorStyle::Block), m_cursorDrawn(false), m_cursorDrawnRow(0), m_cursorDrawnCol(0) {
     if (m_display != nullptr)
         m_frameBuffer = m_display->GetFrameBuffer();
 }
@@ -236,6 +236,14 @@ bool FBConsole::SetScrollRegion(uint64_t top, uint64_t bottom) {
     return true;
 }
 
+uint64_t FBConsole::GetScrollTop() const {
+    return m_scrollTop;
+}
+
+uint64_t FBConsole::GetScrollBottom() const {
+    return m_scrollBottom;
+}
+
 void FBConsole::InsertLines(uint64_t n) {
     uint64_t row = CursorRow();
     if (row < m_scrollTop || row > m_scrollBottom)
@@ -348,11 +356,20 @@ void FBConsole::CopyFrom(FBConsole* other) {
             m_buffer[r * m_numberOfColumns + c].dirty = true;
         }
     }
+
+    m_cursorVisible = other->m_cursorVisible;
+    m_cursorStyle = other->m_cursorStyle;
 }
 
 void FBConsole::Flush() {
     if (m_buffer == nullptr)
         return;
+
+    if (m_cursorDrawn) {
+        if (m_cursorDrawnRow < m_numberOfRows && m_cursorDrawnCol < m_numberOfColumns)
+            m_buffer[m_cursorDrawnRow * m_numberOfColumns + m_cursorDrawnCol].dirty = true;
+        m_cursorDrawn = false;
+    }
 
     for (uint64_t y = 0; y < m_numberOfRows; y++) {
         for (uint64_t x = 0; x < m_numberOfColumns; x++) {
@@ -365,6 +382,9 @@ void FBConsole::Flush() {
             c.dirty = false;
         }
     }
+
+    if (m_cursorVisible && m_numberOfRows > 0 && m_numberOfColumns > 0)
+        DrawCursor();
 }
 
 void FBConsole::SetBuffer(FBConsoleCell* buf, size_t rows, size_t columns) {
@@ -426,6 +446,22 @@ void FBConsole::EraseInDisplay(int mode) {
     }
 }
 
+void FBConsole::SetCursorVisible(bool visible) {
+    m_cursorVisible = visible;
+}
+
+bool FBConsole::IsCursorVisible() const {
+    return m_cursorVisible;
+}
+
+void FBConsole::SetCursorStyle(FBCursorStyle style) {
+    m_cursorStyle = style;
+}
+
+FBCursorStyle FBConsole::GetCursorStyle() const {
+    return m_cursorStyle;
+}
+
 void FBConsole::SetCell(size_t i, char c) {
     if (m_buffer == nullptr || i >= m_numberOfRows * m_numberOfColumns)
         return;
@@ -481,6 +517,37 @@ uint64_t FBConsole::CursorRow() const {
 
 uint64_t FBConsole::CursorCol() const {
     return m_numberOfColumns > 0 ? MIN(m_cursorX / CHAR_WIDTH, m_numberOfColumns - 1) : 0;
+}
+
+void FBConsole::DrawCursor() {
+    uint64_t row = CursorRow();
+    uint64_t col = CursorCol();
+    FBConsoleCell& cell = m_buffer[row * m_numberOfColumns + col];
+    Colour fg(cell.fgR, cell.fgG, cell.fgB);
+    Colour bg(cell.bgR, cell.bgG, cell.bgB);
+    const uint64_t px = col * CHAR_WIDTH;
+    const uint64_t py = row * CHAR_HEIGHT;
+
+    if (m_cursorStyle == FBCursorStyle::Block) {
+        bool same = cell.fgR == cell.bgR && cell.fgG == cell.bgG && cell.fgB == cell.bgB;
+        Colour cursorBg = same ? Colour(0xAA, 0xAA, 0xAA) : fg; // black-on-black would be invisible
+        WriteCharToFrameBuffer(m_frameBuffer, px, py, bg, cursorBg, cell.ch);
+    } else {
+        WriteCharToFrameBuffer(m_frameBuffer, px, py, fg, bg, cell.ch);
+        if (m_cursorStyle == FBCursorStyle::Underline) {
+            for (uint64_t y = CHAR_HEIGHT - 2; y < CHAR_HEIGHT; y++)
+                for (uint64_t x = 0; x < CHAR_WIDTH; x++)
+                    PlotPixel(px + x, py + y, fg);
+        } else {
+            for (uint64_t y = 0; y < CHAR_HEIGHT; y++)
+                for (uint64_t x = 0; x < 2; x++)
+                    PlotPixel(px + x, py + y, fg);
+        }
+    }
+
+    m_cursorDrawn = true;
+    m_cursorDrawnRow = row;
+    m_cursorDrawnCol = col;
 }
 
 

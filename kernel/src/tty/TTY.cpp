@@ -49,11 +49,11 @@ static inline bool IsSpecialChar(char c, char special) {
     return special != '\0' && c == special;
 }
 
-TTY::TTY() : m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_termios(), m_internalBufferOffset(0), m_session(-1), m_foregroundPGID(-1), m_inputLock(SPINLOCK_DEFAULT_VALUE), m_outputLock(SPINLOCK_DEFAULT_VALUE), m_outputIntState(-1), m_info(nullptr), m_appCursor(false), m_type(TTYType::Invalid) {
+TTY::TTY() : m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_termios(), m_internalBufferOffset(0), m_session(-1), m_foregroundPGID(-1), m_inputLock(SPINLOCK_DEFAULT_VALUE), m_outputLock(SPINLOCK_DEFAULT_VALUE), m_outputIntState(-1), m_replyLen(0), m_info(nullptr), m_appCursor(false), m_type(TTYType::Invalid) {
     Init();
 }
 
-TTY::TTY(TTYType type) : m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_termios(), m_internalBufferOffset(0), m_session(-1), m_foregroundPGID(-1), m_inputLock(SPINLOCK_DEFAULT_VALUE), m_outputLock(SPINLOCK_DEFAULT_VALUE), m_outputIntState(-1), m_info(nullptr), m_appCursor(false), m_type(type) {
+TTY::TTY(TTYType type) : m_debugMirroring(DEBUG_MIRRORING_DEFAULT_ENABLED), m_termios(), m_internalBufferOffset(0), m_session(-1), m_foregroundPGID(-1), m_inputLock(SPINLOCK_DEFAULT_VALUE), m_outputLock(SPINLOCK_DEFAULT_VALUE), m_outputIntState(-1), m_replyLen(0), m_info(nullptr), m_appCursor(false), m_type(type) {
     Init();
 }
 
@@ -108,9 +108,13 @@ int TTY::Write(const void* in, size_t size, int flags, uint64_t, size_t* bytesWr
     while (written < size) { // chunk in TTY_WRITE_CHUNK_SIZE blocks to prevent the lock being held for large writes
         size_t chunk = MIN(static_cast<size_t>(TTY_WRITE_CHUNK_SIZE), size - written);
         size_t n = 0;
+        char reply[TTY_REPLY_BUFFER_SIZE];
         Lock(TTYStream::OUT);
         rc = Write(p + written, chunk, true, &n);
+        size_t replyLen = TakeReplies(reply, sizeof(reply));
         Unlock(TTYStream::OUT);
+        if (replyLen > 0)
+            InputBytes(reply, replyLen);
         written += n;
         if (rc < 0 || n == 0)
             break;
@@ -574,6 +578,7 @@ void TTY::ResetTerminalState() {
     ApplyTermios(DefaultTermios(), true);
     Lock(TTYStream::OUT);
     ResetOutputState();
+    m_replyLen = 0;
     Unlock(TTYStream::OUT);
     SetApplicationCursorKeys(false);
 }
@@ -664,7 +669,9 @@ void TTY::ApplyTermios(const termios_t& t, bool flushInput) {
     bool isCanon = (m_termios.c_lflag & ICANON) > 0;
     if (flushInput)
         FlushInputLocked();
-    else if (wasCanon && !isCanon && m_internalBufferOffset > 0)
+    else if (wasCanon && !isCanon)
+        CommitPartialLineLocked();
+    else if (!wasCanon && isCanon && m_internalBufferOffset > 0)
         RetagPendingAsLineLocked();
     spinlock_release(&m_inputLock);
     Processor::EnableInterrupts(st);
@@ -707,6 +714,16 @@ void TTY::CommitLineLocked() {
     m_inputWaitQueue.Trigger(POLLIN | POLLRDNORM);
 }
 
+void TTY::CommitPartialLineLocked() {
+    size_t len = m_internalBufferOffset;
+    size_t n = MIN(len, m_readBuffer.capacity() - m_readBuffer.size());
+    for (size_t i = 0; i < n; i++)
+        m_readBuffer.push(static_cast<uint8_t>(m_internalBuffer[i]));
+    memset(m_internalBuffer, 0, len);
+    memset(m_internalWidths, 0, len);
+    m_internalBufferOffset = 0;
+}
+
 void TTY::RetagPendingAsLineLocked() {
     size_t n = m_readBuffer.size();
     for (size_t i = 0; i < n; i++) {
@@ -736,4 +753,19 @@ termios_t TTY::DefaultTermios() {
     termios.c_cc[VSTOP] = 0x13;
     termios.c_cc[VSUSP] = 0x1a;
     return termios;
+}
+
+void TTY::QueueReply(const char* s, size_t n) {
+    if (n > TTY_REPLY_BUFFER_SIZE - m_replyLen)
+        return;
+    memcpy(m_replyBuffer + m_replyLen, s, n);
+    m_replyLen += n;
+}
+
+size_t TTY::TakeReplies(char* out, size_t max) {
+    size_t n = MIN(max, m_replyLen);
+    memcpy(out, m_replyBuffer, n);
+    memmove(m_replyBuffer, m_replyBuffer + n, m_replyLen - n);
+    m_replyLen -= n;
+    return n;
 }

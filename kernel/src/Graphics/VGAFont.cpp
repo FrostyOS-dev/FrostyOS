@@ -116,8 +116,11 @@ const uint8_t letters[95][16] = {
 {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x8f, 0xf1, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}};
 
 void getChar(char c, uint8_t* buffer) {
-    if (!IsCharValid(c))
+    if (!IsCharValid(c)) {
+        for (int i = 0; i < 16; i++)
+            buffer[i] = 0;
         return;
+    }
     for (int i = 0, i_i = 15; i < 16; i++, i_i--)
         buffer[i] = letters[c - 32][i_i];
 }
