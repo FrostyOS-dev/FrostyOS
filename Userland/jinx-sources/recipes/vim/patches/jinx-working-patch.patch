@@ -1,0 +1,12 @@
+diff -ruN vim-clean/src/time.c vim/src/time.c
+--- vim-clean/src/time.c	2023-07-08 09:54:06.000000000 +1000
++++ vim/src/time.c	2026-11-01 21:40:41.666823594 +1000
+@@ -6,7 +6,7 @@
+  * Do ":help credits" in Vim to see a list of people who contributed.
+  * See README.txt for an overview of the Vim source code.
+  */
+-
++#define _XOPEN_SOURCE
+ /*
+  * time.c: functions related to time and timers
+  */
