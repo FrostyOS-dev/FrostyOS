@@ -1,0 +1,42 @@
+diff -ruN findutils-clean/build-aux/config.sub findutils/build-aux/config.sub
+--- findutils-clean/build-aux/config.sub	2022-01-04 09:22:27.000000000 +1000
++++ findutils/build-aux/config.sub	2022-01-04 09:22:27.000000000 +1000
+@@ -1754,7 +1754,7 @@
+ 	     | onefs* | tirtos* | phoenix* | fuchsia* | redox* | bme* \
+ 	     | midnightbsd* | amdhsa* | unleashed* | emscripten* | wasi* \
+ 	     | nsk* | powerunix* | genode* | zvmoe* | qnx* | emx* | zephyr* \
+-	     | fiwix* )
++	     | fiwix* | frostyos* )
+ 		;;
+ 	# This one is extra strict with allowed versions
+ 	sco3.2v2 | sco3.2v[4-9]* | sco5v6*)
+diff -ruN findutils-clean/configure findutils/configure
+--- findutils-clean/configure	2022-02-02 10:17:29.000000000 +1000
++++ findutils/configure	2022-02-02 10:17:29.000000000 +1000
+@@ -39998,7 +39998,7 @@
+   fi
+ 
+   if test -z "$ac_list_mounted_fs"; then
+-    as_fn_error $? "could not determine how to read list of mounted file systems" "$LINENO" 5
++    as_fn_warn $? "could not determine how to read list of mounted file systems" "$LINENO" 5
+     # FIXME -- no need to abort building the whole package
+     # Can't build mountlist.c or anything that needs its functions
+   fi
+diff -ruN findutils-clean/find/fstype.c findutils/find/fstype.c
+--- findutils-clean/find/fstype.c	2022-01-03 09:34:22.000000000 +1000
++++ findutils/find/fstype.c	2026-11-02 15:35:47.665832408 +1000
+@@ -74,7 +74,14 @@
+     }
+ }
+ 
++#ifdef __frostyos__
++struct mount_entry* read_file_system_list(bool) {
++  return NULL;
++}
+ 
++void free_mount_entry(struct mount_entry*) {
++}
++#endif
+ 
+ 
+ #ifdef AFS

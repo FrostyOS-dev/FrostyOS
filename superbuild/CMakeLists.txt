@@ -77,7 +77,7 @@ add_stage(mlibc
     RUN "${JINX} build mlibc-headers && ${JINX} install -f ${SYSROOT} mlibc-headers && ${JINX} build mlibc && ${JINX} install -f ${SYSROOT} mlibc")
 
 # Stage 3: ported software
-set(PORTS bash binutils coreutils gcc ncurses vim)
+set(PORTS bash binutils coreutils findutils gcc ncurses vim)
 list(JOIN PORTS " " PORTS_STR)
 add_stage(ports
     DEPENDS mlibc
