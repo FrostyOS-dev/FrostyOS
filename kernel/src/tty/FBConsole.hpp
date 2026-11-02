@@ -105,6 +105,8 @@ public:
     void SetCursorStyle(FBCursorStyle style);
     FBCursorStyle GetCursorStyle() const;
 
+    bool IsWrapPending() const;
+
 private:
     void SetCell(size_t index, char c);
     void BlankCells(size_t start, size_t count);

@@ -653,8 +653,12 @@ bool TTY::EraseBufferedChar() {
 
     if ((m_termios.c_lflag & ECHO) > 0) {
         Lock(TTYStream::OUT);
-        for (uint8_t i = 0; i < width; i++)
-            PutChars("\b \b", 3);
+        for (uint8_t i = 0; i < width; i++) {
+            if (AtWrapPoint())
+                PutChars("\x1b[X", 3);
+            else
+                PutChars("\b \b", 3);
+        }
         FlushHW();
         Unlock(TTYStream::OUT);
     }
@@ -671,7 +675,7 @@ void TTY::ApplyTermios(const termios_t& t, bool flushInput) {
         FlushInputLocked();
     else if (wasCanon && !isCanon)
         CommitPartialLineLocked();
-    else if (!wasCanon && isCanon && m_internalBufferOffset > 0)
+    else if (!m_readBuffer.empty())
         RetagPendingAsLineLocked();
     spinlock_release(&m_inputLock);
     Processor::EnableInterrupts(st);

@@ -179,18 +179,13 @@ void FBConsole::PrintChar(char c) {
 }
 
 void FBConsole::Backspace() {
-    if (m_wrapPending) {
-        m_wrapPending = false;
-        return;
-    }
-
-    if (m_cursorX == 0) {
-        if (m_cursorY > 0) {
-            m_cursorY -= CHAR_HEIGHT;
-            m_cursorX = (m_numberOfColumns - 1) * CHAR_WIDTH;
-        }
-    } else
+    m_wrapPending = false;
+    if (m_cursorX > 0)
         m_cursorX -= CHAR_WIDTH;
+    else if (m_cursorY > 0) {
+        m_cursorY -= CHAR_HEIGHT;
+        m_cursorX = (m_numberOfColumns - 1) * CHAR_WIDTH;
+    }
 }
 
 void FBConsole::NewLine() {
@@ -460,6 +455,10 @@ void FBConsole::SetCursorStyle(FBCursorStyle style) {
 
 FBCursorStyle FBConsole::GetCursorStyle() const {
     return m_cursorStyle;
+}
+
+bool FBConsole::IsWrapPending() const {
+    return m_wrapPending;
 }
 
 void FBConsole::SetCell(size_t i, char c) {

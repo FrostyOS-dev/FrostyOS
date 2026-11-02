@@ -184,6 +184,10 @@ void GraphicalTTY::ResetOutputState() {
     SoftReset();
 }
 
+bool GraphicalTTY::AtWrapPoint() {
+    return m_console != nullptr && m_console->IsWrapPending();
+}
+
 void GraphicalTTY::ResetEscapeState() {
     m_escapeState.state = EscState::Ground;
     for (int i = 0; i < ANSI_MAX_PARAMS; i++)
@@ -245,9 +249,20 @@ void GraphicalTTY::ProcessChar(char c) {
             m_console->ClearScreen();
             m_console->SetCursor(0, 0);
             break;
-        default:
-            m_console->PrintChar(c);
+        default: {
+            uint8_t u = static_cast<uint8_t>(c);
+            if (u < 0x80) {
+                m_utf8Remaining = 0;
+                m_console->PrintChar(c);
+            } else if (u >= 0xC0) {
+                m_utf8Remaining = u >= 0xF0 ? 3 : (u >= 0xE0 ? 2 : 1);
+                m_console->PrintChar('?');
+            } else if (m_utf8Remaining > 0)
+                m_utf8Remaining--;
+            else
+                m_console->PrintChar('?');
             break;
+        }
         }
         break;
 
@@ -257,6 +272,10 @@ void GraphicalTTY::ProcessChar(char c) {
             ResetEscapeState();
             es.state = EscState::CSI;
             break;
+        case 'P':
+        case 'X':
+        case '^':
+        case '_':
         case ']':
             es.current = 0;
             es.state = EscState::OSC;
@@ -337,7 +356,7 @@ void GraphicalTTY::ProcessChar(char c) {
             es.state = EscState::Ground;
         else if (c == '\x1b')
             es.state = EscState::OSCEscape;
-        else if (++es.current > 256)
+        else if (++es.current > 4096)
             es.state = EscState::Ground;
         break;
 

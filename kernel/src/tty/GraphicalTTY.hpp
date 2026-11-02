@@ -43,6 +43,7 @@ protected:
     int GetSize(winsize_t*) override;
     int SetSize(const winsize_t*) override;
     void ResetOutputState() override;
+    bool AtWrapPoint() override;
 
 private:
     enum class EscState : uint8_t {
@@ -91,6 +92,7 @@ private:
 
     uint64_t m_id;
     char m_name[24];
+    uint8_t m_utf8Remaining = 0;
 };
 
 #endif /* _TTY_GRAPHICAL_HPP */

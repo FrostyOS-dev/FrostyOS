@@ -132,6 +132,7 @@ protected:
     virtual int GetSize(winsize_t*) = 0;
     virtual int SetSize(const winsize_t*) = 0;
     virtual void ResetOutputState() {}
+    virtual bool AtWrapPoint() { return false; }
 
     uint8_t EchoChar(char c); // echo c per termios flags, returns columns occupied
     bool EraseBufferedChar(); // remove last char of the pending line and erase its echo
