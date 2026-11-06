@@ -148,7 +148,7 @@ int DeviceManager::CreateRootDir(const char* name, mode_t mode, FS::DevTempFSVNo
         return -EINVAL;
 
     FS::VNode* vnode = nullptr;
-    int rc = FS::VFS_Create(".", name, FS::VType::DIR, mode, m_fs->GetRoot(), m_cred, nullptr, &vnode);
+    int rc = FS::VFS_Create(".", name, FS::VType::DIR, mode, m_fs->GetRoot(), m_cred, nullptr, outVNode != nullptr ? &vnode : nullptr);
 
     if (rc >= 0 && outVNode != nullptr)
         *outVNode = static_cast<FS::DevTempFSVNode*>(vnode);
