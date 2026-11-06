@@ -1222,7 +1222,7 @@ int sys_ftruncate(int fd, off_t size) {
     }
 
     int flags = desc->GetFlags() & O_ACCMODE;
-    if (flags != O_WRONLY && flags != O_RDWR) {
+    if ((flags != O_WRONLY && flags != O_RDWR) || desc->GetType() != FDType::File) {
         desc->Unref();
         return -EINVAL;
     }
