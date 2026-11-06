@@ -562,7 +562,7 @@ namespace VMM {
                     bool valid = true;
                     obj->pages.forEach([&](uint64_t offset, Page* page) -> bool {
                         if (offset < entry->offset)
-                        return true;
+                            return true;
                         if (offset >= entry->offset + (entry->endVirt - entry->startVirt))
                             return false;
                         if (!isLessOrEqualProt(prot, page->protection)) {
@@ -1075,16 +1075,11 @@ namespace VMM {
     bool VMM::Fork(VMM* other) {
         other->m_mapEntries.lock();
         m_mapEntries.lock();
-        struct Data {
-            VMM* current;
-            VMM* other;
-            bool success;
-        } data = {this, other, true};
-        other->m_mapEntries.forEach([](void* data, uint64_t virt, MapEntry* entry) -> bool {
-            Data* d = static_cast<Data*>(data);
+        bool success = true;
+        other->m_mapEntries.forEach([&](uint64_t virt, MapEntry* entry) -> bool {
             MapEntry* newEntry = (MapEntry*)kcalloc_vmm(1, sizeof(MapEntry));
             if (newEntry == nullptr) {
-                d->success = false;
+                success = false;
                 return false;
             }
 
@@ -1099,7 +1094,7 @@ namespace VMM {
                         kfree_vmm(slots);
                     kfree_vmm(newEntry);
                     spinlock_release(&entry->anonMap->lock);
-                    d->success = false;
+                    success = false;
                     return false;
                 }
 
@@ -1141,19 +1136,19 @@ namespace VMM {
                     spinlock_acquire(&entry->anonMap->lock);
                     for (uint64_t i = 0; i < count; i++)
                         if (entry->anonMap->slots[i] != nullptr)
-                            d->other->m_pageMapper->RemapPage(entry->startVirt + i * PAGE_SIZE, roProt, entry->flags.user, entry->flags.cacheType);
+                            other->m_pageMapper->RemapPage(entry->startVirt + i * PAGE_SIZE, roProt, entry->flags.user, entry->flags.cacheType);
                     spinlock_release(&entry->anonMap->lock);
                 }
-                d->other->m_pageMapper->InvalidatePages(entry->startVirt, count, true);
+                other->m_pageMapper->InvalidatePages(entry->startVirt, count, true);
             }
 
-            d->current->m_mapEntries.Insert(newEntry->startVirt, newEntry);
+            m_mapEntries.Insert(newEntry->startVirt, newEntry);
 
             return true;
-        }, &data);
+        });
         m_mapEntries.unlock();
         other->m_mapEntries.unlock();
-        return data.success;
+        return success;
     }
 
     PageMapper* VMM::GetPageMapper() {
@@ -1167,8 +1162,7 @@ namespace VMM {
     void VMM::DumpRegions(fd_t fd) {
         fprintf(fd, "\nMap Entries:\n");
         m_mapEntries.lock();
-        m_mapEntries.forEach([](void* data, uint64_t key, MapEntry* entry) -> void {
-            fd_t fd = (fd_t)data;
+        m_mapEntries.forEach([fd](uint64_t key, MapEntry* entry) -> bool {
             fprintf(fd, "Entry: %lx-%lx, offset = %lx, anonMap = %p, memoryObject = %p, Flags:\n\tprot = %x\n\tcacheType = %x\n\tuser = %s, needsCopy = %s, isPrivate = %s, zero = %s\n", entry->startVirt, entry->endVirt, entry->offset, entry->anonMap, entry->memoryObject, entry->flags.protection, entry->flags.cacheType, entry->flags.user ? "true" : "false", entry->flags.needsCopy ? "true" : "false", entry->flags.isPrivate ? "true" : "false", entry->flags.zero ? "true" : "false");
             if (entry->anonMap != nullptr) {
                 AnonMap* map = entry->anonMap;
@@ -1183,7 +1177,8 @@ namespace VMM {
                 spinlock_release(&obj->lock);
             }
             fputc(fd, '\n');
-        }, (void*)fd);
+            return true;
+        });
         m_mapEntries.unlock();
         fputc(fd, '\n');
     }

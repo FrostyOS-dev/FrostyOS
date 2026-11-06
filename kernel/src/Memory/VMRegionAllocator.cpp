@@ -62,11 +62,11 @@ void VMRegionAllocator::Delete() {
     m_lock.Lock();
 
     // Step 1: clear the linked list at each node
-    m_freePagesTree.forEach([](void*, uint64_t, LinkedList::Node* list) -> bool {
+    m_freePagesTree.forEach([](uint64_t, LinkedList::Node* list) -> bool {
         while (list != nullptr) // clear the list
             LinkedList::deleteNode(list, list, true);
         return true;
-    }, nullptr);
+    });
 
     // Step 2: Clear both wAVL trees
     m_freePagesTree.Clear();
@@ -408,21 +408,21 @@ bool VMRegionAllocator::Fork(VMRegionAllocator* other) {
     m_lock.Lock();
 
     // start with the allPagesTree
-    other->m_allPagesTree.forEach([](void* data, uint64_t k, uint64_t d) -> void {
-        VMRegionAllocator* vma = static_cast<VMRegionAllocator*>(data);
-        vma->m_allPagesTree.Insert(k, d);
-    }, this);
+    other->m_allPagesTree.forEach([this](uint64_t k, uint64_t d) -> bool {
+        m_allPagesTree.Insert(k, d);
+        return true;
+    });
 
     // now for the freePagesTree
-    other->m_freePagesTree.forEach([](void* data, uint64_t k, LinkedList::Node* list) -> void {
-        VMRegionAllocator* vma = static_cast<VMRegionAllocator*>(data);
+    other->m_freePagesTree.forEach([this](uint64_t k, LinkedList::Node* list) -> bool {
         LinkedList::Node* newList = nullptr;
         while (list != nullptr) {
             LinkedList::insertNode(newList, list->data, true);
             list = list->next;
         }
-        vma->m_freePagesTree.Insert(k, newList);
-    }, this);
+        m_freePagesTree.Insert(k, newList);
+        return true;
+    });
 
     // now everything else
     m_start = other->m_start;
@@ -471,14 +471,13 @@ void VMRegionAllocator::Verify() {
     assert(m_start < m_end);
     assert(m_freePageCount + m_usedPageCount + m_reservedPageCount == m_totalPageCount);
 
-    m_allPagesTree.forEach([](void* data, uint64_t key, uint64_t value) -> void {
-        auto* freePagesTree = (AVLTree::wAVLTree<uint64_t, LinkedList::Node*>*)data;
+    m_allPagesTree.forEach([this](uint64_t key, uint64_t value) -> bool {
         CompleteTreeNodeData nodeData = std::bit_cast<CompleteTreeNodeData>(value);
         assert(nodeData.size > 0);
         
         // find the node in the free pages tree
         if (nodeData.isFree == 1) {
-            AVLTree::wAVLTreeNode* node = freePagesTree->FindNode(nodeData.size);
+            AVLTree::wAVLTreeNode* node = m_freePagesTree.FindNode(nodeData.size);
             assert(node != nullptr);
             LinkedList::Node* freeNode = (LinkedList::Node*)node->value;
             assert(freeNode != nullptr);
@@ -486,5 +485,7 @@ void VMRegionAllocator::Verify() {
             assert(listNode != nullptr);
             assert(listNode->data == key);
         }
-    }, &m_freePagesTree);
+
+        return true;
+    });
 }

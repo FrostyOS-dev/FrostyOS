@@ -144,30 +144,14 @@ namespace AVLTree {
             }
         }
 
-        void forEach(void (*callback)(void*, K, D), void* data = nullptr) {
+        void forEach(FunctionRef<bool (K, D)> callback, K start) {
+            wAVLTreeNode* startNode = FindNode(start);
+            if (startNode == nullptr)
+                return;
             wAVLTreeNode* node;
-            RB_FOREACH(node, raw_wAVLTree, &m_tree) {
-                callback(data, (K)node->key, (D)node->value);
-            }
-        }
-
-        void forEach(bool (*callback)(void*, K, D), void* data = nullptr, uint64_t startingIndex = 0) {
-            wAVLTreeNode* node;
-            uint64_t i = 0;
-            RB_FOREACH(node, raw_wAVLTree, &m_tree) {
-                if (i != startingIndex) {
-                    i++;
-                    continue;
-                }
-                if (!callback(data, (K)node->key, (D)node->value))
-                    break;
-            }
-        }
-
-        void forEach(void (*callback)(void*, wAVLTreeNode*), void* data = nullptr) {
-            wAVLTreeNode* node;
-            RB_FOREACH(node, raw_wAVLTree, &m_tree) {
-                callback(data, node);
+            RB_FOREACH_FROM(node, raw_wAVLTree, startNode) {
+                if (!callback((K)node->key, (D)node->value))
+                    return;
             }
         }
 
