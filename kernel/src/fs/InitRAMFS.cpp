@@ -118,7 +118,6 @@ static int LoadEntry(USTARItemHeader* header, uint64_t itemSize, char* longName,
         rc = FS::VFS_Create(parent, name, FS::VType::DIR, DEFAULT_DIR_MODE, cwd, cred, nullptr, &vnode);
         break;
     default:
-        dbgprintf("Unknown type %c. parent = %s, name = %s\n", header->type, parent, name);
         return -ENOSYS;
     }
 
@@ -130,7 +129,6 @@ static int LoadEntry(USTARItemHeader* header, uint64_t itemSize, char* longName,
 
     uint32_t mtime = StringOctalToNum(header->mtime, 12);
 
-    FS::RefVNode(vnode);
     vnode->Lock();
     FS::VAttr attr{};
     rc = vnode->GetAttr(&attr);

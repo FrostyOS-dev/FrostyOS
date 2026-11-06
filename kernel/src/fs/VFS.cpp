@@ -537,6 +537,9 @@ namespace FS {
             }
         }
 
+        if (outVNode != nullptr)
+            RefVNode(vnode);
+
         parent->Unlock();
 
         if (outVNode != nullptr)

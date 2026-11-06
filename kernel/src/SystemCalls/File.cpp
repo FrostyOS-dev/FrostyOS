@@ -133,8 +133,6 @@ int sys_openat(int dirFD, const char* path, size_t pathLen, int flags, mode_t mo
                     delete[] realPath;
                     return rc;
                 }
-
-                FS::RefVNode(vnode);
             }
         } else {
             FS::UnrefVNode(dirVNode);
