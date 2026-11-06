@@ -29,6 +29,7 @@ enum class FDType {
     File,
     Directory,
     Pipe,
+    Socket,
     Invalid
 };
 
@@ -47,11 +48,16 @@ class Pipe;
 
 class Process;
 
+namespace Net {
+    class Socket;
+}
+
 class FileDescriptor {
 public:
     FileDescriptor();
     FileDescriptor(Process* proc, FDType type, FS::VNode* vnode);
     FileDescriptor(Process* proc, Pipe* pipe, bool writeEnd);
+    FileDescriptor(Process* proc, Net::Socket* socket);
     ~FileDescriptor();
 
     void Init(Process* proc, FDType type, FS::VNode* vnode);
@@ -76,6 +82,7 @@ public:
 
     FDType GetType() const;
     FS::VNode* GetVNode();
+    Net::Socket* GetSocket();
 
     void Ref();
     void Unref();
@@ -101,6 +108,8 @@ private:
 
     Pipe* m_pipe;
     bool m_pipeWriteEnd;
+
+    Net::Socket* m_socket;
 };
 
 #endif /* _FILE_DESCRIPTOR_HPP */

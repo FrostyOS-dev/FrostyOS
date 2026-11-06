@@ -696,17 +696,20 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
     int rc = ResolveVNodeAt(proc, fd, path, pathLen, flags, &vnode);
     if (rc == -ENOTSUP && fd != AT_FDCWD) { // TTY
         FileDescriptor* desc = manager->Get(fd);
-        if (desc == nullptr || !desc->isOpen() || desc->GetType() != FDType::Pipe) {
+        if (desc == nullptr || !desc->isOpen() || (desc->GetType() != FDType::Pipe && desc->GetType() != FDType::Socket)) {
             if (desc != nullptr)
                 desc->Unref();
             return -EBADF;
         }
 
-        desc->Unref();
         Stat buf;
         memset(&buf, 0, sizeof(Stat));
-        buf.mode = 0600 | ((FS::VFS_GetPosixType(FS::VType::FIFO) & 0xF) << 12);
-        buf.blksize = PIPE_BUF;
+        if (desc->GetType() == FDType::Pipe) {
+            buf.mode = 0600 | ((FS::VFS_GetPosixType(FS::VType::FIFO) & 0xF) << 12);
+            buf.blksize = PIPE_BUF;
+        } else if (desc->GetType() == FDType::Socket)
+            buf.mode = 0777 | ((FS::VFS_GetPosixType(FS::VType::SOCK) & 0xF) << 12);
+        desc->Unref();
         return UserWrite(stat, &buf, sizeof(Stat), proc) ? ESUCCESS : -EFAULT;
     }
     if (rc < 0)

@@ -30,6 +30,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <Memory/VMM.hpp>
 
+#include <Net/Socket.hpp>
+
 #include <Scheduling/Process.hpp>
 
 #include <SystemCalls/File.hpp>
@@ -141,7 +143,7 @@ namespace FS {
     }
 
 
-    VNode::VNode(VFS* vfs) : m_attr{VType::BAD, 0, 0, 0, FSType::Invalid, -1, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0}, m_lock(), m_refCount(0), m_vfs(vfs), m_vfsMounted(nullptr), m_parent(nullptr), m_unlinked(false) {
+    VNode::VNode(VFS* vfs) : m_attr{VType::BAD, 0, 0, 0, FSType::Invalid, -1, 0, 0, 0, {0, 0}, {0, 0}, {0, 0}, 0}, m_lock(), m_refCount(0), m_vfs(vfs), m_vfsMounted(nullptr), m_parent(nullptr), m_unlinked(false), m_boundSocket(nullptr) {
 
     }
 
@@ -207,6 +209,15 @@ namespace FS {
     void VNode::Unlock() {
         m_lock.Unlock();
     }
+
+    void VNode::SetBoundSocket(Net::Socket* sock) {
+        m_boundSocket = sock;
+    }
+
+    Net::Socket* VNode::GetBoundSocket() {
+        return m_boundSocket;
+    }
+
 
     // Increment refCount of a VNode
     void RefVNode(VNode* node) {
@@ -599,6 +610,8 @@ namespace FS {
 
         if (vnode->GetType() == VType::DIR && (want & ACCESS_W) > 0)
             return -EISDIR;
+        if (vnode->GetType() == VType::SOCK)
+            return -ENXIO;
 
         rc = vnode->Access(want, cred);
         if (rc < 0)

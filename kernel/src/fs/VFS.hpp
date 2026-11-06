@@ -59,6 +59,10 @@ typedef uint64_t blkcnt_t;
 
 /* Based on the Sun VFS Design */
 
+namespace Net {
+    class Socket;
+}
+
 namespace FS {
 
     class VNode;
@@ -192,6 +196,9 @@ namespace FS {
         virtual void Lock();
         virtual void Unlock();
 
+        virtual void SetBoundSocket(Net::Socket* sock);
+        virtual Net::Socket* GetBoundSocket();
+
     protected:
         VAttr m_attr;
         Mutex m_lock;
@@ -200,6 +207,7 @@ namespace FS {
         VFS* m_vfsMounted; // VFS that is mounted here
         VNode* m_parent;
         bool m_unlinked;
+        Net::Socket* m_boundSocket;
     };
 
     void RefVNode(VNode* node); // Increment refCount of a VNode

@@ -159,6 +159,8 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/PMM.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/VMM.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory/VMRegionAllocator.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Net/Socket.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Net/UnixSocket.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sanitisers/sanitisers.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/sanitisers/ubsan.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Scheduling/Event.cpp
@@ -172,6 +174,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Memory.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Process.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Signal.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Socket.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/SystemCall.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SystemCalls/Time.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tty/Input/KBDInputSource.cpp

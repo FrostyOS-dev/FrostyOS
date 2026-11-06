@@ -14,6 +14,7 @@
 #define TIOCSWINSZ   0x5414
 #define FIONREAD     0x541B
 #define TIOCINQ      FIONREAD
+#define FIONBIO		 0x5421
 #define TIOCGSID     0x5429
 
 #endif /* _FROSTYOS_ASM_IOCTLS_H */

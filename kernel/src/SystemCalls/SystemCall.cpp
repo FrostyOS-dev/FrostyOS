@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Memory.hpp"
 #include "Process.hpp"
 #include "Signal.hpp"
+#include "Socket.hpp"
 #include "SystemCall.hpp"
 #include "Time.hpp"
 
@@ -80,22 +81,28 @@ bool UserReadString(const char* userStr, char** kBuf, size_t* size, Process* cur
     VMM::VMM* vmm = currentProc->GetVMM();
     size_t currentSize = 0;
     char* buffer = (char*)kmalloc(64);
+    if (buffer == nullptr)
+        return false;
     while (true) {
         size_t blockSize = 0;
         bool rc = vmm->CopyStringFromUser(&buffer[currentSize], &userStr[currentSize], 64, &blockSize);
         currentSize += blockSize;
-        if (!rc) {
-            if (blockSize == 64)
-                buffer = (char*)krealloc(buffer, currentSize + 64);
-            else {
-                kfree(buffer);
-                return false;
-            }
+        if (rc)
+            break;
+        if (blockSize != 64) {
+            kfree(buffer);
+            return false;
         }
-        *size = currentSize;
-        *kBuf = buffer;
-        return true;
+        char* bigger = (char*)krealloc(buffer, currentSize + 64);
+        if (bigger == nullptr) {
+            kfree(buffer);
+            return false;
+        }
+        buffer = bigger;
     }
+    *size = currentSize;
+    *kBuf = buffer;
+    return true;
 }
 
 bool UserReadAtomic32(const uint32_t* userBuf, uint32_t* kBuf, Process* currentProc) {

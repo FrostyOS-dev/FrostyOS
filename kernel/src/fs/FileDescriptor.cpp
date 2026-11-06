@@ -24,25 +24,39 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdint.h>
 #include <stdio.h>
 
+#include <frostyos/asm/ioctls.h>
+
+#include <Net/Socket.hpp>
+
 #include <Scheduling/Mutex.hpp>
 
 #include <SystemCalls/File.hpp>
+#include <SystemCalls/SystemCall.hpp>
 
 #include <tty/TTY.hpp>
 
-FileDescriptor::FileDescriptor() : m_proc(nullptr), m_type(FDType::Invalid), m_offset(0), m_open(false), m_vnode(nullptr), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(nullptr), m_pipeWriteEnd(false) {
+FileDescriptor::FileDescriptor() : m_proc(nullptr), m_type(FDType::Invalid), m_offset(0), m_open(false), m_vnode(nullptr), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(nullptr), m_pipeWriteEnd(false), m_socket(nullptr) {
 
 }
 
-FileDescriptor::FileDescriptor(Process* proc, FDType type, FS::VNode* vnode) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_vnode(vnode), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(nullptr), m_pipeWriteEnd(false) {
+FileDescriptor::FileDescriptor(Process* proc, FDType type, FS::VNode* vnode) : m_proc(proc), m_type(type), m_offset(0), m_open(false), m_vnode(vnode), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(nullptr), m_pipeWriteEnd(false), m_socket(nullptr) {
 
 }
 
-FileDescriptor::FileDescriptor(Process* proc, Pipe* pipe, bool writeEnd) : m_proc(proc), m_type(FDType::Pipe), m_offset(0), m_open(false), m_vnode(nullptr), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(pipe), m_pipeWriteEnd(writeEnd) {
+FileDescriptor::FileDescriptor(Process* proc, Pipe* pipe, bool writeEnd) : m_proc(proc), m_type(FDType::Pipe), m_offset(0), m_open(false), m_vnode(nullptr), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(pipe), m_pipeWriteEnd(writeEnd), m_socket(nullptr) {
+
+}
+
+FileDescriptor::FileDescriptor(Process* proc, Net::Socket* socket) : m_proc(proc), m_type(FDType::Socket), m_offset(0), m_open(false), m_vnode(nullptr), m_refCount(1), m_cred(), m_flags(0), m_canRead(false), m_canWrite(false), m_pipe(nullptr), m_pipeWriteEnd(false), m_socket(socket) {
 
 }
 
 FileDescriptor::~FileDescriptor() {
+    if (m_type == FDType::Socket && m_socket != nullptr) {
+        m_socket->Close();
+        m_socket->Unref();
+        return;
+    }
     if (m_vnode != nullptr)
         FS::VFS_Close(m_vnode, m_cred);
     if (m_pipe != nullptr) {
@@ -77,6 +91,12 @@ int FileDescriptor::Open(int flags) {
         break;
     case FDType::Pipe:
         if (m_pipe == nullptr) {
+            m_mutex.Unlock();
+            return -EBADF;
+        }
+        break;
+    case FDType::Socket:
+        if (m_socket == nullptr) {
             m_mutex.Unlock();
             return -EBADF;
         }
@@ -117,6 +137,16 @@ int FileDescriptor::Read(void* buf, size_t count, size_t* realCount) {
         if (!m_open || !m_canRead)
             return -EBADF;
         return m_pipe->Read(buf, count, realCount, (GetFlags() & O_NONBLOCK) > 0);
+    }
+
+    if (m_type == FDType::Socket) {
+        if (!m_open || !m_canRead)
+            return -EBADF;
+        Net::RecvParams p = { buf, count, nullptr, 0, (GetFlags() & O_NONBLOCK) > 0};
+        Net::RecvResult r{};
+        int rc = m_socket->Recv(p, &r);
+        *realCount = r.bytes;
+        return -rc;
     }
 
     if (IsDevice()) {
@@ -179,6 +209,16 @@ int FileDescriptor::Write(const void* buf, size_t count, size_t* realCount) {
         if (!m_open || !m_canWrite)
             return -EBADF;
         return m_pipe->Write(buf, count, realCount, (GetFlags() & O_NONBLOCK) > 0);
+    }
+
+    if (m_type == FDType::Socket) {
+        if (!m_open || !m_canWrite)
+            return -EBADF;
+        Net::SendParams p = {buf, count, nullptr, 0, (GetFlags() & O_NONBLOCK) > 0, false};
+        size_t sent = 0;
+        int rc = m_socket->Send(p, &sent);
+        *realCount = sent;
+        return -rc;
     }
 
     if (IsDevice()) {
@@ -245,7 +285,7 @@ int FileDescriptor::Seek(int64_t offset, FDOffsetStart whence, int64_t* realOffs
     if (realOffset == nullptr)
         return -EINVAL;
 
-    if (m_type == FDType::Pipe)
+    if (m_type == FDType::Pipe || m_type == FDType::Socket)
         return -ESPIPE;
 
     m_mutex.Lock();
@@ -391,6 +431,22 @@ int FileDescriptor::GetDents(FS::Dentry* buf, size_t count, size_t* realCount) {
 }
 
 int FileDescriptor::Ioctl(uint64_t op, void* arg, int* result, Process* currentProc) {
+    if (op == FIONBIO) {
+        int on;
+        if (!UserRead(arg, &on, sizeof(on), currentProc))
+            return EFAULT;
+        int fl = GetFlags();
+        SetFlags(on ? (fl | O_NONBLOCK) : (fl & ~O_NONBLOCK));
+        *result = 0;
+        return 0;
+    }
+
+    if (m_type == FDType::Socket) {
+        if (!m_open || m_socket == nullptr)
+            return EBADF;
+        return m_socket->Ioctl(op, arg, result, currentProc);
+    }
+
     if (IsDevice()) {
         if (!m_open)
             return EBADF;
@@ -433,6 +489,8 @@ EventWaitQueue* FileDescriptor::GetPollQueue(uint32_t events) {
         return m_vnode != nullptr ? m_vnode->GetPollQueue(events) : nullptr;
     case FDType::Pipe:
         return m_pipe != nullptr ? m_pipe->GetPollQueue() : nullptr;
+    case FDType::Socket:
+        return m_socket != nullptr ? m_socket->GetPollQueue(events) : nullptr;
     }
     return nullptr;
 }
@@ -446,6 +504,8 @@ uint32_t FileDescriptor::PollReady(uint32_t events) {
         return m_vnode != nullptr ? m_vnode->PollReady(events) : 0;
     case FDType::Pipe:
         return m_pipe != nullptr ? m_pipe->PollReady(m_pipeWriteEnd, events) : 0;
+    case FDType::Socket:
+        return m_socket != nullptr ? m_socket->PollReady(events) : 0;
     }
     return 0;
 }
@@ -469,6 +529,10 @@ FDType FileDescriptor::GetType() const {
 
 FS::VNode* FileDescriptor::GetVNode() {
     return m_vnode;
+}
+
+Net::Socket* FileDescriptor::GetSocket() {
+    return m_socket;
 }
 
 void FileDescriptor::Ref() {
