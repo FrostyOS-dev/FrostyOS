@@ -64,6 +64,8 @@ uint64_t x86_64_GetPhysicalAddress(void* pageTable, uint64_t virtualAddress) {
         uint64_t pageTableEntry = (uint64_t)pageTable + ((virtualAddress >> (12 + (i - 1) * 9)) & 0x1FF) * 8;
         if (i == 1) {
             uint64_t* entry = (uint64_t*)pageTableEntry;
+            if ((*entry & 1) == 0)
+                return 0; // not present
             return *entry & 0x000F'FFFF'FFFF'F000;
         }
         void* newPageTable = x86_64_GetNextPageTable((void*)pageTableEntry, i);
@@ -127,23 +129,25 @@ void x86_64_MapPage(void* pageTable, uint64_t virtualAddress, uint64_t physicalA
     }
 }
 
-void x86_64_RemapPage(void* pageTable, uint64_t virtualAddress, uint32_t flags) {
+bool x86_64_RemapPage(void* pageTable, uint64_t virtualAddress, uint32_t flags) {
     uint64_t i = x86_64_Is5LevelPagingSupported() ? 5 : 4;
 
     while (pageTable != nullptr) {
         if (i < 1)
-            return;
+            return true;
         uint64_t pageTableEntry = (uint64_t)pageTable + ((virtualAddress >> (12 + (i - 1) * 9)) & 0x1FF) * 8;
         if (i == 1) {
             uint64_t* entry = (uint64_t*)pageTableEntry;
+            if ((*entry & 1) == 0)
+                return false; // never create a mapping from a non-present PTE
             uint64_t raw_entry = *entry & 0x000F'FFFF'FFFF'F000;
             raw_entry |= (((uint64_t)flags & 0x0800'0000) << (52 - 16)) | ((uint64_t)flags & 0x0000'0FFF) | 1;
             *entry = raw_entry;
-            return;
+            return true;
         }
         void* newPageTable = x86_64_GetNextPageTable((void*)pageTableEntry, i);
         if (newPageTable == nullptr)
-            return;
+            return false;
         else {
             uint64_t* entry = (uint64_t*)pageTableEntry;
             uint64_t raw = *entry;
@@ -153,6 +157,7 @@ void x86_64_RemapPage(void* pageTable, uint64_t virtualAddress, uint32_t flags) 
         pageTable = to_HHDM(newPageTable);
         i--;
     }
+    return false; // pageTable should never be null
 }
 
 void x86_64_UnmapPage(void* pageTable, uint64_t virtualAddress) {

@@ -155,9 +155,9 @@ bool x86_64_PageMapper::RemapPage(uint64_t virt, VMM::Protection prot, bool user
     }
     flags |= x86_64_PAT_GetPageMappingFlags(offset);
     spinlock_acquire(&m_lock);
-    x86_64_RemapPage(m_pageTable, virt, flags);
+    bool rc = x86_64_RemapPage(m_pageTable, virt, flags);
     spinlock_release(&m_lock);
-    return true;
+    return rc;
 }
 
 bool x86_64_PageMapper::RemapPages(uint64_t virt, size_t count, VMM::Protection prot, bool user, VMM::CacheType cacheType) {

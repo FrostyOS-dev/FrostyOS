@@ -137,7 +137,7 @@ void* x86_64_GetNextPageTable(void* pageTableEntry, uint64_t index);
 uint64_t x86_64_GetPhysicalAddress(void* pageTable, uint64_t virtualAddress);
 
 void x86_64_MapPage(void* pageTable, uint64_t virtualAddress, uint64_t physicalAddress, uint32_t flags);
-void x86_64_RemapPage(void* pageTable, uint64_t virtualAddress, uint32_t flags);
+bool x86_64_RemapPage(void* pageTable, uint64_t virtualAddress, uint32_t flags);
 void x86_64_UnmapPage(void* pageTable, uint64_t virtualAddress);
 
 void x86_64_Map2MiBPage(void* pageTable, uint64_t virtualAddress, uint64_t physicalAddress, uint32_t flags);
