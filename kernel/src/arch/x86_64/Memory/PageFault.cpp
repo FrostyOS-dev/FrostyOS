@@ -55,7 +55,16 @@ void x86_64_PageFaultHandler(x86_64_ISR_Frame* frame) {
             else
                 vmm = process->GetVMM();
             bool bus = false;
-            if (vmm != nullptr && vmm->HandlePageFault({code.present, code.write, code.user, code.execute}, frame->CR2, &bus))
+            bool rc = false;
+            if (vmm != nullptr) {
+                bool irq = (frame->RFLAGS & (1 << 9)) != 0;
+                if (irq)
+                    Processor::EnableInterrupts(); // enable interrupts if the faulting context had them enabled
+                rc = vmm->HandlePageFault({code.present, code.write, code.user, code.execute}, frame->CR2, &bus);
+                if (irq)
+                    Processor::DisableInterrupts();
+            }
+            if (rc)
                 return;
             if (frame->CS != x86_64_GDT_KERNEL_CODE_SEGMENT && process->GetMode() == ProcessMode::USER && 0 == thread->RaiseSignal(bus ? SIGBUS : SIGSEGV, true))
                 return;
