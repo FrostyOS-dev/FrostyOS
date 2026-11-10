@@ -40,3 +40,39 @@ spinlock_release:
     mov rsp, rbp
     pop rbp
     ret
+
+global spinlock_acquire_int
+spinlock_acquire_int:
+    push rbp
+    mov rbp, rsp
+    pushf
+    pop rax
+    and eax, 1 << 9
+    cli
+.check:
+    lock bts QWORD [rdi], 0
+    jc .spin_with_pause
+    or DWORD [rdi], eax
+    mov rsp, rbp
+    pop rbp
+    ret
+
+.spin_with_pause:
+    pause
+    test QWORD [rdi], 1
+    jnz .spin_with_pause
+    jmp .check
+
+global spinlock_release_int
+spinlock_release_int:
+    push rbp
+    mov rbp, rsp
+    mov rax, QWORD [rdi]
+    mov QWORD [rdi], 0
+    test rax, 1 << 9
+    jz .end
+    sti
+.end:
+    mov rsp, rbp
+    pop rbp
+    ret
