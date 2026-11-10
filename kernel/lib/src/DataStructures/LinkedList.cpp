@@ -154,7 +154,7 @@ namespace LinkedList {
         return nullptr;
     }
 
-    void deleteNode(Node*& head, uint64_t key, bool vmm, bool usePool) {
+    bool deleteNode(Node*& head, uint64_t key, bool vmm, bool usePool) {
         Node* temp = head;
         if (temp != nullptr && temp->data == key) {
             head = temp->next;
@@ -169,13 +169,13 @@ namespace LinkedList {
                 kfree_vmm(temp);
             else
                 delete temp;
-            return;
+            return true;
         }
         if (temp == nullptr)
-            return;
+            return false;
         while (temp->data != key) {
             if (temp->next == nullptr)
-                return;
+                return false;
             temp = temp->next;
         }
         if (temp->next != nullptr)
@@ -188,11 +188,12 @@ namespace LinkedList {
             kfree_vmm(temp);
         else
             delete temp;
+        return true;
     }
 
-    void deleteNode(Node*& head, Node* node, bool vmm, bool usePool) {
+    bool deleteNode(Node*& head, Node* node, bool vmm, bool usePool) {
         if (node == nullptr || head == nullptr)
-            return;
+            return false;
         if (node->next != nullptr)
             node->next->previous = node->previous;
         if (node->previous != nullptr)
@@ -205,6 +206,7 @@ namespace LinkedList {
             kfree_vmm(node);
         else
             delete node;
+        return true;
     }
 
     void fprint(fd_t file, Node* head) {

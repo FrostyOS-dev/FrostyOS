@@ -67,10 +67,10 @@ namespace LinkedList {
     Node* findNode(Node* head, uint64_t data);
 
     // Delete a node
-    void deleteNode(Node*& head, uint64_t key, bool vmm = false, bool usePool = false);
+    bool deleteNode(Node*& head, uint64_t key, bool vmm = false, bool usePool = false);
 
     // Delete a specific node
-    void deleteNode(Node*& head, Node* node, bool vmm = false, bool usePool = false);
+    bool deleteNode(Node*& head, Node* node, bool vmm = false, bool usePool = false);
 
     // print the Linked list
     void fprint(fd_t file, Node* head);
@@ -164,12 +164,12 @@ namespace LinkedList {
             return UINT64_MAX;
         }
         void remove(uint64_t index) {
-            deleteNode(m_start, (uint64_t)get(index), m_vmm, m_usePool);
-            m_count--;
+            if(deleteNode(m_start, (uint64_t)get(index), m_vmm, m_usePool))
+                m_count--;
         }
         void remove(const T* obj) {
-            deleteNode(m_start, (uint64_t)obj, m_vmm, m_usePool);
-            m_count--;
+            if (deleteNode(m_start, (uint64_t)obj, m_vmm, m_usePool))
+                m_count--;
         }
         void rotateLeft() {
             if (m_count < 2)
@@ -346,8 +346,8 @@ namespace LinkedList {
                 return;
             if (node == m_end)
                 m_end = node->previous;
-            deleteNode(m_start, node, m_vmm, m_usePool);
-            m_count--;
+            if (deleteNode(m_start, node, m_vmm, m_usePool))
+                m_count--;
             if (m_count == 0) {
                 m_start = nullptr;
                 m_end = nullptr;
@@ -512,7 +512,7 @@ namespace LinkedList {
     class LockableLinkedList { // has a internal SimpleLinkedList and a spinlock. We do not lock automatically, so the user must lock the list before using it.
     public:
         LockableLinkedList(bool usePool = false)
-            : m_list(usePool), m_lock() {}
+            : m_list(false, usePool), m_lock() {}
         ~LockableLinkedList() {
         }
 
