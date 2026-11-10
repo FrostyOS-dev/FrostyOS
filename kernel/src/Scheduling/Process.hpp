@@ -70,6 +70,11 @@ public:
     Process(ProcessMode mode, VMM::VMM* vmm, uint8_t nice);
     ~Process();
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+    static inline constexpr off_t GetNodeOffset() { return offsetof(Process, m_node); }
+#pragma GCC diagnostic pop
+
     bool Start(bool insert = true);
     bool Create(bool initAlloc = true);
     void Delete();
@@ -155,6 +160,8 @@ public:
 
 private:
     void DiscardPendingSignals(const int* sigs, size_t count); // caller holds m_signalLock
+
+    AVLTree::Node m_node;
 
     ProcessMode m_Mode;
     VMM::VMM* m_VMM;

@@ -51,7 +51,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace Scheduler {
 
     ProcessorState g_BSPState;
-    LinkedList::LockableLinkedList<Process> g_Processes;
+
+    AVLTree::IntrusiveTree<Process, Process::GetNodeOffset()> g_Processes;
+    spinlock_t g_processLock;
+
     Process g_IdleProcess(ProcessMode::KERNEL, nullptr, 0);
     uint64_t g_LastPID = 0;
     uint64_t g_LastTID = 0;
@@ -62,6 +65,14 @@ namespace Scheduler {
 
     ThreadList g_deadThreads;
     Semaphore g_deadThreadsSemaphore(0, 1);
+
+    void LockProcessList() {
+        spinlock_acquire_int(&g_processLock);
+    }
+
+    void UnlockProcessList() {
+        spinlock_release(&g_processLock);
+    }
 
     [[noreturn]] void RunThread(Thread* thread, bool interrupt, bool noSignals) {
         Processor::DisableInterrupts();
@@ -160,36 +171,25 @@ namespace Scheduler {
             }
         }
 
-        g_Processes.lock();
-        g_Processes.insert(process);
-        g_Processes.unlock();
+        LockProcessList();
+        g_Processes.Insert(process, process->GetPID());
+        UnlockProcessList();
     }
 
     Process* GetProcess(int64_t pid) {
-        struct Data {
-            Process* process;
-            int64_t pid;
-        } data = {nullptr, pid};
-        g_Processes.lock();
-        g_Processes.Enumerate([](Process* process, void* data) -> bool {
-            Data* d = (Data*)data;
-            if (process->GetPID() == d->pid) {
-                d->process = process;
-                return false;
-            }
-            return true;
-        }, &data);
-        g_Processes.unlock();
-        return data.process;
+        LockProcessList();
+        Process* process = g_Processes.Find((uint64_t)pid);
+        UnlockProcessList();
+        return process;
     }
 
     void RemoveProcess(int64_t pid) {
         Process* process = GetProcess(pid);
         if (process == nullptr)
             return;
-        g_Processes.lock();
-        g_Processes.remove(process);
-        g_Processes.unlock();
+        LockProcessList();
+        g_Processes.Remove(process);
+        UnlockProcessList();
     }
 
     uint64_t AssignTID() {
@@ -214,22 +214,31 @@ namespace Scheduler {
 
         int found = 0;
         int permitted = 0;
+        int n = 0;
+        constexpr int MAXP = 64;
+        int64_t pids[MAXP];
 
-        int state = Processor::DisableInterrupts();
-        g_Processes.lock();
-        g_Processes.Enumerate([&](Process* p, void*) -> bool {
+        LockProcessList();
+        g_Processes.ForEach([&](int64_t pid, Process* p) -> bool {
             if (p->GetPGID() != pgid || p->GetState() == ProcessState::ZOMBIE)
                 return true;
             found++;
             if (!CanSignalProcess(sender, p, signal))
                 return true;
             permitted++;
-            if (signal != 0)
-                p->RaiseSignal(signal);
+            if (n < MAXP)
+                pids[n++] = pid;
             return true;
-        }, nullptr);
-        g_Processes.unlock();
-        Processor::EnableInterrupts(state);
+        });
+        UnlockProcessList();
+
+        if (signal != 0) {
+            for (int i = 0; i < n; i++) {
+                Process* p = GetProcess(pids[i]);
+                if (p != nullptr)
+                    p->RaiseSignal(signal);
+            }
+        }
 
         if (found == 0)
             return -ESRCH;
@@ -240,26 +249,26 @@ namespace Scheduler {
 
     bool ProcessGroupExists(int64_t pgid, int64_t sid) {
         bool exists = false;
-        g_Processes.lock();
-        g_Processes.Enumerate([&](Process* p, void*) -> bool {
+        LockProcessList();
+        g_Processes.ForEach([&](int64_t, Process* p) -> bool {
             if (p->GetPGID() == pgid && p->GetState() != ProcessState::ZOMBIE && (sid == -1 || p->GetSID() == sid)) {
                 exists = true;
                 return false;
             }
             return true;
-        }, nullptr);
-        g_Processes.unlock();
+        });
+        UnlockProcessList();
         return exists;
     }
 
     void SetSessionTTY(int64_t sid, TTY* tty) {
-        g_Processes.lock();
-        g_Processes.Enumerate([&](Process* p, void*) -> bool {
+        LockProcessList();
+        g_Processes.ForEach([&](int64_t, Process* p) -> bool {
             if (p->GetSID() == sid)
                 p->SetControllingTTY(tty);
             return true;
-        }, nullptr);
-        g_Processes.unlock();
+        });
+        UnlockProcessList();
     }
 
     static inline bool IsDead(Process* p) {
@@ -270,7 +279,7 @@ namespace Scheduler {
         int64_t ppids[32];
         int n = 0;
         bool overflow = false;
-        g_Processes.Enumerate([&](Process* p, void*) -> bool {
+        g_Processes.ForEach([&](int64_t, Process* p) -> bool {
             if (p->GetPGID() != pgid || IsDead(p))
                 return true;
             if (n == 32) {
@@ -279,12 +288,12 @@ namespace Scheduler {
             }
             ppids[n++] = p->GetPPID();
             return true;
-        }, nullptr);
+        });
         if (overflow)
             return false;
 
         bool orphaned = true;
-        g_Processes.Enumerate([&](Process* q, void*) -> bool {
+        g_Processes.ForEach([&](int64_t, Process* q) -> bool {
             if (IsDead(q) || q->GetPGID() == pgid || q->GetSID() != sid)
                 return true;
             for (int i = 0; i < n; i++) {
@@ -294,14 +303,14 @@ namespace Scheduler {
                 }
             }
             return true;
-        }, nullptr);
+        });
         return orphaned;
     }
 
     bool IsProcessGroupOrphaned(int64_t pgid, int64_t sid) {
-        g_Processes.lock();
+        LockProcessList();
         bool r = IsGroupOrphanedLocked(pgid, sid);
-        g_Processes.unlock();
+        UnlockProcessList();
         return r;
     }
 
@@ -317,16 +326,16 @@ namespace Scheduler {
                 out[n++] = { pgid, sid, false };
         };
 
-        g_Processes.lock();
+        LockProcessList();
         add(ownPGID);
-        g_Processes.Enumerate([&](Process* p, void*) -> bool {
+        g_Processes.ForEach([&](int64_t, Process* p) -> bool {
             if (p != subject && p->GetPPID() == subject->GetPID() && !IsDead(p) && p->GetSID() == sid)
                 add(p->GetPGID());
             return true;
-        }, nullptr);
+        });
         for (int i = 0; i < n; i++)
             out[i].wasOrphaned = IsGroupOrphanedLocked(out[i].pgid, out[i].sid);
-        g_Processes.unlock();
+        UnlockProcessList();
         return n;
     }
 
@@ -335,18 +344,18 @@ namespace Scheduler {
             if (c[i].wasOrphaned)
                 continue;
             bool now, hasStopped = false;
-            g_Processes.lock();
+            LockProcessList();
             now = IsGroupOrphanedLocked(c[i].pgid, c[i].sid);
             if (now) {
-                g_Processes.Enumerate([&](Process* p, void*) -> bool {
+                g_Processes.ForEach([&](int64_t, Process* p) -> bool {
                     if (p->GetPGID() == c[i].pgid && !IsDead(p) && p->GetState() == ProcessState::STOPPED) {
                         hasStopped = true;
                         return false;
                     }
                     return true;
-                }, nullptr);
+                });
             }
-            g_Processes.unlock();
+            UnlockProcessList();
             if (now && hasStopped) {
                 SignalProcessGroup(c[i].pgid, SIGHUP);
                 SignalProcessGroup(c[i].pgid, SIGCONT);
@@ -359,16 +368,16 @@ namespace Scheduler {
         if (dying->GetPID() == initPID)
             return;
         bool zombies = false;
-        g_Processes.lock();
-        g_Processes.Enumerate([&](Process* p, void*) -> bool {
+        LockProcessList();
+        g_Processes.ForEach([&](int64_t, Process* p) -> bool {
             if (p != dying && p->GetPPID() == dying->GetPID()) {
                 p->SetPPID(initPID);
                 if (p->GetState() == ProcessState::ZOMBIE)
                     zombies = true;
             }
             return true;
-        }, nullptr);
-        g_Processes.unlock();
+        });
+        UnlockProcessList();
         if (zombies) {
             Process* init = GetProcess(initPID);
             if (init != nullptr)

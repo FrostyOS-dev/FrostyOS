@@ -64,8 +64,10 @@ namespace Scheduler {
     };
 
     extern ProcessorState g_BSPState;
-    extern LinkedList::LockableLinkedList<Process> g_Processes;
+    extern AVLTree::IntrusiveTree<Process, Process::GetNodeOffset()> g_Processes;
 
+    void LockProcessList();
+    void UnlockProcessList();
     
     [[noreturn]] void RunThread(Thread* thread, bool interrupt, bool noSignals = false); // Interrupts must be disabled when this function is called
     void SaveThreadFromINT(Thread* thread, void* data);

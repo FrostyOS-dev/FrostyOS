@@ -368,16 +368,16 @@ int sys_exec(const char* path, char* const argv[], char* const env[]) {
         return -ENOMEM;
     }
 
-    Scheduler::g_Processes.lock();
-    Scheduler::g_Processes.remove(currentProc);
-    Scheduler::g_Processes.unlock();
+    Scheduler::LockProcessList();
+    Scheduler::g_Processes.Remove(currentProc);
+    Scheduler::UnlockProcessList();
 
     if (!newProc->Start()) {
         newProc->Delete();
         delete newProc;
-        Scheduler::g_Processes.lock();
-        Scheduler::g_Processes.insert(currentProc);
-        Scheduler::g_Processes.unlock();
+        Scheduler::LockProcessList();
+        Scheduler::g_Processes.Insert(currentProc, currentProc->GetPID());
+        Scheduler::UnlockProcessList();
         return -ENOTSUP; // very unlikely to happen
     }
 
@@ -405,11 +405,11 @@ long sys_waitpid(pid_t pid, int* wstatus, int options) {
         int64_t myPID = currentProcess->GetPID();
         int64_t myPGID = currentProcess->GetPGID();
         
-        Scheduler::g_Processes.lock();
-        Scheduler::g_Processes.Enumerate([&](Process* p, void* data) -> bool {
+        Scheduler::LockProcessList();
+        Scheduler::g_Processes.ForEach([&](int64_t mPID, Process* p) -> bool {
             if (p->GetPPID() != myPID)
                 return true;
-            bool match = (pid == -1) || (pid > 0 && p->GetPID() == pid) || (pid == 0 && p->GetPGID() == myPGID) || (pid < -1 && p->GetPGID() == -pid);
+            bool match = (pid == -1) || (pid > 0 && mPID == pid) || (pid == 0 && p->GetPGID() == myPGID) || (pid < -1 && p->GetPGID() == -pid);
             if (!match)
                 return true;
             hasChildren = true;
@@ -429,38 +429,38 @@ long sys_waitpid(pid_t pid, int* wstatus, int options) {
                 return false;
             }
             return true;
-        }, nullptr);
-        
-        if (hit != nullptr) {
-            Event::UnregisterWaitNodes(&nodePtr, 1);
+        });
 
-            if (wstatus != nullptr) {
-                int status;
-                if (hitEvent == PROCESS_WAIT_STOPPED)
-                    status = (hit->GetStopSignal() << 8) | 0x7F;
-                else if (hitEvent == PROCESS_WAIT_CONTINUED)
-                    status = 0xFFFF;
-                else
-                    status = hit->GetExitStatus();
-                if (!UserWrite(wstatus, &status, sizeof(int), currentProcess)) {
-                    Scheduler::g_Processes.unlock();
-                    return -EFAULT;
-                }
-            }
-            
-            int64_t reapedPid = hit->GetPID();
-            if (hitEvent != 0) { // stop/continue don't reap
+        int64_t reapedPid = -1;
+        int status = 0;
+        Process* toDelete = nullptr;
+
+        if (hit != nullptr) {
+            reapedPid = hit->GetPID();
+            if (hitEvent == PROCESS_WAIT_STOPPED)
+                status = (hit->GetStopSignal() << 8) | 0x7F;
+            else if (hitEvent == PROCESS_WAIT_CONTINUED)
+                status = 0xFFFF;
+            else
+                status = hit->GetExitStatus();
+
+            if (hitEvent != 0)
                 hit->ClearWaitEvents(hitEvent);
-                Scheduler::g_Processes.unlock();
-                return reapedPid;
+            else {
+                Scheduler::g_Processes.Remove(hit);
+                toDelete = hit;
             }
-            Scheduler::g_Processes.remove(hit);
-            Scheduler::g_Processes.unlock();
-            delete hit;
+        }
+        Scheduler::UnlockProcessList();
+
+        if (reapedPid >= 0) {
+            Event::UnregisterWaitNodes(&nodePtr, 1);
+            if (toDelete)
+                delete toDelete;
+            if (wstatus != nullptr && !UserWrite(wstatus, &status, sizeof(int), currentProcess))
+                return -EFAULT;
             return reapedPid;
         }
-        
-        Scheduler::g_Processes.unlock();
         
         if (!hasChildren) {
             Event::UnregisterWaitNodes(&nodePtr,1);

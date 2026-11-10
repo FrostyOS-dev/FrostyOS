@@ -100,13 +100,16 @@ bool Thread::Delete() {
 bool Thread::ExitCurrentThread(uint64_t code, bool deleteThis, bool deleteParent, bool removeProc) {
     int exitIntState = Processor::DisableInterrupts();
     Thread* thread = Scheduler::RemoveCurrentThread(true);
-    if (thread == nullptr)
+    if (thread == nullptr) {
+        Processor::EnableInterrupts(exitIntState);
         return false;
+    }
     // Clear any pending yield callback to prevent use-after-free when thread is deleted
     thread->yieldCallback = {};
     thread->m_deleteProp = {deleteThis, deleteParent, removeProc, true, exitIntState, code};
     Scheduler::ProcessorState* state = GetCurrentProcessorState();
     Processor::SwapStack(Thread_ExitHelper, thread, state->kernelStack);
+    Processor::EnableInterrupts(exitIntState);
     return false;
 }
 
