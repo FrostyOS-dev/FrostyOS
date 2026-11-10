@@ -86,9 +86,9 @@ bool x86_64_PageMapper::MapPage(uint64_t virt, uint64_t phys, VMM::Protection pr
         break;
     }
     flags |= x86_64_PAT_GetPageMappingFlags(offset);
-    spinlock_acquire(&m_lock);
+    spinlock_acquire_int(&m_lock);
     x86_64_MapPage(m_pageTable, virt, phys, flags);
-    spinlock_release(&m_lock);
+    spinlock_release_int(&m_lock);
     return true;
 }
 
@@ -101,9 +101,9 @@ bool x86_64_PageMapper::MapPages(uint64_t virt, uint64_t phys, size_t count, VMM
 }
 
 bool x86_64_PageMapper::UnmapPage(uint64_t virt) {
-    spinlock_acquire(&m_lock);
+    spinlock_acquire_int(&m_lock);
     x86_64_UnmapPage(m_pageTable, virt);
-    spinlock_release(&m_lock);
+    spinlock_release_int(&m_lock);
     return true;
 }
 
@@ -154,9 +154,9 @@ bool x86_64_PageMapper::RemapPage(uint64_t virt, VMM::Protection prot, bool user
         break;
     }
     flags |= x86_64_PAT_GetPageMappingFlags(offset);
-    spinlock_acquire(&m_lock);
+    spinlock_acquire_int(&m_lock);
     bool rc = x86_64_RemapPage(m_pageTable, virt, flags);
-    spinlock_release(&m_lock);
+    spinlock_release_int(&m_lock);
     return rc;
 }
 
@@ -169,9 +169,9 @@ bool x86_64_PageMapper::RemapPages(uint64_t virt, size_t count, VMM::Protection 
 }
 
 uint64_t x86_64_PageMapper::GetPhysicalAddr(uint64_t virt) {
-    spinlock_acquire(&m_lock);
+    spinlock_acquire_int(&m_lock);
     uint64_t phys = x86_64_GetPhysicalAddress(m_pageTable, virt);
-    spinlock_release(&m_lock);
+    spinlock_release_int(&m_lock);
     return phys;
 }
 
