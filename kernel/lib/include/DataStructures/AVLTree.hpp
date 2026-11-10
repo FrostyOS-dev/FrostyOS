@@ -184,6 +184,141 @@ namespace AVLTree {
         bool m_vmm;
         mutable Mutex m_lock;
     };
+
+
+    struct Node {
+        RB_ENTRY(Node) link;
+        uint64_t key;
+
+        void Reset() { link = {}; key = 0; }
+    };
+
+    int Node_compare(Node* a, Node* b);
+
+    typedef RB_HEAD(raw_NodeTree, Node) raw_NodeTree;
+    RB_PROTOTYPE(raw_NodeTree, Node, link, Node_compare)
+
+    template <typename T, size_t NodeOffset>
+    class IntrusiveTree {
+        static_assert(NodeOffset + sizeof(Node) <= sizeof(T), "bad node offset");
+
+        static Node* NodeOf(T* o) {
+            return reinterpret_cast<Node*>(reinterpret_cast<char*>(o) + NodeOffset);
+        }
+
+        static T* ObjOf(Node* n) {
+            return n != nullptr ? reinterpret_cast<T*>(reinterpret_cast<char*>(n) - NodeOffset) : nullptr;
+        }
+
+    public:
+        IntrusiveTree() {
+            RB_INIT(&m_tree);
+        }
+        IntrusiveTree(const IntrusiveTree&) = delete;
+        IntrusiveTree& operator=(const IntrusiveTree&) = delete;
+
+        bool Insert(T* obj, uint64_t key, T** existing = nullptr) {
+            Node* n = NodeOf(obj);
+            n->key = key;
+            Node* dup = RB_INSERT(raw_NodeTree, &m_tree, n);
+            if (dup != nullptr && existing != nullptr)
+                *existing = ObjOf(dup);
+            return dup == nullptr;
+        }
+
+        void Remove(T* obj) {
+            RB_REMOVE(raw_NodeTree, &m_tree, NodeOf(obj));
+        }
+
+        T* Find(uint64_t key) {
+            Node probe;
+            probe.key = key;
+            return ObjOf(RB_FIND(raw_NodeTree, &m_tree, &probe));
+        }
+
+        T* FindGE(uint64_t key) {
+            Node probe;
+            probe.key = key;
+            return ObjOf(RB_NFIND(raw_NodeTree, &m_tree, &probe));
+        }
+
+        T* FindLE(uint64_t key) {
+            Node probe;
+            probe.key = key;
+            Node* n = RB_NFIND(raw_NodeTree, &m_tree, &probe);
+            if (n == nullptr)
+                n = RB_MAX(raw_NodeTree, &m_tree);
+            else if (n->key > key)
+                n = RB_PREV(raw_NodeTree, &m_tree, n);
+            return ObjOf(n);
+        }
+
+        T* First() {
+            return ObjOf(RB_MIN(raw_NodeTree, &m_tree));
+        }
+
+        T* Last() {
+            return ObjOf(RB_MAX(raw_NodeTree, &m_tree));
+        }
+
+        T* Next(T* o) {
+            return ObjOf(RB_NEXT(raw_NodeTree, &m_tree, NodeOf(o)));
+        }
+
+        T* Prev(T* o) {
+            return ObjOf(RB_PREV(raw_NodeTree, &m_tree, NodeOf(o)));
+        }
+
+        static uint64_t KeyOf(T* o) {
+            return NodeOf(o)->key;
+        }
+
+        bool isEmpty() {
+            return RB_EMPTY(&m_tree);
+        }
+
+        void ForEach(FunctionRef<bool (uint64_t, T*)> cb) {
+            Node* n;
+            RB_FOREACH(n, raw_NodeTree, &m_tree) {
+                if (!cb(n->key, ObjOf(n)))
+                    return;
+            }
+        }
+
+        void ForEachFrom(FunctionRef<bool (uint64_t, T*)> cb, uint64_t startingKey) {
+            Node n;
+            n.key = startingKey;
+            Node* start = RB_NFIND(raw_NodeTree, &m_tree, &n);
+            Node* node = &n;
+            RB_FOREACH_FROM(node, raw_NodeTree, start) {
+                if (!cb(node->key, ObjOf(node)))
+                    return;
+            }
+        }
+
+        // Removal is allowed of the object provided to cb
+        void ForEachFromSafe(FunctionRef<bool (uint64_t, T*)> cb, uint64_t startingKey) {
+            Node probe;
+            probe.key = startingKey;
+            Node* n = RB_NFIND(raw_NodeTree, &m_tree, &probe);
+            while (n != nullptr) {
+                Node* next = RB_NEXT(raw_NodeTree, &m_tree, n);
+                if (!cb(n->key, ObjOf(n)))
+                    return;
+                n = next;
+            }
+        }
+
+        void Drain(FunctionRef<void (T*)> cb) {
+            for (Node* n = RB_MIN(raw_NodeTree, &m_tree); n != nullptr; n = RB_MIN(raw_NodeTree, &m_tree)) {
+                RB_REMOVE(raw_NodeTree, &m_tree, n);
+                cb(ObjOf(n));
+            }
+        }
+
+    private:
+        raw_NodeTree m_tree;
+    };
 }
 
 #endif /* _AVLTREE_HPP */

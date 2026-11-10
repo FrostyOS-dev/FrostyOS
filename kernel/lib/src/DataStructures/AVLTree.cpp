@@ -39,6 +39,12 @@ namespace AVLTree {
         return 0;
     }
 
+    int Node_compare(Node* a, Node* b) {
+        return a->key < b->key ? -1 : (a->key > b->key ? 1 : 0);
+    }
+
+    RB_GENERATE(raw_NodeTree, Node, link, Node_compare);
+
 }
 
 #pragma GCC diagnostic pop

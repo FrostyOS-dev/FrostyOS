@@ -31,12 +31,7 @@
 #ifndef	_SYS_TREE_H_
 #define	_SYS_TREE_H_
 
-#ifndef __frostyos__
-#include <sys/cdefs.h>
-#else
-#include <stdint.h>
 #include <stddef.h>
-#endif
 
 /*
  * This file defines data structures for different types of trees:
