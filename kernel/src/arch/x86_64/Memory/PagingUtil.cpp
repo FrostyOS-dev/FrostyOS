@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024-2025  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdio.h>
 #include <util.h>
 
-#define FULL_FLUSH_THRESHOLD 0x1000 // 2 whole level 1 tables
+#define FULL_FLUSH_THRESHOLD 64
 
 bool g_x86_64_5LevelPagingSupportChecked = false;
 bool g_x86_64_2MiBPageSupportChecked = false;
