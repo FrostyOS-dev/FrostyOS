@@ -56,7 +56,7 @@ namespace FS {
                 return false;
             page->physAddr = (uint64_t)AllocatePage();
             page->protection = VMM::Protection::READ_WRITE;
-            obj->pages.Insert(offset, page);
+            obj->pages.Insert(page, offset);
         }
         *outPage = page;
         return true;
@@ -69,29 +69,30 @@ namespace FS {
     void TempFSPager::ZeroRange(VMM::MemoryObject* obj, uint64_t from, uint64_t to) {
         if (from >= to)
             return;
-        spinlock_acquire(&obj->lock);
-        for (AVLTree::wAVLTreeNode* node = obj->pages.FindNodeOrHigher(ALIGN_DOWN(from, PAGE_SIZE)); node != nullptr && node->key < to; node = obj->pages.NextNode(node)) {
-            VMM::Page* page = reinterpret_cast<VMM::Page*>(node->value);
-            if (page->physAddr == 0)
-                continue;
-            uint64_t s = from > node->key ? from - node->key : 0;
-            uint64_t e = (to - node->key) < PAGE_SIZE ? to - node->key : PAGE_SIZE;
-            memset((uint8_t*)(to_HHDM(page->physAddr) + s), 0, e - s);
-        }
-        spinlock_release(&obj->lock);
+        obj->lock.Lock();
+        obj->pages.ForEachFrom([&](uint64_t offset, VMM::Page* p) -> bool {
+            if (offset >= to)
+                return false;
+            if (p->physAddr == 0)
+                return true;
+            uint64_t s = from > offset ? from - offset : 0;
+            uint64_t e = (to - offset) < PAGE_SIZE ? to - offset : PAGE_SIZE;
+            memset((uint8_t*)(to_HHDM(p->physAddr) + s), 0, e - s);
+            return true;
+        }, ALIGN_DOWN(from, PAGE_SIZE));
+        obj->lock.Unlock();
     }
 
     void TempFSPager::DiscardPages(VMM::MemoryObject* obj, uint64_t fromOffset) {
         while (true) {
-            spinlock_acquire(&obj->lock);
-            AVLTree::wAVLTreeNode* node = obj->pages.FindNodeOrHigher(fromOffset);
-            if (node == nullptr) {
-                spinlock_release(&obj->lock);
+            obj->lock.Lock();
+            VMM::Page* page = obj->pages.FindGE(fromOffset);
+            if (page == nullptr) {
+                obj->lock.Unlock();
                 return;
             }
-            VMM::Page* page = reinterpret_cast<VMM::Page*>(node->value);
-            obj->pages.RemoveNode(node);
-            spinlock_release(&obj->lock);
+            obj->pages.Remove(page);
+            obj->lock.Unlock();
 
             if (page->physAddr != 0)
                 FreePage((void*)page->physAddr);

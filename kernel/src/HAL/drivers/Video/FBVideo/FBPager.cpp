@@ -61,7 +61,7 @@ namespace Video {
                 return false;
             page->physAddr = from_HHDM((uint64_t)fb->BaseAddress + offset);
             page->protection = display->GetDefaultProt();
-            obj->pages.Insert(offset, page);
+            obj->pages.Insert(page, offset);
         }
         *outPage = page;
         return true;

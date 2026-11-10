@@ -57,43 +57,48 @@ namespace VMM {
         DEFAULT = WRITE_BACK
     };
 
+    struct FrameDesc {
+        uint32_t refCount;
+        uint32_t flags;
+    };
+
     struct Page {
+        AVLTree::Node node;
         uint64_t physAddr; // 0 when not assigned
         Protection protection; // highest protection this page is capable of
         bool isWired; // pageable
-    }; // doesn't need a lock 
-
-    struct Anon {
-        uint64_t refCount;
-        uint64_t physAddr;
+        uint16_t flags;
     };
 
-    struct AnonMap {
-        uint64_t refCount;
-        size_t slotCount;
-        spinlock_new(lock);
-        Anon** slots; // pointer to an array of pointers to Anon objects
+    enum class ObjectKind : uint8_t {
+        Backed,
+        Anon
     };
 
     struct MemoryObject {
-        uint64_t size;
+        uint64_t size; // pages
         uint64_t refCount;
-
-        AVLTree::wAVLTree<uint64_t, Page*> pages;
-
+        ObjectKind kind;
+        AVLTree::IntrusiveTree<Page, offsetof(Page, node)> pages; // keyed by offset in bytes
         DefaultPager* pager;
         void* pagerData;
+        Mutex lock;
 
-        spinlock_new(lock);
+        static void* operator new(size_t size);
+        static void operator delete(void* ptr);
+        static void operator delete(void* ptr, size_t size);
     };
 
     struct MapEntry {
+        AVLTree::Node node;
         uint64_t startVirt;
         uint64_t endVirt;
-        uint64_t offset; // offset into memoryObject or anonMap
 
-        AnonMap* anonMap;
-        MemoryObject* memoryObject;
+        MemoryObject* object;
+        uint64_t objectOffset; // bytes
+        
+        MemoryObject* anon;
+        uint64_t anonOffset; // bytes
 
         struct {
             Protection protection;
@@ -103,8 +108,6 @@ namespace VMM {
             bool isPrivate;
             bool zero;
         } flags;
-        
-        uint64_t wireCount; // currently unused
     };
 
     struct AllocFlags {
@@ -162,21 +165,30 @@ namespace VMM {
         void DumpRegions(fd_t fd);
 
     private:
-        MapEntry* SplitMapEntry(MapEntry* entry, uint64_t newPageCount); // split a map entry so that entry has a page count of newPageCount, returns the new upper part
+        MapEntry* SplitMapEntry(MapEntry* entry, uint64_t lowerPages, MapEntry* spare); // split a map entry so that entry has a page count of newPageCount, returns the new upper part
         bool Internal_FreePages(void* virtAddr, uint64_t totalCount, bool multipleRegions, bool lock); // lock controls whether the mapEntries should be locked, and if the vmRegionAllocator should be locked
 
         bool ValidateAccess(const void* addr, size_t size, Protection need, bool user);
         bool PageIsReady(uint64_t virt, bool write);
 
+        bool ResolveNeedsCopy(MapEntry* e); // entries lock is held
+        void ReleaseEntry(MapEntry* e, bool invalidate);
+
         // UVM fields
         PageMapper* m_pageMapper;
         VMRegionAllocator* m_vmRegionAllocator;
-        AVLTree::wAVLTree<uint64_t, MapEntry*> m_mapEntries; // Key is startVirt
+        AVLTree::IntrusiveTree<MapEntry, offsetof(MapEntry, node)> m_mapEntries;
+        Mutex m_mapEntriesLock;
     };
 
     void ReleaseMemoryObject(MemoryObject* obj);
+    void RefMemObj(MemoryObject* obj);
+    bool UnrefMemObj(MemoryObject* obj);
+    bool MemObjIsShared(MemoryObject* obj);
 
-    extern VMM* g_KVMM; // to be implemented in arch-specific code
+    // to be implemented in arch-specific code
+    extern VMM* g_KVMM;
+    extern FrameDesc* g_frameTable; // indexed by page number
 
 };
 

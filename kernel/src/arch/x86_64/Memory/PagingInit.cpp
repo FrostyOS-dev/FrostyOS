@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "PageMapper.hpp"
+#include "PageTables.hpp"
 #include "PagingInit.hpp"
 #include "PagingUtil.hpp"
 #include "PAT.hpp"
@@ -41,6 +42,7 @@ PageMapper* g_KPageMapper = nullptr; // declared in the Memory/PageMapper.hpp
 
 namespace VMM {
     VMM* g_KVMM = nullptr;
+    FrameDesc* g_frameTable = nullptr;
 }
 
 void* g_KernelRootPageTable = nullptr;
@@ -78,9 +80,15 @@ void x86_64_InitPaging(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t
 #define to_newHHDM(addr) ((addr) + newHHDMOffset)
 
     uint64_t frameBufferEntryIndex = 0;
+    uint64_t maxValidPhysAddr = 0;
 
     // HHDM map any usable, bootloader reclaimable, kernel and modules memory as read-write with default cache policy
     for (uint64_t i = 0; i < memoryMapEntryCount; i++) {
+#define VALID_TYPE(x) (x == MEMORY_MAP_ENTRY_USABLE || x == MEMORY_MAP_ENTRY_BOOTLOADER_RECLAIMABLE || x == MEMORY_MAP_ENTRY_KERNEL_AND_MODULES || x == MEMORY_MAP_ENTRY_FRAMEBUFFER)
+        if (VALID_TYPE(memoryMap[i]->Type))
+            maxValidPhysAddr = memoryMap[i]->Base + memoryMap[i]->Length;
+#undef VALID_TYPE
+
         if (memoryMap[i]->Type == MEMORY_MAP_ENTRY_FRAMEBUFFER) {
             frameBufferEntryIndex = i;
             continue;
@@ -136,4 +144,21 @@ void x86_64_InitPaging(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t
     VMM::g_KVMM = &KVMM;
     VMM::g_defaultPager = &DefaultPager;
     g_KPageMapper = &KPageMapper;
+
+    // Init the frame table
+    uint64_t bytes = ALIGN_UP((maxValidPhysAddr >> PAGE_SIZE_SHIFT) * sizeof(VMM::FrameDesc), PAGE_SIZE);
+    void* virt = KVMRegionAllocator.AllocatePages(bytes >> PAGE_SIZE_SHIFT);
+    if (virt == nullptr)
+        PANIC("Failed to allocate virtual address for frame table");
+    for (uint64_t i = 0; i < bytes; i += PAGE_SIZE) {
+        void* phys = g_PMM->AllocatePage();
+        if (phys == nullptr)
+            PANIC("Failed to allocate physical address for frame table");
+        x86_64_MapPage(g_KernelRootPageTable, (uint64_t)virt + i, (uint64_t)phys, 0x0800'0003); // read-write, present, no-execute
+    }
+    x86_64_InvalidatePages((uint64_t)virt, bytes);
+
+    memset(virt, 0, bytes);
+
+    VMM::g_frameTable = (VMM::FrameDesc*)virt;
 }

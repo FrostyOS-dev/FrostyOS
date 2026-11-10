@@ -373,9 +373,7 @@ namespace FS {
 
         pager->ZeroRange(obj, newSize, cutoff);
 
-        spinlock_acquire(&obj->lock);
-        bool userMapped = obj->refCount > m_blockCount + 1; // each block and vnode hold 1 ref
-        spinlock_release(&obj->lock);
+        bool userMapped = __atomic_load_n(&obj->refCount, __ATOMIC_ACQUIRE) > m_blockCount + 1; // each block and vnode hold 1 ref
 
         if (userMapped) {
             // TODO: reverse map to revoke user mappings
@@ -505,11 +503,9 @@ namespace FS {
             return nullptr;
         }
 
-        if (firstBlock) {
-            spinlock_acquire(&m_memObj->lock);
-            m_memObj->refCount++; // vnode's own reference
-            spinlock_release(&m_memObj->lock);
-        }
+        if (firstBlock)
+            VMM::RefMemObj(m_memObj);
+
         m_blockCount++;
         SyncObjSize(offset + pages);
 
@@ -525,9 +521,9 @@ namespace FS {
         uint64_t pages = (m_attr.size + PAGE_SIZE - 1) >> PAGE_SIZE_SHIFT;
         if (minPages > pages)
             pages = minPages;
-        spinlock_acquire(&m_memObj->lock);
+        m_memObj->lock.Lock();
         m_memObj->size = pages;
-        spinlock_release(&m_memObj->lock);
+        m_memObj->lock.Unlock();
     }
 
 }

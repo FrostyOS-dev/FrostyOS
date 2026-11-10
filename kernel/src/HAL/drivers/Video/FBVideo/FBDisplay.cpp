@@ -140,7 +140,7 @@ namespace Video {
 
         m_lock.Lock();
         if (m_memObj == nullptr) {
-            m_memObj = (VMM::MemoryObject*)kcalloc_vmm(1, sizeof(VMM::MemoryObject));
+            m_memObj = new VMM::MemoryObject;
             if (m_memObj == nullptr) {
                 m_lock.Unlock();
                 return -ENOMEM;
