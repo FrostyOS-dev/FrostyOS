@@ -74,7 +74,7 @@ add_stage(toolchain
 add_stage(mlibc
     DEPENDS toolchain
     WATCH ${JS}/deps/mlibc ${JS}/deps/frostyos.cross-file ${JS}/recipes/mlibc ${JS}/recipes/mlibc-headers ${KHDR}
-    RUN "${JINX} build mlibc-headers && ${JINX} install -f ${SYSROOT} mlibc-headers && ${JINX} build mlibc && ${JINX} install -f ${SYSROOT} mlibc")
+    RUN "${JINX} build mlibc-headers && ${JINX} install -f ${SYSROOT} mlibc-headers && ${JINX} build mlibc && ${JINX} install -f ${SYSROOT} mlibc && ${SCRIPTS}/mlibc_compile_commands.sh")
 
 # Stage 3: ported software
 set(PORTS bash binutils coreutils findutils gcc ncurses vim)
@@ -82,7 +82,7 @@ list(JOIN PORTS " " PORTS_STR)
 add_stage(ports
     DEPENDS mlibc
     WATCH ${JS}/recipes ${JS}/Jinxfile
-    RUN "${JINX} update -b ${PORTS_STR} && ${JINX} install -f ${SYSROOT} ${PORTS_STR}")
+    RUN "${JINX} build base-files && ${JINX} update -b ${PORTS_STR} && ${JINX} install -f ${SYSROOT} base-files ${PORTS_STR}")
 
 ExternalProject_Add(os
     SOURCE_DIR ${REPO}
@@ -96,18 +96,16 @@ ExternalProject_Add(os
         -DFROSTYOS_BUILD_CONFIG=${FROSTYOS_BUILD_CONFIG}
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
     DEPENDS ports host_tools
-    BUILD_ALWAYS ON
-    CONFIGURE_HANDLED_BY_BUILD ON
+    BUILD_COMMAND ""
     INSTALL_COMMAND ""
-    USES_TERMINAL_CONFIGURE ON
-    USES_TERMINAL_BUILD ON)
+    USES_TERMINAL_CONFIGURE ON)
 
 add_custom_target(run-qemu
     COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}/os --target run-qemu
     USES_TERMINAL)
 add_dependencies(run-qemu os)
 
-add_custom_target(image
+add_custom_target(image ALL
     COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}/os --target image
     USES_TERMINAL)
 add_dependencies(image os)

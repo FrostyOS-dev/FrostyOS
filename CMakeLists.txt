@@ -67,7 +67,7 @@ endif()
 
 add_custom_target(image ALL
 	COMMAND ${CMAKE_SOURCE_DIR}/build-scripts/make_image.sh ${FROSTYOS_BOOT} ${FROSTYOS_ISO} ${FROSTYOS_ROOTFS}
-			${FROSTYOS_SYSROOT} ${CMAKE_SOURCE_DIR}/Userland/jinx-sources/base-files ${FROSTYOS_STAGE}
+			${FROSTYOS_SYSROOT} ${FROSTYOS_STAGE}
 	USES_TERMINAL VERBATIM)
 add_dependencies(image install_kernel limine_boot stage)
 

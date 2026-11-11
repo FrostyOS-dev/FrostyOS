@@ -17,11 +17,18 @@ set(service_manager_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Init.cpp
 )
 
-frostyos_program(ServiceManager ${service_manager_sources})
+frostyos_program(ServiceManager SOURCES ${service_manager_sources})
 
-install(CODE "
-    set(_bin \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/data/bin\")
-    file(MAKE_DIRECTORY \"\${_bin}\")
-    file(REMOVE \"\${_bin}/init\")
-    file(CREATE_LINK ServiceManager \"\${_bin}/init\" SYMBOLIC)
-")
+install(CODE [[
+    set(_bin "$ENV{DESTDIR}/${CMAKE_INSTALL_PREFIX}/data/bin")
+    file(MAKE_DIRECTORY "${_bin}")
+    set(_cur "")
+    if (IS_SYMLINK "${_bin}/init")
+        file(READ_SYMLINK "${_bin}/init" _cur)
+    endif()
+    if(NOT _cur STREQUAL "ServiceManager")
+        file(REMOVE "${_bin}/init")
+        file(CREATE_LINK ServiceManager "${_bin}/init" SYMBOLIC)
+    endif()
+]])
+

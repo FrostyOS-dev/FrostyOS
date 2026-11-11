@@ -18,8 +18,49 @@ add_link_options(--sysroot=${FROSTYOS_SYSROOT})
 
 include_directories(SYSTEM ${CMAKE_SOURCE_DIR}/kernel/headers/frostyos)
 
+set(CMAKE_SKIP_INSTALL_RPATH ON)
+
+# frostyos_library(<LibName> SOURCES <files...> [LIBS <libs...>] [PRIVATE_LIBS <libs...>])
+function(frostyos_library name)
+    cmake_parse_arguments(ARG "" "" "SOURCES;LIBS;PRIVATE_LIBS" ${ARGN})
+
+    add_library(${name} SHARED ${ARG_SOURCES})
+
+    string(REGEX REPLACE "^Lib" "" _output_name ${name})
+    set_target_properties(${name} PROPERTIES OUTPUT_NAME ${_output_name})
+
+    target_include_directories(${name}
+        PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                $<INSTALL_INTERFACE:data/include>
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+    if(ARG_LIBS)
+        target_link_libraries(${name} PUBLIC ${ARG_LIBS})
+    endif()
+    if(ARG_PRIVATE_LIBS)
+        target_link_libraries(${name} PRIVATE ${ARG_PRIVATE_LIBS})
+    endif()
+
+    install(TARGETS ${name}
+        LIBRARY DESTINATION data/lib
+        ARCHIVE DESTINATION data/lib)
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        install(DIRECTORY include/ DESTINATION data/include)
+    endif()
+
+    set_property(GLOBAL APPEND PROPERTY FROSTYOS_USERLAND_TARGETS ${name})
+endfunction()
+
+# frostyos_program(<name> SOURCES <files...> [LIBS <libs...>])
 function(frostyos_program name)
-    add_executable(${name} ${ARGN})
+    cmake_parse_arguments(ARG "" "" "SOURCES;LIBS" ${ARGN})
+
+    add_executable(${name} ${ARG_SOURCES})
+    if(ARG_LIBS)
+        target_link_libraries(${name} PRIVATE ${ARG_LIBS})
+    endif()
+
     install(TARGETS ${name} RUNTIME DESTINATION data/bin)
     set_property(GLOBAL APPEND PROPERTY FROSTYOS_USERLAND_TARGETS ${name})
 endfunction()
