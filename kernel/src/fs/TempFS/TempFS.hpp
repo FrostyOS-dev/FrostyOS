@@ -91,6 +91,9 @@ namespace FS {
         Block* CreateBlock(uint64_t offset, uint64_t pages); // offset and pages are page count numbers, not bytes
         void SyncObjSize(uint64_t minPages);
 
+        bool EnsureMemObj();
+        uint64_t CountResidentPages();
+
         size_t m_blockCount;
 
         char* m_name;

@@ -29,6 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <DataStructures/AVLTree.hpp>
 
 #include <Memory/PageMapper.hpp>
+#include <Memory/PagingUtil.hpp>
 #include <Memory/VMM.hpp>
 
 #include <HAL/Time.hpp>
@@ -240,6 +241,7 @@ namespace FS {
         if (out == nullptr)
             return -EINVAL;
         memcpy(out, &m_attr, sizeof(VAttr));
+        out->blocks = CountResidentPages();
         return ESUCCESS;
     }
 
@@ -321,20 +323,16 @@ namespace FS {
     }
 
     int TempFSVNode::Mmap(uint64_t offset, size_t size, VMM::MemoryObject** obj, const Credential& cred) {
-        if (offset + size > m_attr.blocks || obj == nullptr || size == 0 || (offset & (PAGE_SIZE - 1)) > 0 || (size & (PAGE_SIZE - 1)) > 0)
+        if (obj == nullptr || size == 0 || (offset & (PAGE_SIZE - 1)) != 0 || (size & (PAGE_SIZE - 1)) != 0)
+            return -EINVAL;
+        if (offset + size < offset)
+            return -EFBIG;
+
+        if (offset + size > ALIGN_UP_BASE2(m_attr.size, PAGE_SIZE))
             return -EINVAL;
 
-        if (m_memObj == nullptr) {
-            m_blocks.lock();
-            bool empty = m_blocks.isEmpty();
-            m_blocks.unlock();
-            if (empty)
-                return -EINVAL;
-            Block* b = CreateBlock(0, 1);
-            if (b == nullptr || m_memObj == nullptr)
-                return -ENOMEM;
-            RefVNode(this); // memory object's reference
-        }
+        if (!EnsureMemObj())
+            return -ENOMEM;
 
         *obj = m_memObj;
         return ESUCCESS;
@@ -395,7 +393,6 @@ namespace FS {
 
             assert(b->pages == 1);
             VMM::g_KVMM->FreePages(b->addr);
-            m_attr.blocks -= b->pages * PAGE_SIZE;
             m_blockCount--;
             delete b;
         }
@@ -487,6 +484,18 @@ namespace FS {
             if (pageIndex < node->key + b->pages)
                 return (void*)((uint64_t)b->addr + (pageIndex - node->key) * PAGE_SIZE);
         }
+
+        if (m_memObj != nullptr) {
+            void* addr = nullptr;
+            m_memObj->lock.Lock();
+            VMM::Page* p = m_memObj->pages.Find(pageIndex << PAGE_SIZE_SHIFT);
+            if (p != nullptr && p->physAddr != 0)
+                addr = (void*)to_HHDM(p->physAddr);
+            m_memObj->lock.Unlock();
+            if (addr != nullptr)
+                return addr;
+        }
+
         if (!create)
             return nullptr;
         Block* b = CreateBlock(pageIndex, 1);
@@ -494,7 +503,9 @@ namespace FS {
     }
 
     TempFSVNode::Block* TempFSVNode::CreateBlock(uint64_t offset, uint64_t pages) {
-        bool firstBlock = (m_memObj == nullptr);
+        if (!EnsureMemObj())
+            return nullptr;
+        
         Block* block = new Block;
         block->pages = pages;
         block->addr = VMM::g_KVMM->AllocMemObjAnonPages(pages, this, offset << PAGE_SIZE_SHIFT, VMM::DEFAULT_KALLOC_FLAGS, &m_memObj, static_cast<TempFS*>(m_vfs)->GetPager());
@@ -503,15 +514,11 @@ namespace FS {
             return nullptr;
         }
 
-        if (firstBlock)
-            VMM::RefMemObj(m_memObj);
-
         m_blockCount++;
         SyncObjSize(offset + pages);
 
         m_defaultProt = VMM::Protection::READ_WRITE;
         m_blocks.Insert(offset, block);
-        m_attr.blocks += pages * PAGE_SIZE;
         return block;
     }
 
@@ -526,4 +533,34 @@ namespace FS {
         m_memObj->lock.Unlock();
     }
 
+    bool TempFSVNode::EnsureMemObj() {
+        if (m_memObj != nullptr)
+            return true;
+
+        VMM::MemoryObject* obj = new VMM::MemoryObject;
+        if (obj == nullptr)
+            return false;
+
+        obj->pager = static_cast<TempFS*>(m_vfs)->GetPager();
+        obj->pagerData = this;
+        obj->size = (m_attr.size + PAGE_SIZE - 1) >> PAGE_SIZE_SHIFT;
+        obj->refCount = 1;
+        obj->kind = VMM::ObjectKind::Backed;
+        m_memObj = obj;
+        return true;
+    }
+
+    uint64_t TempFSVNode::CountResidentPages() {
+        if (m_memObj == nullptr)
+            return 0;
+        uint64_t count = 0;
+        m_memObj->lock.Lock();
+        m_memObj->pages.ForEach([&](uint64_t, VMM::Page* p) -> bool {
+            if (p->physAddr != 0)
+                count++;
+            return true;
+        });
+        m_memObj->lock.Unlock();
+        return count;
+    }
 }

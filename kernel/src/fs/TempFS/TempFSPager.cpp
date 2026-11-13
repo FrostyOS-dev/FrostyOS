@@ -55,7 +55,7 @@ namespace FS {
             if (page == nullptr)
                 return false;
             page->physAddr = (uint64_t)AllocatePage();
-            page->protection = VMM::Protection::READ_WRITE;
+            page->protection = VMM::Protection::READ_WRITE_EXECUTE;
             obj->pages.Insert(page, offset);
         }
         *outPage = page;
