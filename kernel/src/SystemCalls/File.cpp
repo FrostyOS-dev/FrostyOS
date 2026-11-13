@@ -735,7 +735,7 @@ int sys_fstatat(int fd, const char* path, size_t pathLen, Stat* stat, int flags)
     buf.gid = attr.gid;
     buf.size = attr.size;
     buf.blksize = attr.fsBlockSize;
-    buf.blocks = attr.blocks;
+    buf.blocks = attr.blocks * attr.fsBlockSize / 512; // always in 512 byte units
     buf.atime = attr.atime;
     buf.mtime = attr.mtime;
     buf.ctime = attr.ctime;
