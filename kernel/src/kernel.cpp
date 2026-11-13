@@ -22,7 +22,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stddef.h>
 #include <stdio.h>
 #include <stdint.h>
-#include <string.h>
 #include <util.h>
 
 #include <DataStructures/LinkedList.hpp>
@@ -147,6 +146,16 @@ void Kernel_Stage2(void* data) {
         PANIC("Cannot mount DevTempFS");
 
     printf("DevTempFS mounted at /dev!\n");
+
+    rc = FS::VFS_Create("/dev/", "shm", FS::VType::DIR, DEFAULT_DIR_MODE, nullptr, KCred);
+    if (rc < 0 && rc != -EEXIST)
+        PANIC("Cannot create /dev/shm");
+
+    rc = FS::VFS_Mount(FS::FSType::TempFS, "/dev/shm", 0, nullptr, nullptr, KCred);
+    if (rc < 0)
+        PANIC("Cannot mount TempFS on /dev/shm");
+
+    printf("TempFS mounted on /dev/shm!\n");
 
     g_DeviceManager->SetCred(KCred);
 
