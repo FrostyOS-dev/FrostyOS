@@ -48,11 +48,6 @@ function(frostyos_library name)
         PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wpedantic>
         PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fstack-protector>
         PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-O2>
-        PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wl,v>
-    )
-
-    target_link_options(${name}
-        PRIVATE -v
     )
 
     install(TARGETS ${name}
