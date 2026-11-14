@@ -41,6 +41,20 @@ function(frostyos_library name)
         target_link_libraries(${name} PRIVATE ${ARG_PRIVATE_LIBS})
     endif()
 
+    target_compile_options(${name}
+        PRIVATE $<$<COMPILE_LANGUAGE:CXX,C,ASM_NASM>:-g>
+        PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wall>
+        PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wextra>
+        PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wpedantic>
+        PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fstack-protector>
+        PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-O2>
+        PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wl,v>
+    )
+
+    target_link_options(${name}
+        PRIVATE -v
+    )
+
     install(TARGETS ${name}
         LIBRARY DESTINATION data/lib
         ARCHIVE DESTINATION data/lib)
@@ -61,8 +75,20 @@ function(frostyos_program name)
         target_link_libraries(${name} PRIVATE ${ARG_LIBS})
     endif()
 
+    target_compile_options(${name}
+        PRIVATE $<$<COMPILE_LANGUAGE:CXX,C,ASM_NASM>:-g>
+        PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wall>
+        PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wextra>
+        PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wpedantic>
+        PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fstack-protector>
+        PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-O2>
+    )
+
     install(TARGETS ${name} RUNTIME DESTINATION data/bin)
     set_property(GLOBAL APPEND PROPERTY FROSTYOS_USERLAND_TARGETS ${name})
 endfunction()
 
+add_subdirectory(BasicPrograms)
+add_subdirectory(Libraries)
 add_subdirectory(ServiceManager)
+add_subdirectory(WindowManager)
