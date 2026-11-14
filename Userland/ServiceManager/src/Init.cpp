@@ -85,7 +85,10 @@ int main(int argc, char** argv) {
             pid_t child = waitpid(-1, &status, 0);
             if (child < 0)
                 continue;
-            fprintf(stderr, "Child %d exited with code %d", child, WEXITSTATUS(status));
+            if (WIFEXITED(status))
+                fprintf(stderr, "Child %d exited with code %d\n", child, WEXITSTATUS(status));
+            else if (WIFSIGNALED(status))
+                fprintf(stderr, "Child %d terminated with signal %d\n", child, WTERMSIG(status));
         }
     }
 }
