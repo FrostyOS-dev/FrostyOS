@@ -18,9 +18,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _HAL_INPUT_KEY_HPP
 #define _HAL_INPUT_KEY_HPP
 
+#include <stdint.h>
+
 #include <frostyos/asm/key.h>
 
-enum class Key {
+enum class Key : uint32_t {
 #define ENUMERATE_KEY(c, s) c,
     __FOSI_ENUMERATE_INPUT_KEYS(ENUMERATE_KEY)
 #undef ENUMERATE_KEY

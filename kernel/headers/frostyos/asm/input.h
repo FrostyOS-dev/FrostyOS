@@ -23,11 +23,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define FOSI_GET_DEVICE_INFO 0x46494400
 
 enum FOSI_DeviceType {
-    FOSI_DT_KEYBOARD = 0x46495400
+    FOSI_DT_KEYBOARD = 0x46495400,
+    FOSI_DT_MOUSE    = 0x46495401
 };
 
 enum FOSI_EventType {
-    FOSI_ET_KEYBOARDKEY = 0x46494500
+    FOSI_ET_KEY = 0x46494500,
+    FOSI_ET_REL = 0x46494501
+};
+
+enum FOSI_REL_EventCode {
+    FOSI_REL_XY     = 0, // signed x in lower 32-bits of data, signed y in upper 32-bits of data
+    FOSI_REL_WHEEL  = 1,
+    FOSI_REL_HWHEEL = 2
 };
 
 typedef struct FOSI_DeviceInfo {

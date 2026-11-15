@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "PS2Controller.hpp"
 #include "PS2Keyboard.hpp"
+#include "PS2Mouse.hpp"
 
 #include "../../DeviceManager.hpp"
 
@@ -113,6 +114,10 @@ uint8_t PS2Device::ReadData() {
     uint8_t data;
     assert(0 == m_controller->ReadData(&data));
     return data;
+}
+
+int PS2Device::SendCommand(uint8_t command) {
+    return m_controller == nullptr ? -EIO : m_controller->SendCommandToDevice(m_channel, command, true);
 }
 
 PS2Controller::PS2Controller() {
@@ -238,11 +243,20 @@ int PS2Controller::Init(DeviceManager::DeviceInfo* info) {
             return rc;
     }
 
-    if (channel1Works) { // only enable channel 1 for now
+    if (channel1Works) {
         rc = Enable(false);
         if (rc < 0)
             return rc;
         rc = SendCommandToDevice(false, PS2_DEVICE_CMD_ENABLE_SCANNING, true);
+        if (rc < 0)
+            return rc;
+    }
+
+    if (channel2Works) {
+        rc = Enable(true);
+        if (rc < 0)
+            return rc;
+        rc = SendCommandToDevice(true, PS2_DEVICE_CMD_ENABLE_SCANNING, true);
         if (rc < 0)
             return rc;
     }
@@ -258,6 +272,9 @@ int PS2Controller::Init(DeviceManager::DeviceInfo* info) {
     config.port1IRQEnabled = channel1Works;
     config.port1TranslationEnabled = channel1Works;
     config.port1ClockDisabled = !channel1Works;
+
+    config.port2IRQEnabled = channel2Works;
+    config.port2ClockDisabled = !channel2Works;
 
     rc = SendCommand(PS2_CMD_WRITE_CONFIG_BYTE);
     if (rc < 0)
@@ -279,6 +296,42 @@ int PS2Controller::Init(DeviceManager::DeviceInfo* info) {
         rc = g_DeviceManager->AddSubDevice(info, m_devices[1]);
     
     return rc;
+}
+
+int PS2Controller::IdentifyDevice(bool channel, PS2DeviceID* idOut) {
+    int rc = SendCommandToDevice(channel, PS2_DEVICE_CMD_IDENTIFY, true);
+    if (rc < 0)
+        return rc;
+
+    PS2DeviceID id = {};
+
+    while (true) {
+        RepeatUntil([]() -> bool {
+            return std::bit_cast<PS2Status>(GetStatus()).outputFull;
+        }, 30);
+
+        uint8_t idByte = 0;
+        if (ReadData(&idByte, 100) == -ETIME)
+            break;
+
+        if (id.size == 0) {
+            if (idByte != 0x00 && idByte != 0x03 && idByte != 0x04 && idByte != 0xAB)
+                continue;
+
+            id.id[0] = idByte;
+        } else {
+            if (idByte != 0x41 && idByte != 0xC1 && idByte != 0x83)
+                continue;
+
+            id.id[1] = idByte;
+        }
+
+        if (id.size++ == 1)
+            break;
+    }
+
+    *idOut = id;
+    return 0;
 }
 
 int PS2Controller::InitialiseDevice(bool channel) { // false = 1, true = 2
@@ -349,47 +402,18 @@ int PS2Controller::InitialiseDevice(bool channel) { // false = 1, true = 2
     if (rc < 0)
         return rc;
 
-    // Found a valid device, now identify it
-    rc = SendCommandToDevice(channel, PS2_DEVICE_CMD_IDENTIFY, true);
-    if (rc < 0)
-        return rc;
-
-    uint8_t id[2];
-    uint64_t idBytes = 0;
-
-    while (true) {
-        RepeatUntil([]() -> bool {
-            return std::bit_cast<PS2Status>(GetStatus()).outputFull;
-        }, 30);
-
-        uint8_t idByte = 0;
-        if (ReadData(&idByte, 100) == -ETIME)
-            break;
-
-        if (idBytes == 0) {
-            if (idByte != 0x00 && idByte != 0x03 && idByte != 0x04 && idByte != 0xAB)
-                continue;
-
-            id[0] = idByte;
-        } else {
-            if (idByte != 0x41 && idByte != 0xC1 && idByte != 0x83)
-                continue;
-
-            id[1] = idByte;
-        }
-
-        if (idBytes++ == 1)
-            break;
-    }
+    PS2DeviceID id{};
+    rc = IdentifyDevice(channel, &id);
 
     Disable(channel);
 
-    bool type = idBytes == 1; // false for keyboard, true for mouse
+    bool type = id.size == 1; // false for keyboard, true for mouse
 
     if (!type) { // keyboard
         assert(!channel); // keyboard is only supported on channel 1
         m_devices[channel ? 1 : 0] = new PS2Keyboard(this, channel);
-    }
+    } else // mouse
+        m_devices[channel ? 1 : 0] = new PS2Mouse(this, channel);
 
     return 0;
 }

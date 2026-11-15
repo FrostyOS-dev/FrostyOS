@@ -40,14 +40,21 @@ namespace Input {
     typedef uint64_t EventSourceID;
 
     enum class EventType : uint64_t {
-        KeyboardKey = 1
+        KeyboardKey = 1 << 0,
+        MouseEvent  = 1 << 1
     };
 
     enum class EventSourceType : uint64_t {
-        Keyboard = 1
+        Keyboard = 1 << 0,
+        Mouse    = 1 << 1
     };
 
     struct Event {
+        enum class ScrollDirection : uint8_t {
+            HORIZONTAL = 0,
+            VERTICAL = 1
+        };
+
         EventType type;
         EventSourceID source;
         union {
@@ -55,6 +62,12 @@ namespace Input {
                 Key key;
                 bool released;
             } keyboardEvent;
+            struct MouseEvent {
+                int32_t dx;
+                int32_t dy;
+                int16_t wheelDelta;
+                ScrollDirection scrollDirection;
+            } mouseEvent;
         } eventData;
     };
 

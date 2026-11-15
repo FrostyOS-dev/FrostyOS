@@ -145,6 +145,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
     __FOSI_ENUM(MM_MY_COMPUTER, "My Computer") \
     __FOSI_ENUM(MM_EMAIL, "Email") \
     __FOSI_ENUM(MM_MEDIA_SELECT, "Media Select") \
+    __FOSI_ENUM(MOUSE_BTN_LEFT, "Left Mouse Button") \
+    __FOSI_ENUM(MOUSE_BTN_RIGHT, "Right Mouse Button") \
+    __FOSI_ENUM(MOUSE_BTN_MIDDLE, "Middle Mouse Button") \
+    __FOSI_ENUM(MOUSE_BTN_FOUR, "Mouse Button 4") \
+    __FOSI_ENUM(MOUSE_BTN_FIVE, "Mouse Button 5") \
     __FOSI_ENUM(UNKNOWN, "Unknown")
 
 enum FOSI_Key {

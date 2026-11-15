@@ -27,6 +27,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 class PS2Controller;
 
+struct PS2DeviceID {
+    uint8_t id[2];
+    uint8_t size;
+};
+
 class PS2Device : public InputDevice {
 public:
     PS2Device(InputDeviceType type, PS2Controller* controller, bool channel) : InputDevice(type), m_controller(controller), m_channel(channel) {}
@@ -37,9 +42,11 @@ public:
 
     bool GetChannel() const { return m_channel; }
 
-protected:
+    
+    protected:
     bool DataAvailable();
     uint8_t ReadData();
+    int SendCommand(uint8_t command);
 
     PS2Controller* m_controller;
     bool m_channel;
@@ -55,9 +62,12 @@ public:
     static uint8_t GetStatus();
     static int ReadData(uint8_t* out, size_t attempts = 100000);
 
+    int SendCommandToDevice(bool channel, uint8_t command, bool expectAck);
+
+    int IdentifyDevice(bool channel, PS2DeviceID* id);
+
 private:
     int InitialiseDevice(bool channel); // false = 1, true = 2
-    int SendCommandToDevice(bool channel, uint8_t command, bool expectAck);
     int ShouldResend();
 
     int Disable(bool channel);

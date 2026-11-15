@@ -120,22 +120,40 @@ void InputDevice::AddUserEvent(const Input::Event& e) {
     if (__atomic_load_n(&m_users, __ATOMIC_ACQUIRE) == 0)
         return;
 
-    FOSI_Event event;
+    auto addEvent = [this](FOSI_Event ev) -> void {
+        if (m_pendingEvents.push(ev))
+            m_queue.Trigger(POLLIN | POLLRDNORM);
+    };
+
     switch (e.type) {
-    case EventType::KeyboardKey:
-        event.type = FOSI_ET_KEYBOARDKEY;
+    case EventType::KeyboardKey: {
+        FOSI_Event event;
+        event.type = FOSI_ET_KEY;
         event.code = (_u32)e.eventData.keyboardEvent.key;
         event.data = e.eventData.keyboardEvent.released ? 1 : 0;
-        break;
-    default:
-        event.type = 0;
-        event.code = 0;
-        event.data = 0;
+        addEvent(event);
         break;
     }
-
-    if (m_pendingEvents.push(event))
-        m_queue.Trigger(POLLIN | POLLRDNORM);
+    case EventType::MouseEvent: {
+        int32_t dx = e.eventData.mouseEvent.dx, dy = e.eventData.mouseEvent.dy;
+        if (dx != 0 || dy != 0) {
+            FOSI_Event event;
+            event.type = FOSI_ET_REL;
+            event.code = FOSI_REL_XY;
+            event.data = (uint32_t)dx | ((uint64_t)((uint32_t)dy) << 32);
+            addEvent(event);
+        }
+        if (e.eventData.mouseEvent.wheelDelta != 0) {
+            int64_t wheel = e.eventData.mouseEvent.wheelDelta;
+            FOSI_Event event;
+            event.type = FOSI_ET_REL;
+            event.code = e.eventData.mouseEvent.scrollDirection == Input::Event::ScrollDirection::HORIZONTAL ? FOSI_REL_HWHEEL : FOSI_REL_WHEEL;
+            event.data = wheel;
+            addEvent(event);
+        }
+        break;
+    }
+    }
 }
 
 EventWaitQueue* InputDevice::GetPollQueue(uint32_t events) {
