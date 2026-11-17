@@ -90,7 +90,7 @@ namespace VMM {
             return nullptr;
         void* frame = g_PMM->AllocatePage();
         if (frame == nullptr) {
-            kfree_vmm(p);
+            kfree_vmm(p, sizeof(Page));
             return nullptr;
         }
         if (copyFrom != nullptr)
@@ -113,7 +113,7 @@ namespace VMM {
             else
                 g_PMM->FreePage((void*)p->physAddr);
         }
-        kfree_vmm(p);
+        kfree_vmm(p, sizeof(Page));
     }
 
     // lock is held, refCount == 0
@@ -121,7 +121,7 @@ namespace VMM {
         obj->pages.Drain([&](Page* page) -> void {
             ReleasePage(obj, page);
         });
-        kfree_vmm(obj);
+        kfree_vmm(obj, sizeof(MemoryObject));
     }
 
     static bool EnsureResident(MemoryObject* o, Page* p, bool zero) {
@@ -140,12 +140,8 @@ namespace VMM {
         return kcalloc_vmm(1, size);
     }
 
-    void MemoryObject::operator delete(void* ptr) {
-        return kfree_vmm(ptr);
-    }
-
-    void MemoryObject::operator delete(void* ptr, size_t) {
-        return kfree_vmm(ptr);
+    void MemoryObject::operator delete(void* ptr, size_t size) {
+        return kfree_vmm(ptr, size);
     }
 
     VMM::VMM() : m_pageMapper(nullptr), m_vmRegionAllocator(nullptr), m_mapEntries() {
@@ -222,7 +218,7 @@ namespace VMM {
 
         MapEntry* entry = (MapEntry*)kcalloc_vmm(1, sizeof(MapEntry)); // allocate this now for easier error handling
         if (entry == nullptr) {
-            kfree_vmm(anon);
+            kfree_vmm(anon, sizeof(MemoryObject));
             m_vmRegionAllocator->FreePages(pages, count);
             return nullptr;
         }
@@ -241,7 +237,7 @@ namespace VMM {
             }
             if (!ok) {
                 DestroyMemoryObject(anon);
-                kfree_vmm(entry);
+                kfree_vmm(entry, sizeof(MapEntry));
                 m_vmRegionAllocator->FreePages(pages, count);
                 return nullptr;
             }
@@ -323,7 +319,7 @@ namespace VMM {
         if (allocFlags.isPrivate) {
             anon = new MemoryObject;
             if (anon == nullptr) {
-                kfree_vmm(entry);
+                kfree_vmm(entry, sizeof(MapEntry));
                 m_vmRegionAllocator->FreePages(pages, count);
                 return nullptr;
             }
@@ -342,7 +338,7 @@ namespace VMM {
                     obj->lock.Unlock();
                     if (allocFlags.isPrivate)
                         DestroyMemoryObject(anon);
-                    kfree_vmm(entry);
+                    kfree_vmm(entry, sizeof(MapEntry));
                     m_vmRegionAllocator->FreePages(pages, count);
                     return nullptr;
                 }
@@ -1301,7 +1297,7 @@ namespace VMM {
             else
                 obj->lock.Unlock();
         }
-        kfree_vmm(e);
+        kfree_vmm(e, sizeof(MapEntry));
     }
 
 

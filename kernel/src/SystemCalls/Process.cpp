@@ -330,14 +330,14 @@ int sys_exec(const char* path, char* const argv[], char* const env[]) {
     char** kEnv;
     int rc = CopyArgEnvFromUser(const_cast<const char**>(argv), const_cast<const char**>(env), &argc, &kArgv, &envc, &kEnv, currentProc);
     if (rc < 0) {
-        delete kPath;
+        kfree(kPath);
         return rc;
     }
 
     Credential callerCred = currentProc->GetCred();
     rc = CreateELFProcess(kPath, parent, kArgv, kEnv, true, &newProc, &callerCred, currentProc->GetCWD());
 
-    delete kPath;
+    kfree(kPath);
     CleanupArgEnv(argc, argc, kArgv, envc, envc, kEnv);
 
     if (rc < 0)

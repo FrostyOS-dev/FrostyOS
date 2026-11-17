@@ -96,7 +96,7 @@ namespace FS {
 
             if (page->physAddr != 0)
                 FreePage((void*)page->physAddr);
-            kfree_vmm(page);
+            kfree_vmm(page, sizeof(VMM::Page));
         }
     }
 }

@@ -33,6 +33,7 @@ target_include_directories(uacpi PRIVATE ${UACPI_INCLUDES})
 
 target_compile_definitions(uacpi PRIVATE UACPI_FORMATTED_LOGGING=1)
 target_compile_definitions(uacpi PRIVATE UACPI_NATIVE_ALLOC_ZEROED=1)
+target_compile_definitions(uacpi PRIVATE UACPI_SIZED_FREES=1)
 
 target_compile_options(uacpi
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mcmodel=kernel>
@@ -241,6 +242,7 @@ target_compile_definitions(kernel PRIVATE _FROSTYOS_BUILD_TARGET=kernel)
 
 target_compile_definitions(kernel PRIVATE UACPI_FORMATTED_LOGGING=1)
 target_compile_definitions(kernel PRIVATE UACPI_NATIVE_ALLOC_ZEROED=1)
+target_compile_definitions(kernel PRIVATE UACPI_SIZED_FREES=1)
 
 target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-mcmodel=kernel>
@@ -263,9 +265,10 @@ target_compile_options(kernel
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-O2>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-omit-frame-pointer>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fno-asynchronous-unwind-tables>
-    # PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-fsanitize=undefined>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-sized-deallocation>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
     PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
+    PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fsized-deallocation>
 )
 
 set_target_properties(kernel PROPERTIES LINK_DEPENDS ${LINKER_SCRIPT})

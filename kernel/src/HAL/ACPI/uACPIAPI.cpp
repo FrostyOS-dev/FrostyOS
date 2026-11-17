@@ -203,8 +203,35 @@ uacpi_status uacpi_kernel_io_write32(uacpi_handle handle, size_t offset, uacpi_u
     return UACPI_STATUS_OK;
 }
 
+#ifdef UACPI_SIZED_FREES
+
+void* uacpi_kernel_alloc(uacpi_size size) {
+    return kmalloc_sized(size);
+}
+
+void uacpi_kernel_free(void* mem, uacpi_size size) {
+    return kfree_sized(mem, size);
+}
+
+#ifdef UACPI_NATIVE_ALLOC_ZEROED
+
+void* uacpi_kernel_alloc_zeroed(uacpi_size size) {
+    void* mem = kmalloc_sized(size);
+    if (mem == nullptr)
+        return nullptr;
+    memset(mem, 0, size);
+    return mem;
+}
+
+#endif /* UACPI_NATIVE_ALLOC_ZEROED */
+#else
+
 void* uacpi_kernel_alloc(uacpi_size size) {
     return kmalloc(size);
+}
+
+void uacpi_kernel_free(void* mem) {
+    kfree(mem);
 }
 
 #ifdef UACPI_NATIVE_ALLOC_ZEROED
@@ -214,10 +241,7 @@ void* uacpi_kernel_alloc_zeroed(uacpi_size size) {
 }
 
 #endif /* UACPI_NATIVE_ALLOC_ZEROED */
-
-void uacpi_kernel_free(void* mem) {
-    kfree(mem);
-}
+#endif /* UACPI_SIZED_FREES */
 
 uacpi_u64 uacpi_kernel_get_nanoseconds_since_boot(void) {
     return HAL_GetNSTicks();

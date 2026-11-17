@@ -90,11 +90,3 @@ unsigned int rand() {
     x = y; y = z; z = w;
     return w = w ^ (w >> 19) ^ t ^ (t >> 8);
 }
-
-void* kcalloc_eternal(size_t num, size_t size) {
-    return nullptr;
-}
-
-void* kmalloc_eternal(size_t size) {
-    return nullptr;
-}

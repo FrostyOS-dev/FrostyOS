@@ -27,6 +27,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <HAL/HAL.hpp>
 
+#include <Memory/Heap.hpp>
 #include <Memory/Pager.hpp>
 #include <Memory/PagingUtil.hpp>
 #include <Memory/PMM.hpp>
@@ -52,6 +53,7 @@ void x86_64_InitPaging(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t
     
     KPMM.Init(memoryMap, memoryMapEntryCount);
     g_PMM = &KPMM;
+    InitVMMHeap();
 
     if (!x86_64_EnsureNXSupport())
         PANIC("No-Execute bit is not supported!");
@@ -161,4 +163,6 @@ void x86_64_InitPaging(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t
     memset(virt, 0, bytes);
 
     VMM::g_frameTable = (VMM::FrameDesc*)virt;
+
+    InitKHeap();
 }

@@ -43,18 +43,20 @@ long atol(const char* str);
 long strtol(const char* str);
 unsigned long strtoul(const char* str);
 
-void* kcalloc(size_t num, size_t size);
-void kfree(void* ptr);
+void* kmalloc_sized(size_t size);
+void kfree_sized(void* ptr, size_t size);
+
+void* kmalloc_aligned(size_t size, size_t al);
+void kfree_aligned(void* p, size_t s, size_t a);
+
 void* kmalloc(size_t size);
+void kfree(void* ptr);
+void* kcalloc(size_t num, size_t size);
 void* krealloc(void* ptr, size_t size);
 
-void* kcalloc_vmm(size_t num, size_t size);
-void kfree_vmm(void* ptr);
 void* kmalloc_vmm(size_t size);
-void* krealloc_vmm(void* ptr, size_t size);
-
-void* kcalloc_eternal(size_t num, size_t size);
-void* kmalloc_eternal(size_t size);
+void kfree_vmm(void* ptr, size_t size);
+void* kcalloc_vmm(size_t num, size_t size);
 
 unsigned int rand();
 void srand(unsigned int);

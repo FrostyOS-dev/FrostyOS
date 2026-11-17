@@ -179,7 +179,7 @@ void* VMRegionAllocator::AllocatePages(void* ptr, uint64_t numPages, bool lock) 
     }
 
     LinkedList::Node* list = (LinkedList::Node*)freePagesNode->value;
-    LinkedList::deleteNode(list, allPagesNode->key);
+    LinkedList::deleteNode(list, allPagesNode->key, true);
     if (list == nullptr)
         m_freePagesTree.RemoveNode(freePagesNode);
     else
@@ -197,7 +197,7 @@ void* VMRegionAllocator::AllocatePages(void* ptr, uint64_t numPages, bool lock) 
             assert(freePagesNode != nullptr);
         }
 
-        LinkedList::insertNode((LinkedList::Node*&)freePagesNode->value, allPagesNode->key);
+        LinkedList::insertNode((LinkedList::Node*&)freePagesNode->value, allPagesNode->key, true);
 
         allPagesNode = node;
         nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
@@ -215,7 +215,7 @@ void* VMRegionAllocator::AllocatePages(void* ptr, uint64_t numPages, bool lock) 
             assert(freePagesNode != nullptr);
         }
 
-        LinkedList::insertNode((LinkedList::Node*&)freePagesNode->value, node->key);
+        LinkedList::insertNode((LinkedList::Node*&)freePagesNode->value, node->key, true);
 
         nodeData = std::bit_cast<CompleteTreeNodeData>(allPagesNode->value);
     }

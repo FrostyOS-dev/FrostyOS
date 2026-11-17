@@ -166,7 +166,7 @@ namespace LinkedList {
             if (usePool && NodePool_IsInPool(temp))
                 NodePool_FreeNode(temp);
             else if (vmm)
-                kfree_vmm(temp);
+                kfree_vmm(temp, sizeof(Node));
             else
                 delete temp;
             return true;
@@ -185,7 +185,7 @@ namespace LinkedList {
         if (usePool && NodePool_IsInPool(temp))
             NodePool_FreeNode(temp);
         else if (vmm)
-            kfree_vmm(temp);
+            kfree_vmm(temp, sizeof(Node));
         else
             delete temp;
         return true;
@@ -203,7 +203,7 @@ namespace LinkedList {
         if (usePool && NodePool_IsInPool(node))
             NodePool_FreeNode(node);
         else if (vmm)
-            kfree_vmm(node);
+            kfree_vmm(node, sizeof(Node));
         else
             delete node;
         return true;

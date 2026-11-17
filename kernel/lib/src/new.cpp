@@ -18,62 +18,38 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <new.hpp>
 #include <stdlib.h>
 
-// TODO: respect alignment
-
 void* operator new(size_t size) {
-    return kcalloc(1, size);
+    return kmalloc_sized(size);
 }
 
 void* operator new(size_t size, std::align_val_t alignment) {
-    (void)alignment;
-    return kcalloc(1, size);
+    return kmalloc_aligned(size, static_cast<size_t>(alignment));
 }
 
 void* operator new[](size_t size) {
-    return kcalloc(1, size);
+    return kmalloc(size);
 }
 
 void* operator new[](size_t size, std::align_val_t alignment) {
-    (void)alignment;
-    return kcalloc(1, size);
-}
-
-void operator delete(void* p) {
-    kfree(p);
-}
-
-void operator delete(void* ptr, std::align_val_t alignment) noexcept {
-    (void)alignment;
-    kfree(ptr);
+    return kmalloc_aligned(size, static_cast<size_t>(alignment));
 }
 
 void operator delete(void* p, size_t size) {
-    (void)size;
-    kfree(p);
+    kfree_sized(p, size);
 }
 
 void operator delete(void* ptr, size_t size, std::align_val_t alignment) noexcept {
-    (void)size;
-    (void)alignment;
-    kfree(ptr);
+    kfree_aligned(ptr, size, static_cast<size_t>(alignment));
 }
 
 void operator delete[](void* p) {
     kfree(p);
 }
 
-void operator delete[](void* ptr, std::align_val_t alignment) noexcept {
-    (void)alignment;
-    kfree(ptr);
-}
-
-void operator delete[](void* p, size_t size) {
-    (void)size;
+void operator delete[](void* p, size_t) {
     kfree(p);
 }
 
 void operator delete[](void* ptr, size_t size, std::align_val_t alignment) noexcept {
-    (void)size;
-    (void)alignment;
-    kfree(ptr);
+    kfree_aligned(ptr, size, static_cast<size_t>(alignment));
 }

@@ -62,9 +62,11 @@ namespace AVLTree {
         wAVLTreeNode* Insert(K key, D data) {
             wAVLTreeNode* node;
             if (m_vmm)
-                node = (wAVLTreeNode*)kcalloc_vmm(1, sizeof(wAVLTreeNode));
+                node = (wAVLTreeNode*)kmalloc_vmm(sizeof(wAVLTreeNode));
             else
-                node = (wAVLTreeNode*)kcalloc(1, sizeof(wAVLTreeNode));
+                node = (wAVLTreeNode*)kmalloc_sized(sizeof(wAVLTreeNode));
+            if (node == nullptr)
+                return nullptr;
             node->key = (uint64_t)key;
             node->value = (uint64_t)data;
             RB_INSERT(raw_wAVLTree, &m_tree, node);
@@ -79,9 +81,9 @@ namespace AVLTree {
             if (found_node != nullptr) {
                 RB_REMOVE(raw_wAVLTree, &m_tree, found_node);
                 if (m_vmm)
-                    kfree_vmm(found_node);
+                    kfree_vmm(found_node, sizeof(wAVLTreeNode));
                 else
-                    kfree(found_node);
+                    kfree_sized(found_node, sizeof(wAVLTreeNode));
             }
         }
 
@@ -89,9 +91,9 @@ namespace AVLTree {
             if (node != nullptr) {
                 RB_REMOVE(raw_wAVLTree, &m_tree, node);
                 if (m_vmm)
-                    kfree_vmm(node);
+                    kfree_vmm(node, sizeof(wAVLTreeNode));
                 else
-                    kfree(node);
+                    kfree_sized(node, sizeof(wAVLTreeNode));
             }
         }
 
@@ -161,9 +163,9 @@ namespace AVLTree {
                 next = RB_NEXT(raw_wAVLTree, &m_tree, node);
                 RB_REMOVE(raw_wAVLTree, &m_tree, node);
                 if (m_vmm)
-                    kfree_vmm(node);
+                    kfree_vmm(node, sizeof(wAVLTreeNode));
                 else
-                    kfree(node);
+                    kfree_sized(node, sizeof(wAVLTreeNode));
             }
         }
 
