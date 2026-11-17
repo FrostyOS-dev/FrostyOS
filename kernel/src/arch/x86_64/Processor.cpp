@@ -218,13 +218,9 @@ void x86_64_Processor::InitExtraContext(CPU_ExtraContext* extraContext) {
     extraContext->fsBase = 0;
     extraContext->gsBase = 0;
 
-    if (m_info.SIMDInfo.saveMethod == x86_64_SIMDSaveMethod::XSAVE) {
-        extraContext->SIMDAllocBase = kcalloc(1, m_info.SIMDInfo.XSAVESize + 48);
-        extraContext->SIMDSaveRegion = ALIGN_UP_ADDRESS(extraContext->SIMDAllocBase, 64);
-    } else {
-        extraContext->SIMDAllocBase = kcalloc(1, m_info.SIMDInfo.XSAVESize);
-        extraContext->SIMDSaveRegion = extraContext->SIMDAllocBase;
-    }
+    extraContext->SIMDSaveRegion = kmalloc_aligned(m_info.SIMDInfo.XSAVESize, m_info.SIMDInfo.saveMethod == x86_64_SIMDSaveMethod::XSAVE ? 64 : 16);
+    assert(extraContext->SIMDSaveRegion != nullptr);
+    memset(extraContext->SIMDSaveRegion, 0, m_info.SIMDInfo.XSAVESize);
 
     // Initialise the x87 FPU state to what it would be after the FNINIT instruction
     FXSaveRegion* save = static_cast<FXSaveRegion*>(extraContext->SIMDSaveRegion);
@@ -233,7 +229,7 @@ void x86_64_Processor::InitExtraContext(CPU_ExtraContext* extraContext) {
 }
 
 void x86_64_Processor::DestroyExtraContext(CPU_ExtraContext* extraContext) {
-    kfree(extraContext->SIMDAllocBase);
+    kfree_aligned(extraContext->SIMDSaveRegion, m_info.SIMDInfo.XSAVESize, m_info.SIMDInfo.saveMethod == x86_64_SIMDSaveMethod::XSAVE ? 64 : 16);
 }
 
 void x86_64_Processor::SaveExtraContext(CPU_ExtraContext* extraContext) {
