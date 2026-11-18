@@ -32,6 +32,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdint.h>
 #include <stddef.h>
 
+#include <Memory/Heap.hpp>
+
 #include <Scheduling/Mutex.hpp>
 
 /*
@@ -45,6 +47,19 @@ namespace AVLTree {
         uint64_t key;
         uint64_t value;
     };
+
+    extern KMemCache* g_VMMwAVLNodeCache;
+    extern KMemCache* g_wAVLNodeCache;
+
+    static inline wAVLTreeNode* AllocTreeNode(bool vmm) {
+        return static_cast<wAVLTreeNode*>((vmm ? g_VMMHeap : g_KHeap).CacheAlloc(vmm ? g_VMMwAVLNodeCache : g_wAVLNodeCache, 0));
+    }
+
+    static inline void FreeTreeNode(bool vmm, wAVLTreeNode* n) {
+        return (vmm ? g_VMMHeap : g_KHeap).CacheFree(vmm ? g_VMMwAVLNodeCache : g_wAVLNodeCache, n);
+    }
+
+    bool InitwAVLTreeCache(bool vmm);
 
     int wAVLTree_compare(wAVLTreeNode* lhs, wAVLTreeNode* rhs);
 
@@ -60,11 +75,7 @@ namespace AVLTree {
         }
 
         wAVLTreeNode* Insert(K key, D data) {
-            wAVLTreeNode* node;
-            if (m_vmm)
-                node = (wAVLTreeNode*)kmalloc_vmm(sizeof(wAVLTreeNode));
-            else
-                node = (wAVLTreeNode*)kmalloc_sized(sizeof(wAVLTreeNode));
+            wAVLTreeNode* node = AllocTreeNode(m_vmm);
             if (node == nullptr)
                 return nullptr;
             node->key = (uint64_t)key;
@@ -80,20 +91,14 @@ namespace AVLTree {
             wAVLTreeNode* found_node = RB_FIND(raw_wAVLTree, &m_tree, &node);
             if (found_node != nullptr) {
                 RB_REMOVE(raw_wAVLTree, &m_tree, found_node);
-                if (m_vmm)
-                    kfree_vmm(found_node, sizeof(wAVLTreeNode));
-                else
-                    kfree_sized(found_node, sizeof(wAVLTreeNode));
+                FreeTreeNode(m_vmm, found_node);
             }
         }
 
         void RemoveNode(wAVLTreeNode* node) {
             if (node != nullptr) {
                 RB_REMOVE(raw_wAVLTree, &m_tree, node);
-                if (m_vmm)
-                    kfree_vmm(node, sizeof(wAVLTreeNode));
-                else
-                    kfree_sized(node, sizeof(wAVLTreeNode));
+                FreeTreeNode(m_vmm, node);
             }
         }
 
@@ -162,10 +167,7 @@ namespace AVLTree {
             for (wAVLTreeNode* node = RB_MIN(raw_wAVLTree, &m_tree); node != nullptr; node = next) {
                 next = RB_NEXT(raw_wAVLTree, &m_tree, node);
                 RB_REMOVE(raw_wAVLTree, &m_tree, node);
-                if (m_vmm)
-                    kfree_vmm(node, sizeof(wAVLTreeNode));
-                else
-                    kfree_sized(node, sizeof(wAVLTreeNode));
+                FreeTreeNode(m_vmm, node);
             }
         }
 

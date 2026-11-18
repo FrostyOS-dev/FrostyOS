@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2025  Frosty515
+Copyright (©) 2025-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,6 +18,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stddef.h>
 #include <stdint.h>
 
+#include <Memory/Heap.hpp>
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
@@ -28,6 +30,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 typedef uintptr_t __uintptr_t;
 
 namespace AVLTree {
+
+    KMemCache* g_VMMwAVLNodeCache;
+    KMemCache* g_wAVLNodeCache;
+
+    bool InitwAVLTreeCache(bool vmm) {
+        if (vmm) {
+            g_VMMwAVLNodeCache = g_VMMHeap.CacheCreate("VMMwAVLNodeCache", sizeof(wAVLTreeNode), 8, nullptr, nullptr, nullptr, 0);
+            return g_VMMwAVLNodeCache == nullptr;
+        } else {
+            g_wAVLNodeCache = g_VMMHeap.CacheCreate("wAVLNodeCache", sizeof(wAVLTreeNode), 8, nullptr, nullptr, nullptr, 0);
+            return g_wAVLNodeCache == nullptr;
+        }
+    }
     
     RB_GENERATE(raw_wAVLTree, wAVLTreeNode, rb_node, wAVLTree_compare)
     

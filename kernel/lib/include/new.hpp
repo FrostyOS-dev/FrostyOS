@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2024  Frosty515
+Copyright (©) 2024-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -41,5 +41,17 @@ void operator delete[](void* ptr, std::align_val_t alignment) noexcept;
 
 void operator delete[](void* p, size_t size);
 void operator delete[](void* ptr, size_t size, std::align_val_t alignment) noexcept;
+
+inline void* operator new(size_t, void* ptr) noexcept {
+    return ptr;
+}
+
+inline void* operator new[](size_t, void* ptr) noexcept {
+    return ptr;
+}
+
+inline void operator delete(void*, void*) noexcept {}
+inline void operator delete[](void*, void*) noexcept {}
+
 
 #endif /* _NEW_HPP */

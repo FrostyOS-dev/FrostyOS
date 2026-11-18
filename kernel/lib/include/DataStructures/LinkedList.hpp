@@ -28,11 +28,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <HAL/Processor.hpp>
 
+#include <Memory/Heap.hpp>
+
 #include <Scheduling/Mutex.hpp>
 
 namespace LinkedList {
-
-    static constexpr uint64_t POOL_SIZE = 512;
 
     enum class IteratorDecision {
         CONTINUE,
@@ -47,57 +47,59 @@ namespace LinkedList {
         Node* next;
     };
 
-    void NodePool_Init();
-	void NodePool_Destroy();
-	Node* NodePool_AllocateNode();
-	bool NodePool_FreeNode(Node*& node);
-	bool NodePool_HasBeenInitialised();
-	bool NodePool_IsInPool(Node* obj);
+    extern KMemCache* g_VMMNodeCache;
+    extern KMemCache* g_KNodeCache;
+
+    bool InitNodeCache(bool vmm);
+
+    static inline Node* AllocNode(bool vmm) {
+        return static_cast<Node*>((vmm ? g_VMMHeap : g_KHeap).CacheAlloc(vmm ? g_VMMNodeCache : g_KNodeCache, 0));
+    }
+
+    static inline void FreeNode(bool vmm, Node* n) {
+        (vmm ? g_VMMHeap : g_KHeap).CacheFree(vmm ? g_VMMNodeCache : g_KNodeCache, n);
+    }
 
     // Get length of the Linked list
     uint64_t length(Node* head);
 
     // Helper function that allocates a new node with the given data and NULL previous and next pointers.
-    Node* newNode(uint64_t data, bool vmm = false, bool usePool = false);
+    Node* newNode(uint64_t data, bool vmm = false);
 
     // Recursive function to insert a node in the list with given data and returns the head node
-    void insertNode(Node*& head, uint64_t data, bool vmm = false, bool usePool = false);
+    void insertNode(Node*& head, uint64_t data, bool vmm = false);
 
     // Get a pointer to a node from its data
     Node* findNode(Node* head, uint64_t data);
 
     // Delete a node
-    bool deleteNode(Node*& head, uint64_t key, bool vmm = false, bool usePool = false);
+    bool deleteNode(Node*& head, uint64_t key, bool vmm = false);
 
     // Delete a specific node
-    bool deleteNode(Node*& head, Node* node, bool vmm = false, bool usePool = false);
+    bool deleteNode(Node*& head, Node* node, bool vmm = false);
 
     // print the Linked list
     void fprint(fd_t file, Node* head);
 
-    void panic(const char* str); // a tiny function which just expands the PANIC macro. This is so PANIC can be called from the template class below.
-
     template<typename T>
     class SimpleLinkedList {
     public:
-        SimpleLinkedList(bool vmm = false, bool usePool = false)
-            : m_count(0), m_start(nullptr), m_vmm(vmm), m_usePool(usePool) {}
+        SimpleLinkedList(bool vmm = false)
+            : m_count(0), m_start(nullptr), m_vmm(vmm) {}
         ~SimpleLinkedList() {
             for (uint64_t i = 0; i < m_count; i++)
                 remove((uint64_t)0);
         }
 
         void insert(const T* obj) {
-            // if (findNode(m_start, (uint64_t)&obj) != nullptr)
-            // 	return; // object already exists
-            insertNode(m_start, (uint64_t)obj, m_vmm, m_usePool);
+            insertNode(m_start, (uint64_t)obj, m_vmm);
             m_count++;
         }
         void insertAt(uint64_t index, const T* obj) {
             if (index >= m_count)
                 return;
             if (index == 0) {
-                Node* node = newNode(reinterpret_cast<uint64_t>(obj), m_vmm, m_usePool);
+                Node* node = newNode(reinterpret_cast<uint64_t>(obj), m_vmm);
                 node->next = m_start;
                 if (m_start != nullptr)
                     m_start->previous = node;
@@ -115,7 +117,7 @@ namespace LinkedList {
                 previous = temp;
                 temp = temp->next;
             }
-            Node* node = newNode(reinterpret_cast<uint64_t>(obj), m_vmm, m_usePool);
+            Node* node = newNode(reinterpret_cast<uint64_t>(obj), m_vmm);
             // node needs to slot in between temp and temp->next
             if (temp == nullptr) {
                 // empty list
@@ -164,11 +166,11 @@ namespace LinkedList {
             return UINT64_MAX;
         }
         void remove(uint64_t index) {
-            if(deleteNode(m_start, (uint64_t)get(index), m_vmm, m_usePool))
+            if(deleteNode(m_start, (uint64_t)get(index), m_vmm))
                 m_count--;
         }
         void remove(const T* obj) {
-            if (deleteNode(m_start, (uint64_t)obj, m_vmm, m_usePool))
+            if (deleteNode(m_start, (uint64_t)obj, m_vmm))
                 m_count--;
         }
         void rotateLeft() {
@@ -218,8 +220,6 @@ namespace LinkedList {
         void Enumerate(FunctionRef<bool(T* obj, void* data)> func, void* data) const {
             Node* temp = m_start;
             for (uint64_t i = 0; i < m_count; i++) {
-                // if (temp == nullptr)
-                // 	return;
                 if (!func((T*)(temp->data), data))
                     return;
                 temp = temp->next;
@@ -234,14 +234,13 @@ namespace LinkedList {
         uint64_t m_count;
         Node* m_start;
         bool m_vmm;
-        bool m_usePool;
     };
 
     template<typename T>
     class RearInsertLinkedList {
     public:
-        RearInsertLinkedList(bool vmm = false, bool usePool = false)
-            : m_count(0), m_start(nullptr), m_end(nullptr), m_vmm(vmm), m_usePool(usePool), m_lock() {}
+        RearInsertLinkedList(bool vmm = false)
+            : m_count(0), m_start(nullptr), m_end(nullptr), m_vmm(vmm), m_lock() {}
         ~RearInsertLinkedList() {
             for (uint64_t i = 0; i < m_count; i++)
                 remove((uint64_t)0);
@@ -249,7 +248,7 @@ namespace LinkedList {
         }
 
         void insert(const T* obj) {
-            Node* node = newNode((uint64_t)obj, m_vmm, m_usePool);
+            Node* node = newNode((uint64_t)obj, m_vmm);
             if (m_count == 0) {
                 m_start = node;
                 m_end = node;
@@ -274,7 +273,7 @@ namespace LinkedList {
                 previous = temp;
                 temp = temp->next;
             }
-            Node* node = newNode(reinterpret_cast<uint64_t>(obj), m_vmm, m_usePool);
+            Node* node = newNode(reinterpret_cast<uint64_t>(obj), m_vmm);
             // node needs to slot in between temp and temp->next
             if (temp == nullptr) {
                 // empty list
@@ -297,7 +296,7 @@ namespace LinkedList {
             Node* temp = findNode(m_start, reinterpret_cast<const uint64_t>(obj));
             if (temp == nullptr)
                 return;
-            Node* node = newNode(reinterpret_cast<uint64_t>(newObj), m_vmm, m_usePool);
+            Node* node = newNode(reinterpret_cast<uint64_t>(newObj), m_vmm);
             if (temp->next != nullptr) {
                 temp->next->previous = node;
                 node->next = temp->next;
@@ -346,7 +345,7 @@ namespace LinkedList {
                 return;
             if (node == m_end)
                 m_end = node->previous;
-            if (deleteNode(m_start, node, m_vmm, m_usePool))
+            if (deleteNode(m_start, node, m_vmm))
                 m_count--;
             if (m_count == 0) {
                 m_start = nullptr;
@@ -455,7 +454,7 @@ namespace LinkedList {
                         temp->previous->next = next;
                     else
                         m_start = next;
-                    delete temp;
+                    FreeNode(false, temp);
                     m_count--;
                     break;
                 }
@@ -468,7 +467,7 @@ namespace LinkedList {
                         temp->previous->next = next;
                     else
                         m_start = next;
-                    delete temp;
+                    FreeNode(false, temp);
                     m_count--;
                     return;
                 }
@@ -504,15 +503,14 @@ namespace LinkedList {
         Node* m_start;
         Node* m_end;
         bool m_vmm;
-        bool m_usePool;
         mutable Mutex m_lock;
     };
 
     template<typename T>
     class LockableLinkedList { // has a internal SimpleLinkedList and a spinlock. We do not lock automatically, so the user must lock the list before using it.
     public:
-        LockableLinkedList(bool usePool = false)
-            : m_list(false, usePool), m_lock() {}
+        LockableLinkedList()
+            : m_list(false), m_lock() {}
         ~LockableLinkedList() {
         }
 

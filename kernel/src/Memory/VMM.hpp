@@ -68,6 +68,9 @@ namespace VMM {
         Protection protection; // highest protection this page is capable of
         bool isWired; // pageable
         uint16_t flags;
+
+        static Page* Alloc();
+        static void Free(Page* p);
     };
 
     enum class ObjectKind : uint8_t {
@@ -76,6 +79,7 @@ namespace VMM {
     };
 
     struct MemoryObject {
+        MemoryObject() = default;
         uint64_t size; // pages
         uint64_t refCount;
         ObjectKind kind;
@@ -83,10 +87,6 @@ namespace VMM {
         DefaultPager* pager;
         void* pagerData;
         Mutex lock;
-
-        static void* operator new(size_t size);
-        static void operator delete(void* ptr);
-        static void operator delete(void* ptr, size_t size);
     };
 
     struct MapEntry {
@@ -104,7 +104,7 @@ namespace VMM {
             Protection protection;
             CacheType cacheType;
             bool user;
-            bool needsCopy; // True if write fault should trigger an anonoymous copy
+            bool needsCopy; // True if write fault should trigger an anonymous copy
             bool isPrivate;
             bool zero;
         } flags;
@@ -181,10 +181,12 @@ namespace VMM {
         Mutex m_mapEntriesLock;
     };
 
+    MemoryObject* CreateMemObj();
     void ReleaseMemoryObject(MemoryObject* obj);
     void RefMemObj(MemoryObject* obj);
     bool UnrefMemObj(MemoryObject* obj);
     bool MemObjIsShared(MemoryObject* obj);
+    bool InitCaches();
 
     // to be implemented in arch-specific code
     extern VMM* g_KVMM;

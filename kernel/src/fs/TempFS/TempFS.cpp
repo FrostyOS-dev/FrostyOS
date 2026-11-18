@@ -537,7 +537,7 @@ namespace FS {
         if (m_memObj != nullptr)
             return true;
 
-        VMM::MemoryObject* obj = new VMM::MemoryObject;
+        VMM::MemoryObject* obj = VMM::CreateMemObj();
         if (obj == nullptr)
             return false;
 

@@ -51,7 +51,7 @@ namespace FS {
             return false;
         VMM::Page* page = obj->pages.Find(offset);
         if (page == nullptr) {
-            page = static_cast<VMM::Page*>(kcalloc_vmm(1, sizeof(VMM::Page)));
+            page = VMM::Page::Alloc();
             if (page == nullptr)
                 return false;
             page->physAddr = (uint64_t)AllocatePage();
@@ -96,7 +96,7 @@ namespace FS {
 
             if (page->physAddr != 0)
                 FreePage((void*)page->physAddr);
-            kfree_vmm(page, sizeof(VMM::Page));
+            VMM::Page::Free(page);
         }
     }
 }

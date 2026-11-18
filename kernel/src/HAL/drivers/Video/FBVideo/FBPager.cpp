@@ -56,7 +56,7 @@ namespace Video {
 
         VMM::Page* page = obj->pages.Find(offset);
         if (page == nullptr) {
-            page = static_cast<VMM::Page*>(kcalloc_vmm(1, sizeof(VMM::Page)));
+            page = VMM::Page::Alloc();
             if (page == nullptr)
                 return false;
             page->physAddr = from_HHDM((uint64_t)fb->BaseAddress + offset);

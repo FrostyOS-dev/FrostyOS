@@ -15,6 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "Heap.hpp"
 #include "PMM.hpp"
 #include "PageMapper.hpp"
 #include "Pager.hpp"
@@ -22,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "VMM.hpp"
 #include "VMRegionAllocator.hpp"
 
+#include <new>
 #include <spinlock.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -30,6 +32,29 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <DataStructures/AVLTree.hpp>
 
 namespace VMM {
+
+    KMemCache* g_memObjCache;
+    KMemCache* g_pageCache;
+    KMemCache* g_entryCache;
+
+    static int InitMemObj(void* obj, void*, int) {
+        new (obj) MemoryObject();
+        return 0;
+    }
+
+    static void DestroyMemObj(void* obj, void*) {
+        static_cast<MemoryObject*>(obj)->~MemoryObject();
+    }
+
+    static int InitPage(void* obj, void*, int) {
+        new (obj) Page();
+        return 0;
+    }
+
+    static int InitEntry(void* obj, void*, int) {
+        new (obj) MapEntry();
+        return 0;
+    }
 
     static inline Protection WithoutWrite(Protection p) {
         return static_cast<Protection>(static_cast<uint8_t>(p) & ~static_cast<uint8_t>(Protection::WRITE));
@@ -85,12 +110,12 @@ namespace VMM {
     }
 
     static Page* NewAnonPage(const Page* copyFrom, bool zero) {
-        Page* p = (Page*)kcalloc_vmm(1, sizeof(Page));
+        Page* p = Page::Alloc();
         if (p == nullptr)
             return nullptr;
         void* frame = g_PMM->AllocatePage();
         if (frame == nullptr) {
-            kfree_vmm(p, sizeof(Page));
+            Page::Free(p);
             return nullptr;
         }
         if (copyFrom != nullptr)
@@ -113,7 +138,7 @@ namespace VMM {
             else
                 g_PMM->FreePage((void*)p->physAddr);
         }
-        kfree_vmm(p, sizeof(Page));
+        Page::Free(p);
     }
 
     // lock is held, refCount == 0
@@ -121,7 +146,8 @@ namespace VMM {
         obj->pages.Drain([&](Page* page) -> void {
             ReleasePage(obj, page);
         });
-        kfree_vmm(obj, sizeof(MemoryObject));
+        obj->lock.Unlock();
+        g_VMMHeap.CacheFree(g_memObjCache, obj);
     }
 
     static bool EnsureResident(MemoryObject* o, Page* p, bool zero) {
@@ -136,12 +162,35 @@ namespace VMM {
         return true;
     }
 
-    void* MemoryObject::operator new(size_t size) {
-        return kcalloc_vmm(1, size);
+    static inline MapEntry* CreateEntry() {
+        return static_cast<MapEntry*>(g_VMMHeap.CacheAlloc(g_entryCache, 0));
     }
 
-    void MemoryObject::operator delete(void* ptr, size_t size) {
-        return kfree_vmm(ptr, size);
+    static inline void FreeEntry(MapEntry* e) {
+        g_VMMHeap.CacheFree(g_entryCache, e);
+    }
+
+    bool InitCaches() {
+        g_memObjCache = g_VMMHeap.CacheCreate("VMM::MemoryObject", sizeof(MemoryObject), 8, InitMemObj, DestroyMemObj, nullptr, 0);
+        if (g_memObjCache == nullptr)
+            return false;
+        g_pageCache = g_VMMHeap.CacheCreate("VMM::Page", sizeof(Page), 8, InitPage, nullptr, nullptr, 0);
+        if (g_pageCache == nullptr)
+            return false;
+        g_entryCache = g_VMMHeap.CacheCreate("VMM::MapEntry", sizeof(MapEntry), 8, InitEntry, nullptr, nullptr, 0);
+        return g_entryCache != nullptr;
+    }
+
+    MemoryObject* CreateMemObj() {
+        return static_cast<MemoryObject*>(g_VMMHeap.CacheAlloc(g_memObjCache, 0));
+    }
+
+    Page* Page::Alloc() {
+        return static_cast<Page*>(g_VMMHeap.CacheAlloc(g_pageCache, 0));
+    }
+
+    void Page::Free(Page* p) {
+        g_VMMHeap.CacheFree(g_pageCache, p);
     }
 
     VMM::VMM() : m_pageMapper(nullptr), m_vmRegionAllocator(nullptr), m_mapEntries() {
@@ -206,7 +255,7 @@ namespace VMM {
             return nullptr;
 
         // Step 2: put together the anon map
-        MemoryObject* anon = new MemoryObject;
+        MemoryObject* anon = CreateMemObj();
         if (anon == nullptr) {
             m_vmRegionAllocator->FreePages(pages, count);
             return nullptr;
@@ -216,9 +265,9 @@ namespace VMM {
         anon->refCount = 1;
         anon->kind = ObjectKind::Anon;
 
-        MapEntry* entry = (MapEntry*)kcalloc_vmm(1, sizeof(MapEntry)); // allocate this now for easier error handling
+        MapEntry* entry = CreateEntry(); // allocate this now for easier error handling
         if (entry == nullptr) {
-            kfree_vmm(anon, sizeof(MemoryObject));
+            g_VMMHeap.CacheFree(g_memObjCache, anon);
             m_vmRegionAllocator->FreePages(pages, count);
             return nullptr;
         }
@@ -237,7 +286,7 @@ namespace VMM {
             }
             if (!ok) {
                 DestroyMemoryObject(anon);
-                kfree_vmm(entry, sizeof(MapEntry));
+                FreeEntry(entry);
                 m_vmRegionAllocator->FreePages(pages, count);
                 return nullptr;
             }
@@ -248,7 +297,10 @@ namespace VMM {
         // Step 4: Build the map entry
         entry->startVirt = (uint64_t)pages;
         entry->endVirt = (uint64_t)pages + count * PAGE_SIZE;
-        entry->anon = anon; // offset of 0
+        entry->anon = anon;
+        entry->anonOffset = 0;
+        entry->object = nullptr;
+        entry->objectOffset = 0;
         entry->flags.protection = allocFlags.protection;
         entry->flags.cacheType = allocFlags.cacheType;
         entry->flags.user = allocFlags.user;
@@ -307,7 +359,7 @@ namespace VMM {
             return nullptr;
 
         // Step 2: Get a MapEntry
-        MapEntry* entry = (MapEntry*)kcalloc_vmm(1, sizeof(MapEntry));
+        MapEntry* entry = CreateEntry();
         if (entry == nullptr) {
             m_vmRegionAllocator->FreePages(pages, count);
             return nullptr;
@@ -317,9 +369,9 @@ namespace VMM {
         MemoryObject* anon = nullptr;
 
         if (allocFlags.isPrivate) {
-            anon = new MemoryObject;
+            anon = CreateMemObj();
             if (anon == nullptr) {
-                kfree_vmm(entry, sizeof(MapEntry));
+                FreeEntry(entry);
                 m_vmRegionAllocator->FreePages(pages, count);
                 return nullptr;
             }
@@ -338,7 +390,7 @@ namespace VMM {
                     obj->lock.Unlock();
                     if (allocFlags.isPrivate)
                         DestroyMemoryObject(anon);
-                    kfree_vmm(entry, sizeof(MapEntry));
+                    FreeEntry(entry);
                     m_vmRegionAllocator->FreePages(pages, count);
                     return nullptr;
                 }
@@ -350,7 +402,7 @@ namespace VMM {
         // Step 5: Build the MapEntry
         entry->startVirt = (uint64_t)pages;
         entry->endVirt = entry->startVirt + count * PAGE_SIZE;
-        entry->anon = anon; // offset 0
+        entry->anon = anon;
         entry->object = obj;
         entry->objectOffset = offset;
         entry->flags.protection = allocFlags.protection;
@@ -387,7 +439,7 @@ namespace VMM {
         if (objOut != nullptr)
             obj = *objOut;
         if (obj == nullptr) {
-            obj = new MemoryObject;
+            obj = CreateMemObj();
             if (obj == nullptr) {
                 m_vmRegionAllocator->FreePages(pages, count);
                 return nullptr;
@@ -405,7 +457,7 @@ namespace VMM {
             obj->size += count;
         }
 
-        MapEntry* entry = (MapEntry*)kcalloc_vmm(1, sizeof(MapEntry)); // allocate this now for easier error handling
+        MapEntry* entry = CreateEntry(); // allocate this now for easier error handling
         if (entry == nullptr) {
             if (UnrefMemObj(obj))
                 DestroyMemoryObject(obj);
@@ -418,7 +470,7 @@ namespace VMM {
         // Step 3: build the page list
         if (flags.allocPhys) {
             for (uint64_t i = 0; i < count; i++) {
-                Page* page = (Page*)kcalloc_vmm(1, sizeof(Page)); // TODO: check if page is nullptr
+                Page* page = Page::Alloc(); // TODO: check if page is nullptr
                 page->protection = flags.protection;
                 page->isWired = flags.allocPhys;
                 page->physAddr = (uint64_t)g_PMM->AllocatePage();
@@ -431,6 +483,7 @@ namespace VMM {
         }
 
         // Step 4: build the map entry
+        entry->anon = nullptr;
         entry->object = obj;
         entry->objectOffset = offset;
         entry->startVirt = (uint64_t)pages;
@@ -501,7 +554,7 @@ namespace VMM {
                 uint64_t end = entry->endVirt;
                 bool needLower = entry->startVirt < virt;
                 bool needUpper = entry->endVirt > virt + count * PAGE_SIZE;
-                MapEntry* spares[2] = {needLower ? (MapEntry*)kcalloc_vmm(1, sizeof(MapEntry)) : nullptr, needUpper ? (MapEntry*)kcalloc_vmm(1, sizeof(MapEntry)) : nullptr,};
+                MapEntry* spares[2] = {needLower ? CreateEntry() : nullptr, needUpper ? CreateEntry() : nullptr,};
                 if ((needLower && spares[0] == nullptr) || (needUpper && spares[1] == nullptr)) {
                     m_mapEntriesLock.Unlock();
                     return false;
@@ -957,7 +1010,7 @@ namespace VMM {
         m_mapEntriesLock.Lock();
         bool success = true;
         other->m_mapEntries.ForEach([&](uint64_t virt, MapEntry* e) -> bool {
-            MapEntry* c = (MapEntry*)kcalloc_vmm(1, sizeof(MapEntry));
+            MapEntry* c = CreateEntry();
             if (c == nullptr) {
                 success = false;
                 return false;
@@ -1050,12 +1103,14 @@ namespace VMM {
             spare->anonOffset = entry->anonOffset + lowerPages * PAGE_SIZE;
             spare->anon = entry->anon;
             RefMemObj(spare->anon);
-        }
+        } else
+            spare->anon = nullptr;
         if (entry->object != nullptr) {
             spare->objectOffset = entry->objectOffset + lowerPages * PAGE_SIZE;
             spare->object = entry->object;
             RefMemObj(spare->object);
-        }
+        } else
+            spare->object = nullptr;
 
         entry->endVirt = spare->startVirt;
         return spare;
@@ -1099,7 +1154,7 @@ namespace VMM {
             if (!full && (entry->startVirt != virt || entry->endVirt != virt + count * PAGE_SIZE)) {
                 bool needLower = entry->startVirt < virt;
                 bool needUpper = entry->endVirt > virt + count * PAGE_SIZE;
-                MapEntry* spares[2] = {needLower ? (MapEntry*)kcalloc_vmm(1, sizeof(MapEntry)) : nullptr, needUpper ? (MapEntry*)kcalloc_vmm(1, sizeof(MapEntry)) : nullptr,};
+                MapEntry* spares[2] = {needLower ? CreateEntry() : nullptr, needUpper ? CreateEntry() : nullptr,};
                 if ((needLower && spares[0] == nullptr) || (needUpper && spares[1] == nullptr)) {
                     if (lock)
                         m_mapEntriesLock.Unlock();
@@ -1192,7 +1247,7 @@ namespace VMM {
         }
 
         const uint64_t len = e->endVirt - e->startVirt;
-        MemoryObject* fresh = new MemoryObject;
+        MemoryObject* fresh = CreateMemObj();
         if (fresh == nullptr)
             return false;
         fresh->size = len >> PAGE_SIZE_SHIFT;
@@ -1204,7 +1259,7 @@ namespace VMM {
         old->pages.ForEachFrom([&](uint64_t off, Page* p) -> bool {
             if (off >= e->anonOffset + len)
                 return false;
-            Page* np = (Page*)kcalloc_vmm(1, sizeof(Page));
+            Page* np = Page::Alloc();
             if (np == nullptr) {
                 ok = false;
                 return false;
@@ -1297,7 +1352,7 @@ namespace VMM {
             else
                 obj->lock.Unlock();
         }
-        kfree_vmm(e, sizeof(MapEntry));
+        FreeEntry(e);
     }
 
 

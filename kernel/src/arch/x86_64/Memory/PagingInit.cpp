@@ -25,6 +25,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <util.h>
 
+#include <DataStructures/AVLTree.hpp>
+#include <DataStructures/LinkedList.hpp>
+
 #include <HAL/HAL.hpp>
 
 #include <Memory/Heap.hpp>
@@ -134,6 +137,9 @@ void x86_64_InitPaging(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t
     // Set the new HHDM offset
     SetHHDMOffset(newHHDMOffset);
 
+    AVLTree::InitwAVLTreeCache(true);
+    LinkedList::InitNodeCache(true);
+
     // Init the VMM
     if (pagingMode == x86_64_PagingMode::_4LVL)
         KVMRegionAllocator.Init(0xFFFFC00000000000, 0xFFFFF00000000000);
@@ -141,6 +147,8 @@ void x86_64_InitPaging(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t
         KVMRegionAllocator.Init(0xFF80000000000000, 0xFFC0000000000000);
 
     KPageMapper.SetPageTable(g_KernelRootPageTable);
+
+    VMM::InitCaches();
 
     KVMM.Init(&KPageMapper, &KVMRegionAllocator);
     VMM::g_KVMM = &KVMM;
@@ -165,4 +173,6 @@ void x86_64_InitPaging(uint64_t HHDMOffset, MemoryMapEntry** memoryMap, uint64_t
     VMM::g_frameTable = (VMM::FrameDesc*)virt;
 
     InitKHeap();
+    AVLTree::InitwAVLTreeCache(false);
+    LinkedList::InitNodeCache(false);
 }

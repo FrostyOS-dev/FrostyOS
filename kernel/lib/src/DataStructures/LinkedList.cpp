@@ -1,5 +1,5 @@
 /*
-Copyright (©) 2022-2025  Frosty515
+Copyright (©) 2022-2026  Frosty515
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,9 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include <stdlib.h>
 #include <stdio.h>
-
 #include <util.h>
 
 #include <DataStructures/Bitmap.hpp>
@@ -25,61 +23,25 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <HAL/HAL.hpp>
 
+#include <Memory/Heap.hpp>
+
 bool operator==(const LinkedList::Node& left, const LinkedList::Node& right) {
     return ((left.data == right.data) && (left.next == right.next) && (left.previous == right.previous));
 }
 
 namespace LinkedList {
 
-    Node nodePool[POOL_SIZE];
-	uint64_t nodePool_UsedCount;
-	uint8_t nodePool_BitmapData[POOL_SIZE / 8];
-	RawBitmap nodePool_Bitmap;
-	bool nodePoolHasBeenInitialised = false;
+    KMemCache* g_VMMNodeCache;
+    KMemCache* g_KNodeCache;
 
-	void NodePool_Init() {
-		nodePool_UsedCount = 0;
-		memset(nodePool_BitmapData, 0, POOL_SIZE / 8);
-		nodePool_Bitmap.SetSize(POOL_SIZE);
-		nodePool_Bitmap.SetBuffer(&(nodePool_BitmapData[0]));
-		nodePoolHasBeenInitialised = true;
-	}
-
-	void NodePool_Destroy() {
-		nodePool_Bitmap.~RawBitmap();
-		nodePoolHasBeenInitialised = false;
-	}
-
-	Node* NodePool_AllocateNode() {
-		if (nodePool_UsedCount == POOL_SIZE - 1) return nullptr;
-		for (uint64_t i = 0; i < POOL_SIZE; i++) {
-			if (nodePool_Bitmap.Get(i) == 0) {
-				nodePool_Bitmap.Set(i, true);
-				nodePool_UsedCount++;
-				return &(nodePool[i]);
-			}
-		}
-		return nullptr;
-	}
-
-	bool NodePool_FreeNode(Node*& node) {
-		for (uint64_t i = 0; i < POOL_SIZE; i++) {
-			if ((uint64_t)node == (uint64_t)(&(nodePool[i]))) {
-				nodePool_Bitmap.Set(i, false);
-				nodePool_UsedCount--;
-				node = nullptr;
-				return true;
-			}
-		}
-		return false;
-	}
-
-	bool NodePool_HasBeenInitialised() {
-		return nodePoolHasBeenInitialised;
-	}
-
-	bool NodePool_IsInPool(Node* obj) {
-        return (((uint64_t)obj >= (uint64_t)nodePool) && ((uint64_t)obj < ((uint64_t)nodePool + POOL_SIZE * sizeof(Node))));
+    bool InitNodeCache(bool vmm) {
+        if (vmm) {
+            g_VMMNodeCache = g_VMMHeap.CacheCreate("LinkedList::VMMNodeCache", sizeof(Node), 8, nullptr, nullptr, nullptr, 0);
+            return g_VMMNodeCache != nullptr;
+        } else {
+            g_KNodeCache = g_KHeap.CacheCreate("LinkedList::KNodeCache", sizeof(Node), 8, nullptr, nullptr, nullptr, 0);
+            return g_KNodeCache != nullptr;
+        }
     }
 
     uint64_t length(Node* head) {
@@ -100,16 +62,8 @@ namespace LinkedList {
         return count;
     }
 
-    Node* newNode(uint64_t data, bool vmm, bool usePool) {
-        Node* node = nullptr;
-
-        if (usePool)
-            node = NodePool_AllocateNode();
-        else if (vmm)
-            node = reinterpret_cast<Node*>(kcalloc_vmm(1, sizeof(Node)));
-        else
-            node = new Node();
-
+    Node* newNode(uint64_t data, bool vmm) {
+        Node* node = AllocNode(vmm);
         if (node == nullptr)
             return nullptr;
 
@@ -119,10 +73,10 @@ namespace LinkedList {
         return node;
     }
 
-    void insertNode(Node*& head, uint64_t data, bool vmm, bool usePool) {
+    void insertNode(Node*& head, uint64_t data, bool vmm) {
         // check if head is NULL
         if (head == nullptr) {
-            head = newNode(data, vmm, usePool);
+            head = newNode(data, vmm);
             return;
         }
 
@@ -135,7 +89,7 @@ namespace LinkedList {
         }
 
         // get new node and set last node's next to it
-        current->next = newNode(data, vmm, usePool);
+        current->next = newNode(data, vmm);
 
         // update newly created node's previous to the last node
         current->next->previous = current;
@@ -154,7 +108,7 @@ namespace LinkedList {
         return nullptr;
     }
 
-    bool deleteNode(Node*& head, uint64_t key, bool vmm, bool usePool) {
+    bool deleteNode(Node*& head, uint64_t key, bool vmm) {
         Node* temp = head;
         if (temp != nullptr && temp->data == key) {
             head = temp->next;
@@ -163,12 +117,7 @@ namespace LinkedList {
                 if (head->next != nullptr)
                     head->next->previous = head;
             }
-            if (usePool && NodePool_IsInPool(temp))
-                NodePool_FreeNode(temp);
-            else if (vmm)
-                kfree_vmm(temp, sizeof(Node));
-            else
-                delete temp;
+            FreeNode(vmm, temp);
             return true;
         }
         if (temp == nullptr)
@@ -182,16 +131,11 @@ namespace LinkedList {
             temp->next->previous = temp->previous;
         if (temp->previous != nullptr)
             temp->previous->next = temp->next;
-        if (usePool && NodePool_IsInPool(temp))
-            NodePool_FreeNode(temp);
-        else if (vmm)
-            kfree_vmm(temp, sizeof(Node));
-        else
-            delete temp;
+        FreeNode(vmm, temp);
         return true;
     }
 
-    bool deleteNode(Node*& head, Node* node, bool vmm, bool usePool) {
+    bool deleteNode(Node*& head, Node* node, bool vmm) {
         if (node == nullptr || head == nullptr)
             return false;
         if (node->next != nullptr)
@@ -200,12 +144,7 @@ namespace LinkedList {
             node->previous->next = node->next;
         if (head == node)
             head = node->next;
-        if (usePool && NodePool_IsInPool(node))
-            NodePool_FreeNode(node);
-        else if (vmm)
-            kfree_vmm(node, sizeof(Node));
-        else
-            delete node;
+        FreeNode(vmm, node);
         return true;
     }
 
@@ -222,10 +161,6 @@ namespace LinkedList {
 
         // clear the value of current to protect the node it is pointing to from possible deletion
         current = nullptr;
-    }
-
-    void panic(const char* str) {
-        PANIC(str);
     }
 
 } // namespace LinkedList
