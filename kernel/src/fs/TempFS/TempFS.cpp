@@ -50,8 +50,8 @@ namespace FS {
     }
 
     int TempFS::Mount(VNode* nodeCovered, int flags, void* backing, const Credential& cred) {
-        time_t time = HAL_GetUnixEpochTime();
-        VAttr attr = {VType::DIR, ROOT_DIR_MODE, cred.euid, cred.egid, FSType::TempFS, GetInodeNum(), 2, 0, PAGE_SIZE, {time, 0}, {time, 0}, {time, 0}, 0};
+        timespec time = HAL_GetUnixEpochTime();
+        VAttr attr = {VType::DIR, ROOT_DIR_MODE, cred.euid, cred.egid, FSType::TempFS, GetInodeNum(), 2, 0, PAGE_SIZE, time, time, time, 0};
 
         TempFSVNode* root = new TempFSVNode(this);
         int rc = root->Create(nullptr, nullptr, 0, &attr, cred);
@@ -445,10 +445,10 @@ namespace FS {
         node->m_name = nameCopy;
         node->m_nameLen = newNameLen;
 
-        time_t now = HAL_GetUnixEpochTime();
-        node->m_attr.ctime = { now, 0 };
-        m_attr.mtime = m_attr.ctime = {now, 0};
-        dest->m_attr.mtime = dest->m_attr.ctime = { now, 0 };
+        timespec now = HAL_GetUnixEpochTime();
+        node->m_attr.ctime = now;
+        m_attr.mtime = m_attr.ctime = now;
+        dest->m_attr.mtime = dest->m_attr.ctime = now;
         return ESUCCESS;
     }
 

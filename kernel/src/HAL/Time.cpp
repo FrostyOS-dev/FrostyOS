@@ -20,10 +20,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "drivers/HPET.hpp"
 
+#include <spinlock.h>
 #include <stdint.h>
+#include <time.h>
 #include <util.h>
 
 #include <Scheduling/Scheduler.hpp>
+#include <Scheduling/Thread.hpp>
 
 #ifdef __x86_64__
 #include <arch/x86_64/CMOS.hpp>
@@ -94,13 +97,14 @@ void HAL_SleepNS(uint64_t ns) {
 bool HAL_GetTimeOfDay(TimeOfDay* time) {
 #ifdef __x86_64__
     return x86_64_CMOSGetTimeOfDay(time);
+#else
+    return false;
 #endif
 }
 
-int64_t HAL_GetUnixEpochTime() {
+int64_t HAL_ReadRTC() {
     TimeOfDay time = {};
-    bool rc = HAL_GetTimeOfDay(&time);
-    if (!rc)
+    if (!HAL_GetTimeOfDay(&time))
         return INT64_MAX;
     int64_t days = DaysSinceUnixEpoch(time.year, time.month, time.dayOfMonth);
     return days * 86400 + time.hours * 3600 + time.minutes * 60 + time.seconds;
@@ -113,4 +117,173 @@ int64_t DaysSinceUnixEpoch(int32_t year, uint8_t month, uint8_t day) {
     uint32_t doy = (153 * (month > 2 ? month - 3 : month + 9) + 2) / 5 + day - 1;
     uint32_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     return (era * 146097 + (int32_t)doe) - 719468;
+}
+
+// Wall clock
+namespace {
+    constexpr int64_t NS_PER_SEC = 1'000'000'000;
+    constexpr int64_t NS_PER_MS = 1'000'000;
+
+    int64_t g_realtimeOffsetNS = 0;
+    bool g_realtimeValid = false;
+    uint64_t g_realtimeGen = 0;
+    spinlock_t g_realtimeLock = SPINLOCK_DEFAULT_VALUE;
+
+    inline int64_t MonoNS() {
+        return static_cast<int64_t>(HAL_GetNSTicks());
+    }
+
+    void PublishOffsetLocked(int64_t offset) {
+        __atomic_store_n(&g_realtimeOffsetNS, offset, __ATOMIC_RELEASE);
+        __atomic_store_n(&g_realtimeValid, true, __ATOMIC_RELEASE);
+        __atomic_store_n(&g_realtimeGen, g_realtimeGen + 1, __ATOMIC_RELEASE);
+    }
+
+    uint64_t LoadGen() {
+        return __atomic_load_n(&g_realtimeGen, __ATOMIC_ACQUIRE);
+    }
+
+    bool TryPublishOffset(int64_t offset, uint64_t expectedGen) {
+        spinlock_acquire_int(&g_realtimeLock);
+        bool ok = g_realtimeGen == expectedGen;
+        if (ok)
+            PublishOffsetLocked(offset);
+        spinlock_release_int(&g_realtimeLock);
+        return ok;
+    }
+}
+
+int64_t HAL_GetRealtimeNS() {
+    return MonoNS() + HAL_GetRealtimeOffsetNS();
+}
+
+int64_t HAL_GetRealtimeOffsetNS() {
+    return __atomic_load_n(&g_realtimeOffsetNS, __ATOMIC_ACQUIRE);
+}
+
+void HAL_SetRealtimeMS(int64_t ns) {
+    int64_t mono = MonoNS();
+    spinlock_acquire_int(&g_realtimeLock);
+    PublishOffsetLocked(ns - mono);
+    spinlock_release_int(&g_realtimeLock);
+}
+
+bool HAL_RealtimeValid() {
+    return __atomic_load_n(&g_realtimeValid, __ATOMIC_ACQUIRE);
+}
+
+timespec HAL_GetUnixEpochTime() {
+    if (!HAL_RealtimeValid())
+        return {0, 0};
+    int64_t ns = HAL_GetRealtimeNS();
+    return {ns / NS_PER_SEC, ns % NS_PER_SEC};
+}
+
+#ifdef __x86_64__
+
+namespace {
+    bool FindSecondEdgeCoarse(int64_t* edgeMono) {
+        uint8_t last;
+        if (!x86_64_CMOSReadSecondsStable(&last))
+            return false;
+
+        int64_t prev = MonoNS();
+        int64_t deadline = prev + 1500 * NS_PER_MS;
+        while (MonoNS() < deadline) {
+            HAL_Sleep(1);
+            uint8_t s;
+            if (!x86_64_CMOSReadSecondsStable(&s))
+                return false;
+            int64_t now = MonoNS();
+            if (s != last) {
+                *edgeMono = prev + (now - prev) / 2;
+                return true;
+            }
+            prev = now;
+        }
+        return false;
+    }
+
+    bool WaitForUpdateEnd(int64_t timeoutNS, int64_t* edgeMono) {
+        int64_t deadline = MonoNS() + timeoutNS;
+        bool sawUpdate = false;
+        while (MonoNS() < deadline) {
+            if (x86_64_CMOSUpdateInProgess())
+                sawUpdate = true;
+            else if (sawUpdate) {
+                *edgeMono = MonoNS();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool RefineAgainstRTC(uint64_t startGen, int64_t predictedEdge) {
+        for (int attempt = 0; attempt < 3; attempt++) {
+            int64_t now = MonoNS();
+            int64_t wake = predictedEdge - 4 * NS_PER_MS;
+            if (wake <= now) {
+                int64_t offset = ((now - wake) / NS_PER_SEC + 1) * NS_PER_SEC;
+                predictedEdge += offset;
+                wake += offset;
+            }
+            HAL_Sleep((wake - now) / NS_PER_MS);
+
+            int64_t before = HAL_ReadRTC();
+            if (before == INT64_MAX)
+                return false;
+
+            int64_t edge;
+            if (!WaitForUpdateEnd(20 * NS_PER_MS, &edge)) {
+                predictedEdge += NS_PER_SEC;
+                continue;
+            }
+
+            uint8_t sec;
+            if (!x86_64_CMOSReadSecondsStable(&sec) || sec != static_cast<uint8_t>((before + 1) % 60)) {
+                predictedEdge += NS_PER_SEC;
+                continue;
+            }
+
+            int64_t newOffset = (before + 1) * NS_PER_SEC - edge;
+
+            int64_t delta = newOffset - HAL_GetRealtimeOffsetNS();
+            if (delta < 0)
+                delta = -delta;
+            if (delta > 2 * NS_PER_SEC)
+                return false;
+
+            return TryPublishOffset(newOffset, startGen);
+        }
+        return false;
+    }
+
+    void WallClockRefineMain(void* data) {
+        uint64_t startGen = reinterpret_cast<uintptr_t>(data);
+        int64_t edge;
+        if (FindSecondEdgeCoarse(&edge))
+            RefineAgainstRTC(startGen, edge + NS_PER_SEC);
+        Thread::ExitCurrentKernelThread();
+    }
+}
+
+#endif /* __x86_64__ */
+
+void HAL_InitWallClock() {
+    int64_t seconds = HAL_ReadRTC();
+    if (seconds == INT64_MAX)
+        return;
+    int64_t mono = MonoNS();
+
+    spinlock_acquire_int(&g_realtimeLock);
+    if (!g_realtimeValid)
+        PublishOffsetLocked(seconds * NS_PER_SEC - mono);
+    uint64_t gen = g_realtimeGen;
+    spinlock_release_int(&g_realtimeLock);
+
+#ifdef __x86_64__
+    Thread::CreateKernelThread({&WallClockRefineMain, reinterpret_cast<void*>(gen)});
+#else
+    (void)gen;
+#endif
 }

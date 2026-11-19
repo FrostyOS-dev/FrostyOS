@@ -527,8 +527,8 @@ namespace FS {
             return -ENOMEM;
         }
 
-        time_t time = HAL_GetUnixEpochTime();
-        VAttr attr = {type, (uint16_t)mode, cred.euid, cred.egid, vfs->GetType(), vfs->GetInodeNum(), type == VType::DIR ? 2 : 1, 0, 0, {time, 0}, {time, 0}, {time, 0}, 0};
+        timespec time = HAL_GetUnixEpochTime();
+        VAttr attr = {type, (uint16_t)mode, cred.euid, cred.egid, vfs->GetType(), vfs->GetInodeNum(), type == VType::DIR ? 2 : 1, 0, 0, time, time, time, 0};
         InheritFromParent(attr, parent);
         if (type != VType::DIR && type != VType::LNK && cred.euid != 0 && !InGroup(attr.gid, cred))
             attr.mode &= (uint16_t)~S_ISGID;
@@ -871,8 +871,7 @@ namespace FS {
             newMode &= (uint16_t)~S_ISGID;
 
         attr.mode = newMode;
-        attr.ctime.tv_sec = HAL_GetUnixEpochTime();
-        attr.ctime.tv_nsec = 0;
+        attr.ctime = HAL_GetUnixEpochTime();
 
         rc = vnode->SetAttr(attr);
         vnode->Unlock();
@@ -915,8 +914,7 @@ namespace FS {
                 attr.mode &= (uint16_t)~S_ISGID;
         }
 
-        attr.ctime.tv_sec = HAL_GetUnixEpochTime();
-        attr.ctime.tv_nsec = 0;
+        attr.ctime = HAL_GetUnixEpochTime();
 
         rc = vnode->SetAttr(attr);
         vnode->Unlock();
@@ -936,8 +934,7 @@ namespace FS {
             return;
 
         attr.mode &= (uint16_t)~kill;
-        attr.ctime.tv_sec = HAL_GetUnixEpochTime();
-        attr.ctime.tv_nsec = 0;
+        attr.ctime = HAL_GetUnixEpochTime();
         vnode->SetAttr(attr);
     }
 
@@ -1049,8 +1046,7 @@ namespace FS {
             if (rc >= 0) {
                 if (cred.euid != 0 && clearSID)
                     attr.mode &= (uint16_t)~(S_ISUID | S_ISGID);
-                attr.mtime.tv_sec = HAL_GetUnixEpochTime();
-                attr.mtime.tv_nsec = 0;
+                attr.mtime = HAL_GetUnixEpochTime();
                 attr.ctime = attr.mtime;
                 rc = vnode->SetAttr(attr);
             }

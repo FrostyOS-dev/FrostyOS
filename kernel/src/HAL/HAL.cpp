@@ -53,6 +53,8 @@ void HAL_Stage2() {
     ACPI::Stage2Init();
     g_BSP->InitStage2();
 
+    HAL_InitWallClock();
+
     PCI_Walk();
 
     g_DeviceManager->ProbeDevices();

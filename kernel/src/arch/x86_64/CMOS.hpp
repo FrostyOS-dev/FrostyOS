@@ -44,4 +44,7 @@ void x86_64_WriteCMOS(x86_64_CMOSRegister reg, uint8_t value);
 
 bool x86_64_CMOSGetTimeOfDay(TimeOfDay* out);
 
+bool x86_64_CMOSUpdateInProgess();
+bool x86_64_CMOSReadSecondsStable(uint8_t* out);
+
 #endif /* _x86_64_CMOS_HPP */

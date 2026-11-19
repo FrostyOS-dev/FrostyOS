@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #define _HAL_TIME_HPP
 
 #include <stdint.h>
+#include <time.h>
 
 #include "Processor.hpp"
 
@@ -41,8 +42,16 @@ uint64_t HAL_GetNSTicks();
 void HAL_Sleep(uint64_t ms);
 void HAL_SleepNS(uint64_t ns);
 
-bool HAL_GetTimeOfDay(TimeOfDay* time);
-int64_t HAL_GetUnixEpochTime(); // returns INT64_MAX on error
+void HAL_InitWallClock();
+
+int64_t HAL_GetRealtimeNS();
+int64_t HAL_GetRealtimeOffsetNS();
+void HAL_SetRealtimeMS(int64_t ns);
+bool HAL_RealtimeValid();
+
+bool HAL_GetTimeOfDay(TimeOfDay* time); // reads hardware RTC
+int64_t HAL_ReadRTC(); // RTC as unix seconds
+timespec HAL_GetUnixEpochTime(); // wall clock in seconds, returns INT64_MAX on error
 
 int64_t DaysSinceUnixEpoch(int32_t year, uint8_t month, uint8_t day);
 

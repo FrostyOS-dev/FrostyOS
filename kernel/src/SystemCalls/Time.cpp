@@ -38,10 +38,7 @@ int sys_clockget(int clock, timespec* time) {
     
     switch (clock) {
     case CLOCK_REALTIME:
-        t.tv_sec = HAL_GetUnixEpochTime();
-        if (t.tv_sec == INT64_MAX)
-            return -ENOSYS;
-        t.tv_nsec = 0;
+        t = HAL_GetUnixEpochTime();
         break;
     case CLOCK_MONOTONIC:
     case CLOCK_BOOTTIME: {
