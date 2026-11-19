@@ -124,6 +124,11 @@ namespace Scheduler {
     [[noreturn]] void IdleTask(void*); // implemented in arch-specific code
 
     [[noreturn]] void HandleDeadThreads(void*); // just an infinite loop waiting to delete threads
+
+    typedef void (*ProcessExitHookFunc)(Process* proc, void* ctx);
+    bool RegisterProcessExitHook(ProcessExitHookFunc fn, void* ctx);
+    bool UnregisterProcessExitHook(ProcessExitHookFunc fn, void* ctx);
+    void RunProcessExitHooks(Process* proc); // only called by HandleDeadThreads
     
 } // namespace Scheduler
 

@@ -855,6 +855,7 @@ namespace Scheduler {
                 if (finalExit) {
                     orphanCount = SnapshotOrphanCandidates(proc, orphanCands, 16);
                     proc->MarkExiting();
+                    RunProcessExitHooks(proc);
                 }
 
                 if (proc != nullptr) {
@@ -903,6 +904,73 @@ namespace Scheduler {
             }
             g_deadThreadsSemaphore.Wait(); // nothing to delete, wait until next is ready
         }
+    }
+
+    namespace {
+        constexpr size_t MAX_EXIT_HOOKS = 8;
+
+        struct ExitHook {
+            ProcessExitHookFunc fn;
+            void* ctx;
+        };
+
+        ExitHook g_exitHooks[MAX_EXIT_HOOKS];
+        spinlock_t g_exitHooksLock = SPINLOCK_DEFAULT_VALUE;
+    }
+
+    bool RegisterProcessExitHook(ProcessExitHookFunc fn, void* ctx) {
+        if (fn == nullptr)
+            return false;
+
+        bool ok = false;
+        spinlock_acquire_int(&g_exitHooksLock);
+
+        for (size_t i = 0; i < MAX_EXIT_HOOKS; i++) {
+            if (g_exitHooks[i].fn == fn && g_exitHooks[i].ctx == ctx) {
+                spinlock_release_int(&g_exitHooksLock);
+                return false;
+            }
+        }
+
+        for (size_t i = 0; i < MAX_EXIT_HOOKS; i++) {
+            if (g_exitHooks[i].fn == nullptr) {
+                g_exitHooks[i] = {fn, ctx};
+                ok = true;
+                break;
+            }
+        }
+
+        spinlock_release_int(&g_exitHooksLock);
+        return ok;
+    }
+
+    bool UnregisterProcessExitHook(ProcessExitHookFunc fn, void* ctx) {
+        bool found = false;
+        spinlock_acquire_int(&g_exitHooksLock);
+        for (size_t i = 0; i < MAX_EXIT_HOOKS; i++) {
+            if (g_exitHooks[i].fn == fn && g_exitHooks[i].ctx == ctx) {
+                g_exitHooks[i] = {nullptr, nullptr};
+                found = true;
+                break;
+            }
+        }
+        spinlock_release_int(&g_exitHooksLock);
+        return found;
+    }
+
+    void RunProcessExitHooks(Process* proc) {
+        ExitHook local[MAX_EXIT_HOOKS];
+        size_t count = 0;
+
+        spinlock_acquire_int(&g_exitHooksLock);
+        for (size_t i = 0; i < MAX_EXIT_HOOKS; i++) {
+            if (g_exitHooks[i].fn != nullptr)
+                local[count++] = g_exitHooks[i];
+        }
+        spinlock_release_int(&g_exitHooksLock);
+
+        for (size_t i = 0; i < count; i++)
+            local[i].fn(proc, local[i].ctx);
     }
 
 } // namespace Scheduler
