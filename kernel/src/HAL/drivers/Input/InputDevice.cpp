@@ -16,6 +16,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "InputDevice.hpp"
+#include "InputClient.hpp"
 #include "InputEvent.hpp"
 
 #include <errno.h>
@@ -24,14 +25,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <frostyos/asm/input.h>
 
 #include <Scheduling/Event.hpp>
+#include <Scheduling/Process.hpp>
 
 #include <SystemCalls/SystemCall.hpp>
 
-InputDevice::InputDevice() : m_info(nullptr), m_deviceType(InputDeviceType::Unknown), m_eventSourceID(UINT64_MAX), m_pendingEvents(), m_queue(), m_users(0) {
+InputDevice::InputDevice() : m_info(nullptr), m_deviceType(InputDeviceType::Unknown), m_eventSourceID(UINT64_MAX) {
 
 }
 
-InputDevice::InputDevice(InputDeviceType type) : m_info(nullptr), m_deviceType(type), m_eventSourceID(UINT64_MAX), m_pendingEvents(), m_queue(), m_users(0) {
+InputDevice::InputDevice(InputDeviceType type) : m_info(nullptr), m_deviceType(type), m_eventSourceID(UINT64_MAX) {
 
 }
 
@@ -39,60 +41,52 @@ InputDevice::~InputDevice() {
 
 }
 
-int InputDevice::Open(int flags, const Credential& cred) {
-    __atomic_fetch_add(&m_users, 1, __ATOMIC_RELAXED);
-    return ESUCCESS;
-}
+int InputDevice::OpenFile(int flags, const Credential&, void** priv) {
+    *priv = nullptr;
+    if (m_eventSourceID == UINT64_MAX || Input::g_EventManager == nullptr)
+        return -ENODEV;
 
-int InputDevice::Close(int flags, const Credential& cred) {
-    __atomic_fetch_sub(&m_users, 1, __ATOMIC_RELAXED);
-    return ESUCCESS;
-}
+    InputClient* client = new InputClient();
+    if (client == nullptr)
+        return -ENOMEM;
 
-int InputDevice::Read(void* out, size_t size, int flags, uint64_t, size_t* bytesRead, const Credential& cred) {
-    *bytesRead = 0;
-    if (size < sizeof(FOSI_Event))
-        return -ERANGE;
-
-    size_t written = 0;
-    while (written < size && (size - written) >= sizeof(FOSI_Event)) {
-        FOSI_Event e;
-        if (m_pendingEvents.pop(e)) {
-            memcpy((void*)((uint64_t)out + written), &e, sizeof(FOSI_Event));
-            written += sizeof(FOSI_Event);
-            continue;
-        }
-
-        if ((flags & O_NONBLOCK) > 0) {
-            *bytesRead = written;
-            return written > 0 ? ESUCCESS : -EAGAIN;
-        }
-
-        EventWaitNode node;
-        node.queue = &m_queue;
-        node.requestedEvents = POLLIN;
-        EventWaitNode* nodes[] = {&node};
-        Event::RegisterWaitNodes(nodes, 1);
-
-        if (!m_pendingEvents.empty()) {
-            Event::UnregisterWaitNodes(nodes, 1);
-            continue;
-        }
-
-        Event::BlockOnWaitNodes(nodes, 1, UINT64_MAX);
-
-        Event::UnregisterWaitNodes(nodes, 1);
+    int rc = Input::g_EventManager->AttachClient(m_eventSourceID, client);
+    if (rc < 0) {
+        delete client;
+        return rc;
     }
 
-    *bytesRead = written;
+    *priv = client;
     return ESUCCESS;
 }
 
-int InputDevice::Write(const void* in, size_t size, int flags, uint64_t, size_t* bytesWritten, const Credential& cred) {
+int InputDevice::CloseFile(void* priv, int flags, const Credential&) {
+    InputClient* client = static_cast<InputClient*>(priv);
+    if (client == nullptr)
+        return ESUCCESS;
+
+    if (Input::g_EventManager != nullptr)
+        Input::g_EventManager->DetachClient(client);
+    delete client;
+    return ESUCCESS;
+}
+
+int InputDevice::ReadFile(void* priv, void* out, size_t size, int flags, uint64_t, size_t* bytesRead, const Credential&) {
+    InputClient* client = static_cast<InputClient*>(priv);
+    if (client == nullptr) {
+        *bytesRead = 0;
+        return -EBADF;
+    }
+    return client->Read(out, size, flags, bytesRead);
+}
+
+int InputDevice::WriteFile(void*, const void*, size_t, int, uint64_t, size_t*, const Credential&) {
     return -EBADF;
 }
 
-int InputDevice::Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) {
+int InputDevice::IoctlFile(void* priv, size_t op, void* arg, int* result, Process* proc, const Credential& cred) {
+    InputClient* client = static_cast<InputClient*>(priv);
+
     switch (op) {
     case FOSI_GET_DEVICE_INFO: {
         FOSI_DeviceInfo info;
@@ -100,13 +94,54 @@ int InputDevice::Ioctl(size_t op, void* arg, int* result, Process* proc, const C
         switch (m_deviceType) {
         case InputDeviceType::Keyboard:
             info.type = FOSI_DT_KEYBOARD;
+            info.cap = FOSI_CAP_KEY;
+            break;
+        case InputDeviceType::Mouse:
+            info.type = FOSI_DT_MOUSE;
+            info.cap = FOSI_CAP_KEY | FOSI_CAP_REL;
             break;
         default:
             info.type = 0;
             break;
         }
         if (!UserWrite(arg, &info, sizeof(FOSI_DeviceInfo), proc))
-            return -EFAULT;
+            return EFAULT;
+        *result = 0;
+        return ESUCCESS;
+    }
+    case FOSI_SET_CLAIM: {
+        if (client == nullptr || Input::g_EventManager == nullptr)
+            return EBADF;
+        int value;
+        if (UserRead(arg, &value, sizeof(int), proc))
+            return EFAULT;
+        int rc = Input::g_EventManager->SetClaim(client, value != 0, proc, cred);
+        if (rc < 0)
+            return -rc;
+        *result = 0;
+        return ESUCCESS;
+    }
+    case FOSI_SET_CLOCK: {
+        if (client == nullptr || Input::g_EventManager == nullptr)
+            return EBADF;
+        int clock;
+        if (!UserRead(arg, &clock, sizeof(int), proc))
+            return EFAULT;
+        int rc = Input::g_EventManager->SetClientClock(client, clock);
+        if (rc < 0)
+            return -rc;
+        *result = 0;
+        return ESUCCESS;
+    }
+    case FOSI_GET_KEY_STATE: {
+        if (client == nullptr || Input::g_EventManager == nullptr)
+            return EBADF;
+        FOSI_KeyState state;
+        int rc = Input::g_EventManager->GetKeyState(client, &state);
+        if (rc < 0)
+            return -rc;
+        if (!UserWrite(arg, &state, sizeof(FOSI_KeyState), proc))
+            return EFAULT;
         *result = 0;
         return ESUCCESS;
     }
@@ -114,55 +149,12 @@ int InputDevice::Ioctl(size_t op, void* arg, int* result, Process* proc, const C
     return ENOTTY;
 }
 
-void InputDevice::AddUserEvent(const Input::Event& e) {
-    using namespace Input;
-
-    if (__atomic_load_n(&m_users, __ATOMIC_ACQUIRE) == 0)
-        return;
-
-    auto addEvent = [this](FOSI_Event ev) -> void {
-        if (m_pendingEvents.push(ev))
-            m_queue.Trigger(POLLIN | POLLRDNORM);
-    };
-
-    switch (e.type) {
-    case EventType::KeyboardKey: {
-        FOSI_Event event;
-        event.type = FOSI_ET_KEY;
-        event.code = (_u32)e.eventData.keyboardEvent.key;
-        event.data = e.eventData.keyboardEvent.released ? 1 : 0;
-        addEvent(event);
-        break;
-    }
-    case EventType::MouseEvent: {
-        int32_t dx = e.eventData.mouseEvent.dx, dy = e.eventData.mouseEvent.dy;
-        if (dx != 0 || dy != 0) {
-            FOSI_Event event;
-            event.type = FOSI_ET_REL;
-            event.code = FOSI_REL_XY;
-            event.data = (uint32_t)dx | ((uint64_t)((uint32_t)dy) << 32);
-            addEvent(event);
-        }
-        if (e.eventData.mouseEvent.wheelDelta != 0) {
-            int64_t wheel = e.eventData.mouseEvent.wheelDelta;
-            FOSI_Event event;
-            event.type = FOSI_ET_REL;
-            event.code = e.eventData.mouseEvent.scrollDirection == Input::Event::ScrollDirection::HORIZONTAL ? FOSI_REL_HWHEEL : FOSI_REL_WHEEL;
-            event.data = wheel;
-            addEvent(event);
-        }
-        break;
-    }
-    }
+EventWaitQueue* InputDevice::GetPollQueueFile(void* priv, uint32_t events) {
+    InputClient* client = static_cast<InputClient*>(priv);
+    return client != nullptr ? client->GetWaitQueue() : nullptr;
 }
 
-EventWaitQueue* InputDevice::GetPollQueue(uint32_t events) {
-    return &m_queue;
-}
-
-uint32_t InputDevice::PollReady(uint32_t events) {
-    uint32_t e = 0;
-    if (!m_pendingEvents.empty())
-        e |= POLLIN | POLLRDNORM;
-    return e & events;
+uint32_t InputDevice::PollReadyFile(void* priv, uint32_t events) {
+    InputClient* client = static_cast<InputClient*>(priv);
+    return client != nullptr ? client->PollReady(events) : POLLNVAL;
 }

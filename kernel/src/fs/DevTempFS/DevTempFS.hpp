@@ -74,6 +74,14 @@ namespace FS {
         virtual EventWaitQueue* GetPollQueue(uint32_t events) override;
         virtual uint32_t PollReady(uint32_t events) override;
 
+        virtual int OpenDescription(int flags, const Credential& cred, void** priv) override;
+        virtual int CloseDescription(void* priv, int flags, const Credential& cred) override;
+        virtual int ReadDescription(void* priv, void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, const Credential& cred) override;
+        virtual int WriteDescription(void* priv, const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, const Credential& cred) override;
+        virtual int IoctlDescription(void* priv, size_t op, void* arg, int* result, Process* proc, const Credential& cred) override;
+        virtual EventWaitQueue* GetPollQueueDescription(void* priv, uint32_t events) override;
+        virtual uint32_t PollReadyDescription(void* priv, uint32_t events) override;
+
         void SetDevice(Device* dev);
         Device* GetDevice();
 

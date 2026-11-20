@@ -26,9 +26,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #define KT_MAX_SEQ 16
 
+enum class KeyAction : uint8_t {
+    Release,
+    Press,
+    Repeat
+};
+
 class KBDTranslator {
 public:
-    size_t HandleKey(Key key, bool released, char* out);
+    size_t HandleKey(Key key, KeyAction action, char* out);
     void SetApplicationCursorKeys(bool on);
 
     bool Shift() const;

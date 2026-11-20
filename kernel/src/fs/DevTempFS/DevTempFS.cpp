@@ -298,6 +298,42 @@ namespace FS {
         CALL_DEV_OP(PollReady, events);
     }
 
+    int DevTempFSVNode::OpenDescription(int flags, const Credential& cred, void** priv) {
+        *priv = nullptr;
+        if (m_attr.type == VType::DIR || m_dev == nullptr)
+            return 0;
+        return m_dev->OpenFile(flags, cred, priv);
+    }
+
+    int DevTempFSVNode::CloseDescription(void* priv, int flags, const Credential& cred) {
+        if (m_attr.type == VType::DIR || m_dev == nullptr)
+            return 0;
+        return m_dev->CloseFile(priv, flags, cred);
+    }
+
+    int DevTempFSVNode::ReadDescription(void* priv, void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, const Credential& cred) {
+        CALL_DEV_OP(ReadFile, priv, out, size, flags, offset, bytesRead, cred);
+    }
+
+    int DevTempFSVNode::WriteDescription(void* priv, const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, const Credential& cred) {
+        CALL_DEV_OP(WriteFile, priv, in, size, flags, offset, bytesWritten, cred);
+    }
+
+    int DevTempFSVNode::IoctlDescription(void* priv, size_t op, void* arg, int* result, Process* proc, const Credential& cred) {
+        if (m_dev == nullptr)
+            return ENOTSUP;
+        return m_dev->IoctlFile(priv, op, arg, result, proc, cred);
+    }
+
+    EventWaitQueue* DevTempFSVNode::GetPollQueueDescription(void* priv, uint32_t events) {
+        if (m_dev == nullptr)
+            return nullptr;
+        return m_dev->GetPollQueueFile(priv, events);
+    }
+
+    uint32_t DevTempFSVNode::PollReadyDescription(void* priv, uint32_t events) {
+        CALL_DEV_OP(PollReadyFile, priv, events);
+    }
 
     bool DevTempFSVNode::HasChildren() {
         return m_children.getCount() != 0;

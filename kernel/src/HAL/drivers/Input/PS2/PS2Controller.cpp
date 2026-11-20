@@ -110,10 +110,8 @@ bool PS2Device::DataAvailable() {
     return status.outputFull && status.dataFromPort2 == m_channel; // channel is true for port 2
 }
 
-uint8_t PS2Device::ReadData() {
-    uint8_t data;
-    assert(0 == m_controller->ReadData(&data));
-    return data;
+bool PS2Device::ReadData(uint8_t* out) {
+    return m_controller != nullptr && PS2Controller::ReadData(out, 16) == 0; // small number of attempts to protect against misbehaving controllers
 }
 
 int PS2Device::SendCommand(uint8_t command) {

@@ -140,6 +140,7 @@ set(kernel_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Input/PS2/PS2Controller.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Input/PS2/PS2Keyboard.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Input/PS2/PS2Mouse.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Input/InputClient.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Input/InputDevice.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Input/InputEvent.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/HAL/drivers/Video/FBVideo/FBDisplay.cpp

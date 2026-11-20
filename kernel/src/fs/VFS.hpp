@@ -193,6 +193,15 @@ namespace FS {
         virtual EventWaitQueue* GetPollQueue(uint32_t events);
         virtual uint32_t PollReady(uint32_t events);
 
+        // Per-open-file-description versions for device nodes. FileDescriptor calls these for CHR vnodes, standard ones otherwise.
+        virtual int OpenDescription(int flags, const Credential& cred, void** priv) { *priv = nullptr; return 0; }
+        virtual int CloseDescription(void* priv, int flags, const Credential& cred) { return 0; }
+        virtual int ReadDescription(void* priv, void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, const Credential& cred) { return Read(out, size, flags, offset, bytesRead, cred); }
+        virtual int WriteDescription(void* priv, const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, const Credential& cred) { return Write(in, size, flags, offset, bytesWritten, cred); }
+        virtual int IoctlDescription(void* priv, size_t op, void* arg, int* result, Process* proc, const Credential& cred) { return Ioctl(op, arg, result, proc, cred); }
+        virtual EventWaitQueue* GetPollQueueDescription(void* priv, uint32_t events) { return GetPollQueue(events); }
+        virtual uint32_t PollReadyDescription(void* priv, uint32_t events) { return PollReady(events); }
+
         virtual void Lock();
         virtual void Unlock();
 

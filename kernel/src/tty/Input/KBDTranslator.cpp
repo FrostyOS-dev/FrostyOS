@@ -113,16 +113,16 @@ char ApplyCtrl(char c) {
     return c;
 }
 
-size_t KBDTranslator::HandleKey(Key key, bool released, char* out) {
+size_t KBDTranslator::HandleKey(Key key, KeyAction action, char* out) {
     if (uint8_t bit = ModifierBit(key); bit != 0) {
-        if (released)
+        if (action == KeyAction::Release)
             m_held &= ~bit;
-        else
-            m_held |= bit;
+        else if (action == KeyAction::Press)
+            m_held |= bit; // a repeat of a modifier changes nothing
         return 0;
     }
-    if (released)
-        return 0; // act on press
+    if (action == KeyAction::Release)
+        return 0; // act on press (and repeat)
 
     if (key == Key::CAPS_LOCK) {
         m_caps = !m_caps;

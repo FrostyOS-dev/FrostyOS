@@ -28,9 +28,8 @@ public:
     ~KeyboardInputSource();
 
 private:
-    static bool GenericEventHandler(const Input::Event* e, void* ctx);
-
-    bool EventHandler(const Input::Event* e);
+    static bool GenericEventHandler(const Input::Frame* f, void* ctx);
+    bool EventHandler(const Input::Frame* f);
 
     Input::EventSourceID m_source;
     Input::EventListener m_eventListener;

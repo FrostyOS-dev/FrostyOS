@@ -44,6 +44,15 @@ public:
     virtual int Ioctl(size_t op, void* arg, int* result, Process* proc, const Credential& cred) { return -ENOTSUP; }
     virtual int Isatty() { return -ENOTTY; }
 
+    // Per-open-file-description variants. priv is whatever OpenFile stored for this description, and is passed back to every other call on it.
+    virtual int OpenFile(int flags, const Credential& cred, void** priv) { *priv = nullptr; return 0; }
+    virtual int CloseFile(void* priv, int flags, const Credential& cred) { return 0; }
+    virtual int ReadFile(void* priv, void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, const Credential& cred) { return Read(out, size, flags, offset, bytesRead, cred); }
+    virtual int WriteFile(void* priv, const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, const Credential& cred) { return Write(in, size, flags, offset, bytesWritten, cred); }
+    virtual int IoctlFile(void* priv, size_t op, void* arg, int* result, Process* proc, const Credential& cred) { return Ioctl(op, arg, result, proc, cred); }
+    virtual EventWaitQueue* GetPollQueueFile(void* priv, uint32_t events) { return GetPollQueue(events); }
+    virtual uint32_t PollReadyFile(void* priv, uint32_t events) { return PollReady(events); }
+
     virtual EventWaitQueue* GetPollQueue(uint32_t events) { return nullptr; }
     virtual uint32_t PollReady(uint32_t events) { return events & (POLLIN | POLLRDNORM | POLLOUT | POLLWRNORM); }
 };

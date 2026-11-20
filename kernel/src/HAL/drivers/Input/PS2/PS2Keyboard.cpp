@@ -255,10 +255,11 @@ int PS2Keyboard::Init() {
     if (Input::g_EventManager == nullptr)
         return -EIO;
 
-    HAL_RegisterLegacyIntHandler(PS2KEYBOARD_INT, &PS2Keyboard_HandleIRQ, this);
-
     m_eventSourceID = Input::g_EventManager->RegisterEventSource(Input::EventSourceType::Keyboard, this);
+    if (m_eventSourceID == UINT64_MAX)
+        return -ENOMEM;
 
+    HAL_RegisterLegacyIntHandler(PS2KEYBOARD_INT, &PS2Keyboard_HandleIRQ, this);
     return 0;
 }
 
@@ -277,14 +278,29 @@ int PS2Keyboard::Init(DeviceManager::DeviceInfo* info) {
     params.info = info;
     params.name = name;
     params.type = FS::VType::CHR;
-    return g_DeviceManager->CreateRootItem(params);
+    params.mode = INPUT_DEVICE_NODE_MODE;
+    int rc = g_DeviceManager->CreateRootItem(params);
+    if (rc < 0)
+        return rc;
+
+    if (Input::g_EventManager != nullptr)
+        Input::g_EventManager->PublishEventSource(m_eventSourceID);
+    return 0;
+}
+
+void PS2Keyboard::SubmitKey(Key key, bool released) {
+    Input::FrameBuilder f(m_eventSourceID);
+    f.AddKey(key, !released);
+    f.Submit();
 }
 
 bool PS2Keyboard::HandleIRQ() {
     if (!DataAvailable())
         return false;
 
-    uint8_t code = ReadData();
+    uint8_t code;
+    if (!ReadData(&code))
+        return false;
 
     if (Input::g_EventManager == nullptr)
         return true; // clear the pending data, but don't do anything with it
@@ -303,20 +319,11 @@ bool PS2Keyboard::HandleIRQ() {
         }
         m_state = State::NORMAL;
         break;
-    case E0_REPEAT: {
-        if (code != 0x37 && code != 0xAA) {
-            m_state = State::NORMAL;
-            return true; // garbage byte: reset to normal
-        }
-
-        Input::Event e = {Input::EventType::KeyboardKey, m_eventSourceID, {}};
-        e.eventData.keyboardEvent.key = Key::PRTSC;
-        e.eventData.keyboardEvent.released = code == 0xAA;
-
-        Input::g_EventManager->RaiseEvent(e);
+    case E0_REPEAT:
+        if (code == 0x37 || code != 0xAA)
+            SubmitKey(Key::PRTSC, code == 0xAA);
         m_state = State::NORMAL;
         return true;
-    }
     case E1:
         if (code == 0x1D)
             m_state = State::PAUSE1;
@@ -335,14 +342,9 @@ bool PS2Keyboard::HandleIRQ() {
         return true;
     case PAUSE3:
         if (code == 0xC5) {
-            Input::Event e = {Input::EventType::KeyboardKey, m_eventSourceID, {}};
-            e.eventData.keyboardEvent.key = Key::PAUSE;
-            e.eventData.keyboardEvent.released = false;
-            Input::g_EventManager->RaiseEvent(e);
-            e.eventData.keyboardEvent.released = true;
-            Input::g_EventManager->RaiseEvent(e);
+            SubmitKey(Key::PAUSE, false);
+            SubmitKey(Key::PAUSE, true);
         }
-
         m_state = State::NORMAL;
         return true;
     case NORMAL:
@@ -355,17 +357,12 @@ bool PS2Keyboard::HandleIRQ() {
         return true;
     }
 
-    Input::Event e = {Input::EventType::KeyboardKey, m_eventSourceID, {}};
-    e.eventData.keyboardEvent.released = code & (1 << 7);
-
+    bool released = (code & (1 << 7)) != 0;
     uint8_t key = code & ~(1 << 7);
-    if (m_state == State::NORMAL && key <= 0x58) {
-        e.eventData.keyboardEvent.key = g_singleByteKeys[key];
-        Input::g_EventManager->RaiseEvent(e);
-    } else if (m_state == State::E0 && key <= 0x6D) {
-        e.eventData.keyboardEvent.key = g_multiByteKeys[key];
-        Input::g_EventManager->RaiseEvent(e);
-    }
+    if (m_state == State::NORMAL && key <= 0x58)
+        SubmitKey(g_singleByteKeys[key], released);
+    else if (m_state == State::E0 && key <= 0x6D)
+        SubmitKey(g_multiByteKeys[key], released);
 
     m_state = State::NORMAL;
     return true;

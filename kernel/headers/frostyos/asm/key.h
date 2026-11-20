@@ -152,6 +152,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
     __FOSI_ENUM(MOUSE_BTN_FIVE, "Mouse Button 5") \
     __FOSI_ENUM(UNKNOWN, "Unknown")
 
+#define __FOSI_COUNT_KEY(c, s) + 1U
+#define FOSI_KEY_COUNT (0U __FOSI_ENUMERATE_INPUT_KEYS(__FOSI_COUNT_KEY))
+
+#define FOSI_KEY_BITMAP_BYTES ((FOSI_KEY_COUNT + 7U) / 8U)
+
 enum FOSI_Key {
 #define __FOSI_ENUMERATE_KEY(c, s) FOSI_KEY_##c,
     __FOSI_ENUMERATE_INPUT_KEYS(__FOSI_ENUMERATE_KEY)

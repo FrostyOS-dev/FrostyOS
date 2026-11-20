@@ -110,6 +110,9 @@ private:
     bool m_pipeWriteEnd;
 
     Net::Socket* m_socket;
+
+    void* m_devPriv;
+    bool m_devOpened;
 };
 
 #endif /* _FILE_DESCRIPTOR_HPP */

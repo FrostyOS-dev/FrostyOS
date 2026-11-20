@@ -28,6 +28,8 @@ enum class Key : uint32_t {
 #undef ENUMERATE_KEY
 };
 
+inline constexpr uint32_t KEY_COUNT = FOSI_KEY_COUNT;
+
 inline constexpr const char* GetKeyName(Key k) {
     switch (k) {
 #define ENUMERATE_KEY(c, s) case Key::c: return s;

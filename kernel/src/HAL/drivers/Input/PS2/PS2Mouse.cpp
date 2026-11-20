@@ -49,6 +49,7 @@ static uint8_t BytesInPacket(PS2Mouse::Type t) {
     case PS2Mouse::Type::FiveButtons:
         return 4;
     }
+    return 3;
 }
 
 PS2Mouse::PS2Mouse(PS2Controller* controller, bool channel) : PS2Device(InputDeviceType::Mouse, controller, channel), m_packet(), m_packetBytes(0), m_type(Type::Standard), m_lastButtons(0) {
@@ -67,10 +68,12 @@ int PS2Mouse::Init() {
     if (rc < 0)
         return rc;
 
-    HAL_RegisterLegacyIntHandler(PS2MOUSE_INT, &PS2Mouse_HandleIRQ, this);
-
+    
     m_eventSourceID = Input::g_EventManager->RegisterEventSource(Input::EventSourceType::Mouse, this);
+    if (m_eventSourceID == UINT64_MAX)
+        return -ENOMEM;
 
+    HAL_RegisterLegacyIntHandler(PS2MOUSE_INT, &PS2Mouse_HandleIRQ, this);
     return 0;
 }
 
@@ -113,7 +116,9 @@ bool PS2Mouse::HandleIRQ() {
     if (!DataAvailable())
         return false;
 
-    uint8_t data = ReadData();
+    uint8_t data;
+    if (!ReadData(&data))
+        return false;
 
     if (Input::g_EventManager == nullptr)
         return true; // clear the pending data, but don't do anything with it
@@ -190,65 +195,39 @@ void PS2Mouse::ParsePacket() {
     dx = static_cast<int32_t>(static_cast<uint32_t>(m_packet[1]) | (xSign ? 0xFFFFFF00 : 0));
     dy = static_cast<int32_t>(static_cast<uint32_t>(m_packet[2]) | (ySign ? 0xFFFFFF00 : 0));
 
-    Input::Event e{};
-    e.type = EventType::MouseEvent;
-    e.source = m_eventSourceID;
-    e.eventData.mouseEvent.dx = dx;
-    e.eventData.mouseEvent.dy = dy;
-    bool wheelChanged = false;
+    // PS/2: Y positive = up, wheel positive = towards the user, negate both
+    int32_t wheel = 0;
+    uint32_t wheelAxis = REL_WHEEL;
 
-    using SD = Input::Event::ScrollDirection;
-
-    if (m_type == Type::ScrollWheel) {
-        e.eventData.mouseEvent.scrollDirection = SD::VERTICAL;
-        e.eventData.mouseEvent.wheelDelta = static_cast<int8_t>(m_packet[3]);
-        if (m_packet[3] != 0)
-            wheelChanged = true;
-    } else if (m_type == Type::FiveButtons) {
-        int16_t wheel = 0;
-        wheelChanged = true;
-        SD direction = SD::VERTICAL;
+    if (m_type == Type::ScrollWheel)
+        wheel = -static_cast<int32_t>(static_cast<int8_t>(m_packet[3]));
+    else if (m_type == Type::FiveButtons) {
         switch (m_packet[3] & 0xF) {
-        case 1:
-            wheel = 1;
-            direction = SD::VERTICAL;
-            break;
-        case 0xF:
-            wheel = -1;
-            direction = SD::VERTICAL;
-            break;
-        case 2:
-            wheel = 1;
-            direction = SD::HORIZONTAL;
-            break;
-        case 0xE:
-            wheel = -1;
-            direction = SD::HORIZONTAL;
-            break;
-        default:
-            wheelChanged = false;
-            break;
+        case 0x1: wheel = -1; break;
+        case 0xF: wheel =  1; break;
+        case 0x2: wheel =  1; wheelAxis = REL_HWHEEL; break;
+        case 0xE: wheel = -1; wheelAxis = REL_HWHEEL; break;
+        default: break;
         }
-
-        buttons |= (m_packet[3] & (1 << 4 | 1 << 5)) >> 1; // bits 4 and 5 are buttons 4 and 5. Input event system expects bits 3 and 4, respectively.
-        e.eventData.mouseEvent.scrollDirection = direction;
-        e.eventData.mouseEvent.wheelDelta = wheel;
+        buttons |= (m_packet[3] & (1 << 4 | 1 << 5)) >> 1; // buttons 4 and 5 move to bits 3 and 4
     }
 
-    if (dx != 0 || dy != 0 || wheelChanged)
-        g_EventManager->RaiseEvent(e);
-    
-    if (buttons != m_lastButtons) {
-        e.type = EventType::KeyboardKey;
-        for (int i = 0; i < 5; i++) {
-            if ((buttons & (1 << i)) == (m_lastButtons & (1 << i)))
-                continue;
-            e.eventData.keyboardEvent.key = static_cast<Key>(static_cast<uint32_t>(Key::MOUSE_BTN_LEFT) + i);
-            e.eventData.keyboardEvent.released = (buttons & (1 << i)) == 0;
-            g_EventManager->RaiseEvent(e);
-        }
-        m_lastButtons = buttons;
-    }
+    FrameBuilder f(m_eventSourceID);
+    if (dx != 0)
+        f.AddRel(REL_X, dx);
+    if (dy != 0)
+        f.AddRel(REL_Y, -dy);
+    if (wheel != 0)
+        f.AddRel(wheelAxis, wheel);
 
+    uint8_t changed = buttons ^ m_lastButtons;
+    for (int i = 0; i < 5; i++) {
+        if ((changed & (1 << i)) == 0)
+            continue;
+        f.AddKey(static_cast<Key>(static_cast<uint32_t>(Key::MOUSE_BTN_LEFT) + i), (buttons & (1 << i)) != 0);
+    }
+    f.Submit();
+
+    m_lastButtons = buttons;
     m_packetBytes = 0;
 }

@@ -34,26 +34,31 @@ KeyboardInputSource::~KeyboardInputSource() {
         Input::g_EventManager->UnregisterEventHandler(m_eventListener);
 }
 
-bool KeyboardInputSource::GenericEventHandler(const Input::Event* e, void* ctx) {
-    if (ctx == nullptr || e == nullptr)
+bool KeyboardInputSource::GenericEventHandler(const Input::Frame* f, void* ctx) {
+    if (ctx == nullptr || f == nullptr)
         return false;
-    return static_cast<KeyboardInputSource*>(ctx)->EventHandler(e);
+    return static_cast<KeyboardInputSource*>(ctx)->EventHandler(f);
 }
 
-bool KeyboardInputSource::EventHandler(const Input::Event* e) { // consumes all valid events
-    if (e->type != Input::EventType::KeyboardKey)
-        return false;
-    
+bool KeyboardInputSource::EventHandler(const Input::Frame* f) { // consumes all valid events
     TTY* tty = g_CurrentTTY;
-    if (tty == nullptr || tty->GetType() != TTYType::Graphical)
-        return true;
+    bool graphical = tty != nullptr && tty->GetType() == TTYType::Graphical;
+    if (graphical)
+        m_translator.SetApplicationCursorKeys(tty->ApplicationCursorKeys());
 
-    char seq[KT_MAX_SEQ];
-    m_translator.SetApplicationCursorKeys(tty->ApplicationCursorKeys());
-    size_t n = m_translator.HandleKey(e->eventData.keyboardEvent.key, e->eventData.keyboardEvent.released, seq);
+    bool sawKey = false;
+    for (uint32_t i = 0; i < f->count; i++) {
+        const Input::Event& e = f->events[i];
+        if (e.type != Input::ET_KEY)
+            continue;
+        sawKey = true;
 
-    if (n > 0)
-        tty->InputBytes(seq, n);
+        KeyAction action = e.value == 0 ? KeyAction::Release : (e.value == 2 ? KeyAction::Repeat : KeyAction::Press);
 
-    return true;
+        char seq[KT_MAX_SEQ];
+        size_t n = m_translator.HandleKey(static_cast<Key>(e.code), action, seq);
+        if (n > 0 && graphical)
+            tty->InputBytes(seq, n);
+    }
+    return sawKey;
 }

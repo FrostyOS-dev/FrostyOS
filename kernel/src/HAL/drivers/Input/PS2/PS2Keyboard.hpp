@@ -31,6 +31,8 @@ public:
     bool HandleIRQ();
 
 private:
+    void SubmitKey(Key key, bool released);
+
     enum State {
         NORMAL,
 

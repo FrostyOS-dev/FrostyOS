@@ -43,9 +43,9 @@ public:
     bool GetChannel() const { return m_channel; }
 
     
-    protected:
+protected:
     bool DataAvailable();
-    uint8_t ReadData();
+    bool ReadData(uint8_t* out);
     int SendCommand(uint8_t command);
 
     PS2Controller* m_controller;
