@@ -66,13 +66,13 @@ uint8_t x86_64_ReadCMOSMaybeBCD(x86_64_CMOSRegister reg) {
     return ConvertValue(x86_64_ReadCMOS(reg));
 }
 
-bool x86_64_CMOSUpdateInProgess() {
+bool x86_64_CMOSUpdateInProgress() {
     return (x86_64_ReadCMOS(x86_64_CMOSRegister::StatusA) & CMOS_UIP) != 0;
 }
 
 static bool WaitForUIPClear() {
     for (size_t i = 0; i < 100000; i++) {
-        if (!x86_64_CMOSUpdateInProgess())
+        if (!x86_64_CMOSUpdateInProgress())
             return true;
     }
     return false;

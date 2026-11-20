@@ -161,7 +161,7 @@ int64_t HAL_GetRealtimeOffsetNS() {
     return __atomic_load_n(&g_realtimeOffsetNS, __ATOMIC_ACQUIRE);
 }
 
-void HAL_SetRealtimeMS(int64_t ns) {
+void HAL_SetRealtimeNS(int64_t ns) {
     int64_t mono = MonoNS();
     spinlock_acquire_int(&g_realtimeLock);
     PublishOffsetLocked(ns - mono);
@@ -208,7 +208,7 @@ namespace {
         int64_t deadline = MonoNS() + timeoutNS;
         bool sawUpdate = false;
         while (MonoNS() < deadline) {
-            if (x86_64_CMOSUpdateInProgess())
+            if (x86_64_CMOSUpdateInProgress())
                 sawUpdate = true;
             else if (sawUpdate) {
                 *edgeMono = MonoNS();

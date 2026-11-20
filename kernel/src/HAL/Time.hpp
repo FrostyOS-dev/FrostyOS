@@ -46,7 +46,7 @@ void HAL_InitWallClock();
 
 int64_t HAL_GetRealtimeNS();
 int64_t HAL_GetRealtimeOffsetNS();
-void HAL_SetRealtimeMS(int64_t ns);
+void HAL_SetRealtimeNS(int64_t ns);
 bool HAL_RealtimeValid();
 
 bool HAL_GetTimeOfDay(TimeOfDay* time); // reads hardware RTC
