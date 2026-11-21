@@ -14,11 +14,11 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 set(window_manager_sources
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/FrostyOSVideoBackend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Backends/FrostyOS/FrostyOSVideoBackend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Backends/VideoBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Init.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PixelFormat.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Server.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/VideoBackend.cpp
 )
 
 frostyos_program(WindowManager SOURCES ${window_manager_sources} LIBS WM)

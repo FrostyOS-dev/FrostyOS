@@ -16,7 +16,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "FrostyOSVideoBackend.hpp"
-#include "PixelFormat.hpp"
 
 #include <algorithm>
 #include <dirent.h>
@@ -31,6 +30,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+
+#include <PixelFormat.hpp>
 
 namespace WM {
     static PixelFormat ConvertFormat(uint32_t f) {

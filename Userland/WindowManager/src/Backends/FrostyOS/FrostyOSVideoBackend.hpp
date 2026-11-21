@@ -18,7 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _WM_FROSTYOS_VIDEO_BACKEND_HPP
 #define _WM_FROSTYOS_VIDEO_BACKEND_HPP
 
-#include "VideoBackend.hpp"
+#include "../VideoBackend.hpp"
 
 namespace WM {
     class FrostyOSVideoBackend final : public VideoBackend {

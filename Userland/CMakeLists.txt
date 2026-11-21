@@ -70,6 +70,9 @@ function(frostyos_program name)
         target_link_libraries(${name} PRIVATE ${ARG_LIBS})
     endif()
 
+    target_include_directories(${name}
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
     target_compile_options(${name}
         PRIVATE $<$<COMPILE_LANGUAGE:CXX,C,ASM_NASM>:-g>
         PRIVATE $<$<COMPILE_LANGUAGE:CXX,C>:-Wall>

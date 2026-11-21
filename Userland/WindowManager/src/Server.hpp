@@ -29,7 +29,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <LibWM/SharedMem.hpp>
 
 #include "Rect.hpp"
-#include "VideoBackend.hpp"
+
+#include "Backends/VideoBackend.hpp"
 
 namespace WM {
 

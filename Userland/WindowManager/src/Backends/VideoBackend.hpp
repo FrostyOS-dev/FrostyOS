@@ -24,8 +24,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <string>
 #include <vector>
 
-#include "PixelFormat.hpp"
-#include "Rect.hpp"
+#include <PixelFormat.hpp>
+#include <Rect.hpp>
 
 namespace WM {
     struct VideoMode {

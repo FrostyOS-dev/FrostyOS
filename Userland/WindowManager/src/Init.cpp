@@ -21,14 +21,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <string.h>
 
 #include "Server.hpp"
-#include "VideoBackend.hpp"
+
+#include "Backends/VideoBackend.hpp"
 
 #if !defined(WM_BACKEND_FROSTYOS) && defined(__frostyos__)
 #define WM_BACKEND_FROSTYOS 1
 #endif
 
 #ifdef WM_BACKEND_FROSTYOS
-#include "FrostyOSVideoBackend.hpp"
+#include "Backends/FrostyOS/FrostyOSVideoBackend.hpp"
 #endif
 
 int main(int argc, char** argv) {
