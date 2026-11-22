@@ -14,10 +14,16 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 set(window_manager_sources
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Backends/FrostyOS/FrostyOSInputBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Backends/FrostyOS/FrostyOSVideoBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Backends/VideoBackend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Init.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/InputConfig.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/InputManager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Keymap.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Keys.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/PixelFormat.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Seat.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Server.cpp
 )
 

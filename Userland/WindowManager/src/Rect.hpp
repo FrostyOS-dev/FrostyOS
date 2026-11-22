@@ -23,14 +23,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace WM {
     struct Rect {
         int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+
         bool Empty() const {
             return x1 <= x0 || y1 <= y0;
         }
+
         int Width() const { return x1 - x0; }
+
         int Height() const { return y1 - y0; }
+
         Rect Interset(const Rect& o) const {
             return {std::max(x0, o.x0), std::max(y0, o.y0), std::min(x1, o.x1), std::min(y1, o.y1)};
         }
+
         void Add(const Rect& o) {
             if (o.Empty())
                 return;
@@ -43,8 +48,13 @@ namespace WM {
             y0 = std::min(y0, o.y0);
             y1 = std::max(y1, o.y1);
         }
+
         Rect Moved(int dx, int dy) const {
             return {x0 + dx, y0 + dy, x1 + dx, y1 + dy};
+        }
+
+        bool Contains(int x, int y) const {
+            return x >= x0 && x < x1 && y >= y0 && y < y1;
         }
     };
 }

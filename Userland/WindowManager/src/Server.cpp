@@ -16,8 +16,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "Server.hpp"
+#include "Cursor.hpp"
+#include "Keys.hpp"
 
 #include <algorithm>
+#include <asm/input.h>
+#include <cmath>
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -91,18 +95,44 @@ namespace WM {
         sigaction(SIGTERM, &sa, nullptr);
 
         uint64_t nextFrame = 0;
+        uint64_t deadlineMS = timeoutSeconds > 0 ? NowMS() + (uint64_t)timeoutSeconds * 1000 : 0;
 
         while (!g_quit && !(clientCount > 0 && (size_t)seen >= clientCount && clients.size() < clientCount)) {
+            if (deadlineMS != 0 && NowMS() >= deadlineMS) {
+                fprintf(stderr, "WindowManager: timeout reached, exiting\n");
+                break;
+            }
+
             std::vector<pollfd> fds;
             fds.push_back({listener.FD(), POLLIN, 0});
             for (auto& c : clients)
                 fds.push_back({c->conn.FD(), (short)(POLLIN | (c->conn.WantsWrite() ? POLLOUT : 0)), 0});
 
+            size_t inputStart = fds.size();
+            if (input != nullptr)
+                input->CollectFDs(fds);
+            size_t inputCount = fds.size() - inputStart;
+
+            uint64_t now = NowMS();
+            int64_t waitMS = -1;
+            auto wakeIn = [&](int64_t ms) {
+                if (ms < 0)
+                    ms = 0;
+                if (waitMS < 0 || ms < waitMS)
+                    waitMS = ms;
+            };
+
+            if (NeedsFrame())
+                wakeIn(nextFrame > now ? (int64_t)(nextFrame - now) : 0);
+            if (input != nullptr && input->NextTimeoutMS(now) >= 0)
+                wakeIn(input->NextTimeoutMS(now));
+            if (deadlineMS != 0)
+                wakeIn(deadlineMS > now ? (int64_t)(deadlineMS - now) : 0);
+
             timespec ts;
             timespec* timeout = nullptr;
-            if (NeedsFrame()) {
-                uint64_t now = NowMS(), wait = nextFrame > now ? nextFrame - now : 0;
-                ts = {(time_t)(wait / 1000), (long)(wait % 1000) * 1000000};
+            if (waitMS >= 0) {
+                ts = {(time_t)(waitMS / 1000), (long)(waitMS % 1000) * 1'000'000};
                 timeout = &ts;
             }
 
@@ -129,6 +159,11 @@ namespace WM {
             if ((fds[0].revents & POLLIN) > 0)
                 AcceptClients();
 
+            if (input != nullptr) {
+                input->Dispatch(fds.data() + inputStart, inputCount);
+                input->Tick(NowMS());
+            }
+
             if (NeedsFrame() && NowMS() >= nextFrame) {
                 Repaint();
                 nextFrame = NowMS() + frameIntervalMS;
@@ -143,6 +178,29 @@ namespace WM {
             }
             Reap();
         }
+    }
+
+    bool Server::StartInput(InputBackend& backend) {
+        seat = std::make_unique<Seat>(inputConfig, actions, *this);
+
+        std::vector<Rect> bounds;
+        for (const Output& o : outputs)
+            bounds.push_back(o.rect);
+
+        seat->SetPointerBounds(bounds);
+        seat->SetPointerPosition((outputs[0].rect.x0 + outputs[0].rect.x1) / 2.0, (outputs[0].rect.y0 + outputs[0].rect.y1) / 2.0);
+
+        actions.Register("quit", []() -> void {
+            g_quit = 1;
+        });
+        actions.Register("focus-next", [this]() -> void {
+            if (windows.size() > 1)
+                SetFocus(windows.front().get(), true);
+        });
+
+        DamageCursor();
+        input = std::make_unique<InputManager>(backend, *seat);
+        return input->Initialise();
     }
 
     void Server::AcceptClients() {
@@ -324,8 +382,11 @@ namespace WM {
         case P::Window::Destroy: {
             AddDamage(w.GetRect());
             auto self = o.window;
+            ForgetWindow(self.get());
             windows.erase(std::remove(windows.begin(), windows.end(), self), windows.end());
             c.objects.erase(id);
+            UpdatePointerFocus();
+            FixFocus();
             return;
         }
         default:
@@ -351,6 +412,8 @@ namespace WM {
             AddDamage(w.pendingDamage.Interset(bufr).Moved(w.x, w.y));
         }
         w.pendingDamage = {};
+        if (seat != nullptr && w.current != nullptr && keyboardFocus == nullptr)
+            SetFocus(&w, false);
         if (w.pendingFrame) {
             w.frameCB = true;
             w.pendingFrame = false;
@@ -418,6 +481,17 @@ namespace WM {
                     dst[x] = opaque ? (src[x] | 0xFF000000) : BlendPreMul(src[x], dst[x]);
             }
         }
+
+        if (seat != nullptr) {
+            Rect cr = cursorRect.Interset(d);
+            for (int y = cr.y0; y < cr.y1; y++) {
+                for (int x = cr.x0; x < cr.x1; x++) {
+                    uint32_t px = cursorPixels[(size_t)(y - cursorRect.y0) * CursorWidth + (x - cursorRect.x0)];
+                    uint32_t* dst = row(y, x);
+                    *dst = BlendPreMul(px, *dst);
+                }
+            }
+        }
         
         // Back buffer -> screen
         o.display->Present(o.back.data(), stride, d.Moved(-o.rect.x0, -o.rect.y0));
@@ -425,12 +499,146 @@ namespace WM {
 
     void Server::DropWindows(Client& c) {
         for (auto& w : windows) {
-            if (w->owner == &c)
+            if (w->owner == &c) {
                 AddDamage(w->GetRect());
+                ForgetWindow(w.get());
+            }
         }
         windows.erase(std::remove_if(windows.begin(), windows.end(), [&](auto& w) {
             return w->owner == &c;
         }), windows.end());
+        UpdatePointerFocus();
+        FixFocus();
     }
 
+    static uint32_t ToMS(uint64_t ns) {
+        return (uint32_t)(ns / 1'000'000);
+    }
+
+    void Server::OnKey(const KeyEvent& e) {
+        WindowObj* w = keyboardFocus;
+        if (w == nullptr)
+            return;
+        // A window only sees releases and repeats for keys whose press it saw
+        if (e.state == FOSI_KV_PRESS)
+            w->keysSent.reset(e.key);
+        else if (!w->keysSent.test(e.key))
+            return;
+        if (e.state == FOSI_KV_RELEASE)
+            w->keysSent.reset(e.key);
+        SendTo(w, P::Window::Key, P::KeyBody{nextSerial++, ToMS(e.timeNS), e.key, e.state, e.codepoint});
+    }
+
+    void Server::OnModifiers(uint32_t mods) {
+        if (keyboardFocus != nullptr)
+            SendTo(keyboardFocus, P::Window::Modifiers, P::ModifiersBody{nextSerial++, mods});
+    }
+
+    void Server::OnPointerMotion(double x, double y, uint64_t timeNS) {
+        DamageCursor();
+        UpdatePointerFocus();
+        WindowObj* target = grabWindow != nullptr ? grabWindow : pointerFocus;
+        if (target != nullptr)
+            SendTo(target, P::Window::PointerMotion, P::PointerMotion{ToMS(timeNS), P::ToFixed(x - target->x), P::ToFixed(y - target->y)});
+    }
+
+    void Server::OnPointerButton(const ButtonEvent& e) {
+        WindowObj* target = grabWindow != nullptr ? grabWindow : WindowAt(seat->PointerX(), seat->PointerY());
+
+        if (e.pressed) {
+            if (seat->ButtonsDown() == 1) // first button
+                grabWindow = target;
+            if (target != nullptr)
+                SetFocus(target, true); // click to focus and raise
+        }
+        if (target != nullptr)
+            SendTo(target, P::Window::PointerButton, P::PointerButton{nextSerial++, ToMS(e.timeNS), e.button, e.pressed ? 1u : 0u});
+
+        if (!e.pressed && seat->ButtonsDown() == 0) {
+            grabWindow = nullptr;
+            UpdatePointerFocus();
+        }
+    }
+
+    void Server::OnPointerAxis(const AxisEvent& e) {
+        WindowObj* target = grabWindow != nullptr ? grabWindow : pointerFocus;
+        if (target != nullptr)
+            SendTo(target, P::Window::PointerAxis, P::PointerAxis{ToMS(e.timeNS), P::ToFixed(e.dx), P::ToFixed(e.dy)});
+    }
+
+    WindowObj* Server::WindowAt(double x, double y) const {
+        int ix = (int)std::floor(x), iy = (int)std::floor(y);
+        for (auto it = windows.rbegin(); it != windows.rend(); it++) {
+            if ((*it)->current != nullptr && (*it)->GetRect().Contains(ix, iy))
+                return it->get();
+        }
+        return nullptr;
+    }
+
+    void Server::UpdatePointerFocus() {
+        if (seat == nullptr)
+            return;
+        WindowObj* target = grabWindow != nullptr ? grabWindow : WindowAt(seat->PointerX(), seat->PointerY());
+        if (target == pointerFocus)
+            return;
+        if (pointerFocus != nullptr)
+            SendTo(pointerFocus, P::Window::PointerLeave, P::PointerLeave{nextSerial++});
+        pointerFocus = target;
+        if (target != nullptr) {
+            SendTo(target, P::Window::PointerEnter, P::PointerEnter{nextSerial++, P::ToFixed(seat->PointerX() - target->x), P::ToFixed(seat->PointerY() - target->y)});
+        }
+    }
+
+    void Server::SetFocus(WindowObj* w, bool raise) {
+        if (raise && w != nullptr)
+            RaiseWindow(w);
+        if (w == keyboardFocus)
+            return;
+
+        if (keyboardFocus != nullptr) {
+            for (uint32_t k = 0; k < KeyCount; k++) {
+                if (keyboardFocus->keysSent.test(k))
+                    SendTo(keyboardFocus, P::Window::Key, P::KeyBody{nextSerial++, (uint32_t)NowMS(), k, FOSI_KV_RELEASE, 0});
+            }
+            keyboardFocus->keysSent.reset();
+            SendTo(keyboardFocus, P::Window::KeyboardLeave, P::KeyboardLeave{nextSerial++});
+        }
+        keyboardFocus = w;
+        if (w != nullptr) {
+            SendTo(w, P::Window::KeyboardEntry, P::KeyboardEnter{nextSerial++});
+            SendTo(w, P::Window::Modifiers, P::ModifiersBody{nextSerial++, seat->Modifiers()});
+        }
+    }
+
+    void Server::RaiseWindow(WindowObj* w) {
+        auto it = std::find_if(windows.begin(), windows.end(), [&](auto& p) {
+            return p.get() == w;
+        });
+
+        if (it == windows.end() || it + 1 == windows.end())
+            return;
+        std::rotate(it, it + 1, windows.end());
+        AddDamage(w->GetRect());
+    }
+
+    void Server::ForgetWindow(WindowObj* w) {
+        if (keyboardFocus == w)
+            keyboardFocus = nullptr;
+        if (pointerFocus == w)
+            pointerFocus = nullptr;
+        if (grabWindow == w)
+            grabWindow = nullptr;
+    }
+
+    void Server::FixFocus() {
+        if (seat != nullptr && keyboardFocus == nullptr && !windows.empty())
+            SetFocus(windows.back().get(), false);
+    }
+
+    void Server::DamageCursor() {
+        AddDamage(cursorRect);
+        int x = (int)std::floor(seat->PointerX()), y = (int)std::floor(seat->PointerY());
+        cursorRect = {x, y, x + CursorWidth, y + CursorHeight};
+        AddDamage(cursorRect);
+    }
 }

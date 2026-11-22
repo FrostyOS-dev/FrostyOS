@@ -54,7 +54,11 @@ namespace LibWM::Proto {
 
     namespace Window {
         enum Request : uint16_t { Attach = 0, Damage = 1, Frame = 2, Commit = 3, Destroy = 4 };
-        enum Event   : uint16_t { FrameDone = 0 };
+        enum Event   : uint16_t {
+            FrameDone = 0,
+            PointerEnter = 1, PointerLeave = 2, PointerMotion = 3, PointerButton = 4, PointerAxis = 5,
+            KeyboardEntry = 6, KeyboardLeave = 8, Key = 8, Modifiers = 9
+        };
     }
 
     struct Hello        { uint32_t version; };
@@ -69,6 +73,21 @@ namespace LibWM::Proto {
     struct Damage       { int32_t x, y, w, h; }; // buffer coordinates
     struct FrameDone    { uint32_t timeMS; };
     // Frame, Commit, Destory and Release have no body
+
+    struct PointerEnter  { uint32_t serial; int32_t x, y; };
+    struct PointerLeave  { uint32_t serial; };
+    struct PointerMotion { uint32_t timeMS; int32_t x, y; };
+    struct PointerButton { uint32_t serial, timeMS, button, pressed; };
+    struct PointerAxis   { uint32_t timeMS; int32_t dx, dy; };
+    struct KeyboardEnter { uint32_t serial; };
+    struct KeyboardLeave { uint32_t serial; };
+    struct KeyBody       { uint32_t serial, timeMS, key, state, codepoint; }; // state 0 release, 1 press, 2 repeat
+    struct ModifiersBody { uint32_t serial, mods; };
+
+    // Coordinates are window local and 24.8 fixed point
+
+    inline int32_t ToFixed(double v) { return (int32_t)(v * 256.0 + (v >= 0 ? 0.5 : -0.5)); }
+    inline double FromFixed(int32_t v) { return v / 256.0; }
 }
 
 #endif /* _FOS_LIBWM_PROTOCOL_HPP */

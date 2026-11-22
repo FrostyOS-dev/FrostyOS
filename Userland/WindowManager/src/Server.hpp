@@ -18,17 +18,26 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef _WM_SERVER_HPP
 #define _WM_SERVER_HPP
 
+#include <algorithm>
+#include <bitset>
+#include <memory>
 #include <stddef.h>
 #include <stdint.h>
-#include <memory>
 #include <unordered_map>
+#include <vector>
 
 #include <LibWM/Connection.hpp>
 #include <LibWM/Message.hpp>
 #include <LibWM/Protocol.hpp>
 #include <LibWM/SharedMem.hpp>
 
+#include "Backends/InputDevice.hpp"
+#include "Cursor.hpp"
+#include "InputConfig.hpp"
+#include "InputManager.hpp"
+#include "Keys.hpp"
 #include "Rect.hpp"
+#include "Seat.hpp"
 
 #include "Backends/VideoBackend.hpp"
 
@@ -55,6 +64,8 @@ namespace WM {
         Rect pendingDamage;
         bool pendingFrame = false, frameCB = false;
         int commits = 0;
+        std::bitset<KeyCount> keysSent;
+
         Rect GetRect() const {
             if (!current)
                 return {x, y, x, y};
@@ -105,7 +116,7 @@ namespace WM {
         }
     };
 
-    class Server {
+    class Server : public SeatDelegate {
     public:
         bool Listen(const char* path);
 
@@ -114,6 +125,10 @@ namespace WM {
         void Run();
 
         void SetExitAfter(size_t n) { clientCount = n; }
+
+        void SetInputConfig(InputConfig config) { inputConfig = std::move(config); }
+        bool StartInput(InputBackend& backend);
+        void SetTimeout(uint32_t seconds) { timeoutSeconds = seconds; }
 
     private:
         void AcceptClients();
@@ -138,6 +153,25 @@ namespace WM {
         void RepaintOutput(Output& o);
         void DropWindows(Client& c);
 
+        void OnKey(const KeyEvent& e) override;
+        void OnModifiers(uint32_t mods) override;
+        void OnPointerMotion(double x, double y, uint64_t timeNS) override;
+        void OnPointerButton(const ButtonEvent& e) override;
+        void OnPointerAxis(const AxisEvent& e) override;
+
+        WindowObj* WindowAt(double x, double y) const;
+        void UpdatePointerFocus();
+        void SetFocus(WindowObj* w, bool raise);
+        void RaiseWindow(WindowObj* w);
+        void ForgetWindow(WindowObj* w);
+        void FixFocus();
+        void DamageCursor();
+
+        template <typename T>
+        void SendTo(WindowObj* w, uint16_t op, const T& body) {
+            w->owner->Send(w->id, op, body);
+        }
+
         Listener listener;
         std::vector<std::unique_ptr<Client>> clients;
         int seen = 0;
@@ -149,6 +183,21 @@ namespace WM {
         uint64_t frameIntervalMS = 16;
         
         size_t clientCount = 0;
+
+        uint32_t timeoutSeconds = 0;
+
+        InputConfig inputConfig = InputConfig::Defaults();
+        ActionRegistry actions;
+        std::unique_ptr<Seat> seat;
+        std::unique_ptr<InputManager> input;
+
+        WindowObj* keyboardFocus = nullptr;
+        WindowObj* pointerFocus = nullptr;
+        WindowObj* grabWindow = nullptr;
+        uint32_t nextSerial = 1;
+
+        std::vector<uint32_t> cursorPixels = BuildCursorPixels();
+        Rect cursorRect;
     };
 
 }

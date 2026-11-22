@@ -22,6 +22,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "Server.hpp"
 
+#include "Backends/InputDevice.hpp"
 #include "Backends/VideoBackend.hpp"
 
 #if !defined(WM_BACKEND_FROSTYOS) && defined(__frostyos__)
@@ -29,12 +30,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #endif
 
 #ifdef WM_BACKEND_FROSTYOS
+#include "Backends/FrostyOS/FrostyOSInputBackend.hpp"
 #include "Backends/FrostyOS/FrostyOSVideoBackend.hpp"
 #endif
 
 int main(int argc, char** argv) {
     const char* socketPath = "/run/wm";
     size_t exitAfter = 0;
+    uint32_t timeoutSeconds = 0;
 
     for (int i = 1; i < argc; i++) {
         bool hasArg = i + 1 < argc;
@@ -42,20 +45,25 @@ int main(int argc, char** argv) {
             socketPath = argv[++i];
         else if (strcmp(argv[i], "--exit-after") == 0 && hasArg)
             exitAfter = (size_t)atoi(argv[++i]);
+        else if (strcmp(argv[i], "--timeout") == 0 && hasArg)
+            timeoutSeconds = (uint32_t)atoi(argv[++i]);
         else {
             fprintf(stderr, "bad argument: %s\n", argv[i]);
             return 2;
         }
     }
 
+    std::unique_ptr<WM::VideoBackend> backend;
+    std::unique_ptr<WM::InputBackend> inputBackend;
+
     WM::Server server;
     server.SetExitAfter(exitAfter);
+    server.SetTimeout(timeoutSeconds);
     if (!server.Listen(socketPath)) {
         fprintf(stderr, "Cannon listen on %s: %s\n", socketPath, strerror(errno));
         return 1;
     }
 
-    std::unique_ptr<WM::VideoBackend> backend;
 #ifdef WM_BACKEND_FROSTYOS
     backend = std::make_unique<WM::FrostyOSVideoBackend>();
 #else
@@ -77,6 +85,19 @@ int main(int argc, char** argv) {
         fprintf(stderr, "Failed to set up outputs\n");
         return 1;
     }
+
+#ifdef WM_BACKEND_FROSTYOS
+    inputBackend = std::make_unique<WM::FrostyOSInputBackend>();
+#endif
+
+    if (inputBackend != nullptr && inputBackend->Initialise()) {
+        for (auto& d : inputBackend->Devices())
+            printf("input: %s (%s)\n", d->Path().c_str(), d->Type() == WM::DeviceType::Keyboard ? "keyboard" : "mouse");
+        if (!server.StartInput(*inputBackend))
+            fprintf(stderr, "WindowManager: input setup failed, continuing without input\n");
+    } else
+        fprintf(stderr, "WindowManager: no input devices, continuing without input\n");
+
     server.Run();
 
     return 0;
