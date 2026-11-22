@@ -113,7 +113,7 @@ int InputDevice::IoctlFile(void* priv, size_t op, void* arg, int* result, Proces
         if (client == nullptr || Input::g_EventManager == nullptr)
             return EBADF;
         int value;
-        if (UserRead(arg, &value, sizeof(int), proc))
+        if (!UserRead(arg, &value, sizeof(int), proc))
             return EFAULT;
         int rc = Input::g_EventManager->SetClaim(client, value != 0, proc, cred);
         if (rc < 0)
