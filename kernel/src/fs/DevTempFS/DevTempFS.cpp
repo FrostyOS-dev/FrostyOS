@@ -312,26 +312,32 @@ namespace FS {
     }
 
     int DevTempFSVNode::ReadDescription(void* priv, void* out, size_t size, int flags, uint64_t offset, size_t* bytesRead, const Credential& cred) {
+        if (m_dev == nullptr)
+            return Read(out, size, flags, offset, bytesRead, cred);
         CALL_DEV_OP(ReadFile, priv, out, size, flags, offset, bytesRead, cred);
     }
 
     int DevTempFSVNode::WriteDescription(void* priv, const void* in, size_t size, int flags, uint64_t offset, size_t* bytesWritten, const Credential& cred) {
+        if (m_dev == nullptr)
+            return Write(in, size, flags, offset, bytesWritten, cred);
         CALL_DEV_OP(WriteFile, priv, in, size, flags, offset, bytesWritten, cred);
     }
 
     int DevTempFSVNode::IoctlDescription(void* priv, size_t op, void* arg, int* result, Process* proc, const Credential& cred) {
         if (m_dev == nullptr)
-            return ENOTSUP;
+            return Ioctl(op, arg, result, proc, cred);
         return m_dev->IoctlFile(priv, op, arg, result, proc, cred);
     }
 
     EventWaitQueue* DevTempFSVNode::GetPollQueueDescription(void* priv, uint32_t events) {
         if (m_dev == nullptr)
-            return nullptr;
+            return GetPollQueue(events);
         return m_dev->GetPollQueueFile(priv, events);
     }
 
     uint32_t DevTempFSVNode::PollReadyDescription(void* priv, uint32_t events) {
+        if (m_dev == nullptr)
+            return PollReady(events);
         CALL_DEV_OP(PollReadyFile, priv, events);
     }
 
