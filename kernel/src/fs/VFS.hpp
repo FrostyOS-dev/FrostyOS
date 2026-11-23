@@ -165,7 +165,7 @@ namespace FS {
         virtual int GetAttr(VAttr* out) = 0;
         virtual int SetAttr(const VAttr& attr) = 0;
         virtual int GetDents(Dentry* buffer, size_t count, uint64_t offset, size_t* readCount) = 0;
-        virtual int Access(int mode, const Credential& cred); // callers must not have the vnode lock held
+        virtual int Access(int mode, const Credential& cred, bool lock = true); // callers must not have the vnode lock held
         virtual int Link() = 0;
         virtual int Unlink(VNode* child, const Credential& cred) = 0;
         virtual int Symlink(const char* path, size_t pathLen, const Credential& cred) = 0;

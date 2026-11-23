@@ -151,10 +151,12 @@ namespace FS {
 
     }
 
-    int VNode::Access(int mode, const Credential& cred) {
-        Lock();
+    int VNode::Access(int mode, const Credential& cred, bool lock) {
+        if (lock)
+            Lock();
         VAttr snapshot = m_attr;
-        Unlock();
+        if (lock)
+            Unlock();
         return CheckPermission(snapshot, mode, cred) ? ESUCCESS : -EACCES;
     }
 
