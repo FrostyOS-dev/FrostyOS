@@ -115,6 +115,9 @@ struct Stat {
 #define O_OPEN_ONLY_FLAGS (O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC | O_CLOEXEC)
 #define O_SETFL_MASK (O_APPEND | O_NONBLOCK | O_ASYNC | O_DIRECT | O_NOATIME)
 
+#define UTIME_NOW ((1l << 30) - 1l)
+#define UTIME_OMIT ((1l << 30) - 2l)
+
 struct PollFD {
 	int fd;
 	short events;
@@ -180,5 +183,7 @@ mode_t sys_umask(mode_t mode);
 int sys_renameat(uint64_t fds, const char* oldPath, size_t oldPathLen, const char* newPath, size_t newPathLen);
 
 ssize_t sys_readlinkat(int dirfd, const char* path, size_t pathLen, void* buffer, size_t maxSize);
+
+int sys_utimensat(int dirfd, const char* path, size_t pathLen, const timespec* times, int flags);
 
 #endif /* _SYSCALL_FILE_HPP */

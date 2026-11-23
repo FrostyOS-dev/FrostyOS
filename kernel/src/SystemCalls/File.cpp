@@ -1450,3 +1450,72 @@ ssize_t sys_readlinkat(int dirfd, const char* path, size_t pathLen, void* buffer
 
     return (ssize_t)n;
 }
+
+int sys_utimensat(int dirfd, const char* path, size_t pathLen, const timespec* times, int flags) {
+    if ((flags & ~(AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW)) != 0)
+        return -EINVAL;
+
+    Process* proc = Thread::GetCurrentThread()->GetParent();
+    Credential cred = proc->GetCred();
+
+    timespec now = HAL_GetUnixEpochTime();
+    bool onlyWrite = false;
+
+    timespec kTimes[2];
+    if (times == nullptr) {
+        kTimes[0].tv_nsec = UTIME_NOW;
+        kTimes[1] = kTimes[0];
+        onlyWrite = true;
+    } else {
+        if (!UserRead(times, kTimes, sizeof(timespec) * 2, proc))
+            return -EFAULT;
+
+        if (kTimes[0].tv_nsec == UTIME_NOW && kTimes[1].tv_nsec == UTIME_NOW)
+            onlyWrite = true;
+    }
+
+    FS::VNode* vnode = nullptr;
+    int rc = ResolveVNodeAt(proc, dirfd, path, pathLen, flags, &vnode);
+    if (rc < 0)
+        return rc;
+
+    if (kTimes[0].tv_nsec == UTIME_OMIT && kTimes[1].tv_nsec == UTIME_OMIT) { // path validation still must happen
+        FS::UnrefVNode(vnode);
+        return ESUCCESS;
+    }
+
+    FS::VAttr attr;
+    vnode->Lock();
+    rc = vnode->GetAttr(&attr);
+    if (rc < 0) {
+        vnode->Unlock();
+        FS::UnrefVNode(vnode);
+        return rc;
+    }
+
+    rc = vnode->Access(ACCESS_W, cred, false);
+    if (rc < 0 || !onlyWrite) {
+        if (cred.euid != 0 || attr.uid != cred.uid || attr.uid != cred.euid) {
+            vnode->Unlock();
+            FS::UnrefVNode(vnode);
+            return onlyWrite ? -EACCES : -EPERM;
+        }
+    }
+
+    attr.ctime = now;
+
+    if (kTimes[0].tv_nsec == UTIME_NOW)
+        attr.atime = now;
+    else if (kTimes[0].tv_nsec != UTIME_OMIT)
+        attr.atime = kTimes[0];
+    if (kTimes[1].tv_nsec == UTIME_NOW)
+        attr.mtime = now;
+    else if (kTimes[1].tv_nsec != UTIME_OMIT)
+        attr.mtime = kTimes[1];
+
+    rc = vnode->SetAttr(attr);
+    vnode->Unlock();
+    FS::UnrefVNode(vnode);
+
+    return rc;
+}
