@@ -31,7 +31,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <LibWM/Protocol.hpp>
 #include <LibWM/SharedMem.hpp>
 
-#include "Backends/InputDevice.hpp"
 #include "Cursor.hpp"
 #include "InputConfig.hpp"
 #include "InputManager.hpp"
@@ -39,6 +38,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Rect.hpp"
 #include "Seat.hpp"
 
+#include "Backends/InputDevice.hpp"
 #include "Backends/VideoBackend.hpp"
 
 namespace WM {
@@ -53,11 +53,36 @@ namespace WM {
         bool alive = true;
     };
 
+    struct Insets { int left = 0, top = 0, right = 0, bottom = 0; };
+
+    enum class SizeSource {
+        Buffer,  // the client: the frame follows the size of the buffer
+        Assigned // the server: the frame has an assigned size
+    };
+
+    struct PendingConfigure {
+        uint32_t serial;
+        int width, height;
+        uint32_t flags;
+    };
+
     struct Client;
     struct WindowObj {
         Client* owner;
         uint32_t id;
-        int x = 0, y = 0;
+
+        Rect frame;
+        Insets insets;
+        SizeSource sizeSource = SizeSource::Buffer;
+        bool placed = false;
+        size_t output = 0; // home output, index into Server::outputs
+
+        std::vector<PendingConfigure> configures;
+        uint32_t lastConfigureSerial = 0;
+        uint32_t ackedSerial = 0;
+        uint32_t committedSerial = 0;
+        PendingConfigure lastConfigure = {};
+
         std::shared_ptr<BufferObj> current;
         std::shared_ptr<BufferObj> pending;
         bool pendingAttach = false;
@@ -66,10 +91,22 @@ namespace WM {
         int commits = 0;
         std::bitset<KeyCount> keysSent;
 
+        Rect Content() const {
+            return {frame.x0 + insets.left, frame.y0 + insets.top, frame.x1 - insets.right, frame.y1 - insets.bottom};
+        }
+
         Rect GetRect() const {
             if (!current)
-                return {x, y, x, y};
-            return {x, y, x + (int)current->width, y + (int)current->height};
+                return {frame.x0, frame.y0, frame.x0, frame.y0};
+            return frame;
+        }
+
+        double LocalX(double gx) const {
+            return gx - (frame.x0 + insets.left);
+        }
+
+        double LocalY(double gy) const {
+            return gy - (frame.y0 + insets.top);
         }
     };
 
@@ -98,6 +135,7 @@ namespace WM {
         Connection conn;
         std::unordered_map<uint32_t, Obj> objects;
         bool dead = false;
+        uint32_t version = 0;
 
         template <typename T>
         void Send(uint32_t obj, uint16_t op, const T& body) {
@@ -129,6 +167,8 @@ namespace WM {
         void SetInputConfig(InputConfig config) { inputConfig = std::move(config); }
         bool StartInput(InputBackend& backend);
         void SetTimeout(uint32_t seconds) { timeoutSeconds = seconds; }
+
+        ActionRegistry& Actions() { return actions; }
 
     private:
         void AcceptClients();
@@ -166,6 +206,13 @@ namespace WM {
         void ForgetWindow(WindowObj* w);
         void FixFocus();
         void DamageCursor();
+
+        void PlaceNewWindow(WindowObj& w);
+        void FollowBuffer(WindowObj& w);
+        void AssignFrame(WindowObj& w, const Rect& frame, uint32_t flags);
+        void ReleaseSize(WindowObj& w, uint32_t flags);
+        void SendConfigure(WindowObj& w, int width, int height, uint32_t flags);
+        size_t OutputAt(double x, double y) const;
 
         template <typename T>
         void SendTo(WindowObj* w, uint16_t op, const T& body) {

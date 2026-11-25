@@ -56,6 +56,8 @@ namespace WM {
         bool Contains(int x, int y) const {
             return x >= x0 && x < x1 && y >= y0 && y < y1;
         }
+        
+        bool operator==(const Rect&) const = default;
     };
 }
 

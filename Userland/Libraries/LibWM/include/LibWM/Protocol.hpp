@@ -21,7 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdint.h>
 
 namespace LibWM::Proto {
-    constexpr uint32_t Version = 1;
+    constexpr uint32_t Version = 2; // Configure is version 2
     constexpr uint32_t LastClientId = 0xFEFFFFFF;
 
     enum : uint32_t {
@@ -35,7 +35,8 @@ namespace LibWM::Proto {
         BadSize,
         IdInUse,
         BadPool,
-        BadBuffer
+        BadBuffer,
+        BadSerial
     };
 
     namespace Display {
@@ -53,12 +54,16 @@ namespace LibWM::Proto {
     }
 
     namespace Window {
-        enum Request : uint16_t { Attach = 0, Damage = 1, Frame = 2, Commit = 3, Destroy = 4 };
+        enum Request : uint16_t { Attach = 0, Damage = 1, Frame = 2, Commit = 3, Destroy = 4, AckConfigure = 5 };
         enum Event   : uint16_t {
             FrameDone = 0,
             PointerEnter = 1, PointerLeave = 2, PointerMotion = 3, PointerButton = 4, PointerAxis = 5,
-            KeyboardEntry = 6, KeyboardLeave = 8, Key = 8, Modifiers = 9
+            KeyboardEntry = 6, KeyboardLeave = 8, Key = 8, Modifiers = 9, Configure = 10
         };
+    }
+
+    namespace ConfigureFlag {
+        enum : uint32_t { Activated = 1, Maximised = 2, Fullscreen = 4, Tiled = 8 };
     }
 
     struct Hello        { uint32_t version; };
@@ -83,6 +88,9 @@ namespace LibWM::Proto {
     struct KeyboardLeave { uint32_t serial; };
     struct KeyBody       { uint32_t serial, timeMS, key, state, codepoint; }; // state 0 release, 1 press, 2 repeat
     struct ModifiersBody { uint32_t serial, mods; };
+
+    struct Configure    { uint32_t serial, width, height, flags; };
+    struct AckConfigure { uint32_t serial; };
 
     // Coordinates are window local and 24.8 fixed point
 

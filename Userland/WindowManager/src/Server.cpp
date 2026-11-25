@@ -35,6 +35,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <sys/signal.h>
 
 #define BACKGROUND_COLOUR 0xFF203040u
+#define LETTERBOX_COLOUR  0xFF0A0A0Au // shown when a window's content is bigger than the buffer from the client
 
 namespace WM {
     static volatile sig_atomic_t g_quit = 0;
@@ -265,6 +266,7 @@ namespace WM {
             P::Hello h;
             if (!Parse(m, h))
                 return c.Error(0, P::BadSize);
+            c.version = std::clamp(h.version, 1u, P::Version);
             c.Send(0, P::Display::Welcome, P::Welcome({P::Version, (uint32_t)outputs[0].rect.Width(), (uint32_t)outputs[0].rect.Height()}));
             return;
         }
@@ -304,10 +306,7 @@ namespace WM {
                 return c.Error(0, P::IdInUse);
             auto w = std::make_shared<WindowObj>();
             w->owner = &c;
-            w->id = b.newID;
-            w->x = 30 + 70 * windowSerial; // cascade
-            w->y = 30 + 50 * windowSerial;
-            windowSerial++;
+            w->id = b.newID; // new windows have no position until they first map
             Obj o(Type::Window);
             o.window = w;
             c.objects.emplace(b.newID, std::move(o));
@@ -373,6 +372,19 @@ namespace WM {
                 w.pendingDamage.Add({d.x, d.y, d.x + d.w, d.y + d.h});
             return;
         }
+        case P::Window::AckConfigure: {
+            P::AckConfigure a;
+            if (!Parse(m, a))
+                return c.Error(id, P::BadSize);
+            if (a.serial == 0 || a.serial > w.lastConfigureSerial)
+                return c.Error(id, P::BadSize);
+            auto it = std::find_if(w.configures.begin(), w.configures.end(), [&](const PendingConfigure& p) { return p.serial == a.serial; });
+            if (it != w.configures.end()) {
+                w.ackedSerial = a.serial;
+                w.configures.erase(w.configures.begin(), it + 1);
+            }
+            return;
+        }
         case P::Window::Frame:
             w.pendingFrame = true;
             return;
@@ -396,24 +408,42 @@ namespace WM {
 
     void Server::Commit(WindowObj& w) {
         Rect old = w.GetRect();
+        bool mapStateChanged = false;
+
         if (w.pendingAttach) {
             if (w.current && w.current != w.pending && w.current->alive)
                 w.owner->Send(w.current->id, P::Buffer::Release);
+            mapStateChanged = (w.current == nullptr) != (w.pending == nullptr);
             w.current = w.pending;
             w.pendingAttach = false;
+
+            if (w.current != nullptr) {
+                if (!w.placed)
+                    PlaceNewWindow(w);
+                else if (w.sizeSource == SizeSource::Buffer)
+                    FollowBuffer(w);
+            }
+
             Rect nr = w.GetRect();
-            if (old.x1 - old.x0 != nr.x1 - nr.x0 || old.y1 - old.y0 != nr.y1 - nr.y0) {
+            if (old != nr) {
                 AddDamage(old);
                 AddDamage(nr);
             }
         }
+
         if (w.current) {
             Rect bufr{0, 0, (int)w.current->width, (int)w.current->height};
-            AddDamage(w.pendingDamage.Interset(bufr).Moved(w.x, w.y));
+            Rect content = w.Content();
+            AddDamage(w.pendingDamage.Interset(bufr).Moved(content.x0, content.y0).Interset(content));
         }
         w.pendingDamage = {};
+        w.committedSerial = w.ackedSerial;
+
         if (seat != nullptr && w.current != nullptr && keyboardFocus == nullptr)
             SetFocus(&w, false);
+        if (mapStateChanged)
+            UpdatePointerFocus();
+
         if (w.pendingFrame) {
             w.frameCB = true;
             w.pendingFrame = false;
@@ -468,17 +498,35 @@ namespace WM {
         for (auto& w : windows) {
             if (!w->current)
                 continue;
+
+            Rect content = w->Content();
             Rect r = w->GetRect().Interset(d);
             if (r.Empty())
                 continue;
+
             const BufferObj& b = *w->current;
             const uint8_t* base = b.pool->Data() + b.offset;
             bool opaque = b.format == P::XRGB8888;
+
+            Rect bufRect{content.x0, content.y0, content.x0 + (int)b.width, content.y0 + (int)b.height};
+            Rect covered = bufRect.Interset(r);
+
+            auto letterbox = [&](int y, int xa, int xb) {
+                if (xb > xa)
+                    std::fill_n(row(y, xa), xb - xa, LETTERBOX_COLOUR);
+            };
+
             for (int y = r.y0; y < r.y1; y++) {
-                const uint32_t* src = (const uint32_t*)(base + (size_t)(y - w->y) * b.stride) +  (r.x0 - w->x);
+                if (covered.Empty() || y < covered.y0 || y >= covered.y1) {
+                    letterbox(y, r.x0, r.x1);
+                    continue;
+                }
+                letterbox(y, r.x0, covered.x0);
+                const uint32_t* src = (const uint32_t*)(base + (size_t)(y - content.y0) * b.stride) +  (covered.x0 - content.x0);
                 uint32_t* dst = row(y, r.x0);
                 for (int x = 0; x < r.x1 - r.x0; x++)
                     dst[x] = opaque ? (src[x] | 0xFF000000) : BlendPreMul(src[x], dst[x]);
+                letterbox(y, covered.x1, r.x1);
             }
         }
 
@@ -539,7 +587,7 @@ namespace WM {
         UpdatePointerFocus();
         WindowObj* target = grabWindow != nullptr ? grabWindow : pointerFocus;
         if (target != nullptr)
-            SendTo(target, P::Window::PointerMotion, P::PointerMotion{ToMS(timeNS), P::ToFixed(x - target->x), P::ToFixed(y - target->y)});
+            SendTo(target, P::Window::PointerMotion, P::PointerMotion{ToMS(timeNS), P::ToFixed(target->LocalX(x)), P::ToFixed(target->LocalY(y))});
     }
 
     void Server::OnPointerButton(const ButtonEvent& e) {
@@ -585,7 +633,7 @@ namespace WM {
             SendTo(pointerFocus, P::Window::PointerLeave, P::PointerLeave{nextSerial++});
         pointerFocus = target;
         if (target != nullptr) {
-            SendTo(target, P::Window::PointerEnter, P::PointerEnter{nextSerial++, P::ToFixed(seat->PointerX() - target->x), P::ToFixed(seat->PointerY() - target->y)});
+            SendTo(target, P::Window::PointerEnter, P::PointerEnter{nextSerial++, P::ToFixed(target->LocalX(seat->PointerX())), P::ToFixed(target->LocalY(seat->PointerY()))});
         }
     }
 
@@ -640,5 +688,86 @@ namespace WM {
         int x = (int)std::floor(seat->PointerX()), y = (int)std::floor(seat->PointerY());
         cursorRect = {x, y, x + CursorWidth, y + CursorHeight};
         AddDamage(cursorRect);
+    }
+
+    static Insets ResolveInsets(const WindowObj&) {
+        return {};
+    }
+
+    void Server::PlaceNewWindow(WindowObj& w) {
+        double px, py;
+        if (seat != nullptr) {
+            px = seat->PointerX();
+            py = seat->PointerY();
+        } else { // no pointer: middle of first output
+            px = (outputs[0].rect.x0 + outputs[0].rect.x1) / 2.0;
+            py = (outputs[0].rect.y0 + outputs[0].rect.y1) / 2.0;
+        }
+
+        w.output = OutputAt(px, py);
+        const Rect& out = outputs[w.output].rect;
+
+        w.insets = ResolveInsets(w);
+        int fw = (int)w.current->width + w.insets.left + w.insets.right;
+        int fh = (int)w.current->height + w.insets.top + w.insets.bottom;
+
+        int x = std::max(out.x0, std::min((int)std::lround(px) - fw / 2, out.x1 - fw));
+        int y = std::max(out.y0, std::min((int)std::lround(py) - fh / 2, out.y1 - fh));
+        w.frame = {x, y, x + fw, y + fh};
+        w.placed = true;
+    }
+
+    void Server::FollowBuffer(WindowObj& w) {
+        if (!w.current)
+            return;
+        w.insets = ResolveInsets(w);
+        w.frame.x1 = w.frame.x0 + (int)w.current->width + w.insets.left + w.insets.right;
+        w.frame.y1 = w.frame.y0 + (int)w.current->height + w.insets.top + w.insets.bottom;
+    }
+
+    void Server::AssignFrame(WindowObj& w, const Rect& frame, uint32_t flags) {
+        Rect old = w.GetRect();
+        w.insets = ResolveInsets(w);
+        w.sizeSource = SizeSource::Assigned;
+        w.frame = frame;
+        w.placed = true;
+        AddDamage(old);
+        AddDamage(w.GetRect());
+
+        Rect content = w.Content();
+        SendConfigure(w, std::max(1, content.Width()), std::max(1, content.Height()), flags);
+    }
+
+    void Server::ReleaseSize(WindowObj& w, uint32_t flags) {
+        Rect old = w.GetRect();
+        w.sizeSource = SizeSource::Buffer;
+        FollowBuffer(w);
+        AddDamage(old);
+        AddDamage(w.GetRect());
+        SendConfigure(w, 0, 0, flags);
+    }
+
+    void Server::SendConfigure(WindowObj& w, int width, int height, uint32_t flags) {
+        if (w.owner->version < 2)
+            return;
+        if (w.lastConfigureSerial != 0 && w.lastConfigure.width == width && w.lastConfigure.height == height && w.lastConfigure.flags == flags)
+            return;
+
+        PendingConfigure p{nextSerial++, width, height, flags};
+        w.lastConfigure = p;
+        w.lastConfigureSerial = p.serial;
+        w.configures.push_back(p);
+        if (w.configures.size() > 16)
+            w.configures.erase(w.configures.begin());
+        SendTo(&w, P::Window::Configure, P::Configure{p.serial, (uint32_t)width, (uint32_t)height, flags});
+    }
+
+    size_t Server::OutputAt(double x, double y) const {
+        int ix = (int)std::floor(x), iy = (int)std::floor(y);
+        for (size_t i = 0; i < outputs.size(); i++) {
+            if (outputs[i].rect.Contains(ix, iy))
+                return i;
+        }
+        return 0;
     }
 }
