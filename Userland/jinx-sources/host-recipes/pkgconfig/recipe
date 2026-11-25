@@ -1,0 +1,36 @@
+name=pkgconfig
+version=1.8.0
+revision=1
+tarball_url="https://github.com/pkgconf/pkgconf/archive/refs/tags/pkgconf-${version}.tar.gz"
+tarball_sha512=6b0ce203e85dc671503ad4bebdfdddc567916a8cdd77f739350db99e1e01c098ea2e3111309d2beeff2eff5389f328372ec327eb590f7b3a120b2452ed24021d
+source_hostdeps="autoconf automake libtool"
+imagedeps="gcc build-essential"
+hostdeps="automake autoconf libtool"
+
+prepare() {
+    ./autogen.sh
+}
+
+configure() {
+    ${source_dir}/configure --prefix=${prefix}
+}
+
+build() {
+    make -j${parallelism}
+}
+
+package() {
+    make install DESTDIR="${dest_dir}"
+    mkdir -p ${dest_dir}${prefix}/share/pkgconfig/personality.d
+	
+	cat > ${dest_dir}${prefix}/share/pkgconfig/personality.d/x86_64-frostyos.personality << EOF
+Triplet: x86_64-frostyos
+SysrootDir: ${sysroot}
+DefaultSearchPaths: ${sysroot}${prefix}/lib/pkgconfig:${sysroot}${prefix}/share/pkgconfig
+SystemIncludePaths: ${sysroot}${prefix}/include
+SystemLibraryPaths: ${sysroot}${prefix}/lib
+EOF
+
+	ln -s pkgconf ${dest_dir}${prefix}/bin/x86_64-frostyos-pkg-config
+	ln -s pkgconf ${dest_dir}${prefix}/bin/pkg-config
+}

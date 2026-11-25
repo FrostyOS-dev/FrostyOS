@@ -1,0 +1,26 @@
+name=shadow
+version=4.20.3
+revision=1
+tarball_url="https://github.com/shadow-maint/shadow/releases/download/${version}/shadow-${version}.tar.xz"
+tarball_sha512=1ae3cf1e0a2538133f17a79f87728264adb44fed74527055dab172958d75a67714a2288ec641475163cb64434b0841a59d78e28c37b628e79d46ea48f68d5934
+source_hostdeps="autoconf automake libtool pkgconfig"
+imagedeps="build-essential"
+hostdeps="xgcc xbinutils libtool"
+deps="base libxcrypt"
+
+prepare() {
+    autoreconf -fiv
+}
+
+configure() {
+    cp -rvfp ${source_dir}/* .
+    ./configure --host=x86_64-frostyos --prefix=${prefix} --sysconfdir=/etc --with-group-name-max-length=32 --without-libbsd --disable-nls --disable-logind --without-btrfs
+}
+
+build() {
+    make -j ${parallelism}
+}
+
+package() {
+    make install DESTDIR=${dest_dir}
+}

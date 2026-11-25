@@ -1,0 +1,170 @@
+diff -ruN util-linux-clean/configure.ac util-linux-workdir/configure.ac
+--- util-linux-clean/configure.ac	2025-06-24 17:55:28.000000000 +1000
++++ util-linux-workdir/configure.ac	2025-06-24 17:55:28.000000000 +1000
+@@ -3110,7 +3110,6 @@
+ libsmartcols/docs/Makefile
+ libsmartcols/docs/version.xml
+ libsmartcols/src/libsmartcols.h
+-po/Makefile.in
+ ])
+ 
+ AC_OUTPUT
+diff -ruN util-linux-clean/include/cpuset.h util-linux-workdir/include/cpuset.h
+--- util-linux-clean/include/cpuset.h	2025-06-24 17:55:28.000000000 +1000
++++ util-linux-workdir/include/cpuset.h	2025-06-24 17:55:28.000000000 +1000
+@@ -21,6 +21,9 @@
+  */
+ #if !HAVE_DECL_CPU_ALLOC
+ 
++#define __CPUELT(x) 0
++#define __CPUMASK(x) 0
++
+ # define CPU_ZERO_S(setsize, cpusetp) \
+   do {									      \
+     size_t __i;								      \
+diff -ruN util-linux-clean/lib/path.c util-linux-workdir/lib/path.c
+--- util-linux-clean/lib/path.c	2025-06-24 17:55:28.000000000 +1000
++++ util-linux-workdir/lib/path.c	2025-06-24 17:55:28.000000000 +1000
+@@ -860,6 +860,10 @@
+ 	return !p ? -errno : ul_path_read_u32(pc, res, p);
+ }
+ 
++dev_t makedev(unsigned int maj, unsigned int min) {
++	return maj << 20 | (min & 0xFFFFF);
++}
++
+ int ul_path_read_majmin(struct path_cxt *pc, dev_t *res, const char *path)
+ {
+ 	int rc, maj = 0, min = 0;
+diff -ruN util-linux-clean/lib/sysfs.c util-linux-workdir/lib/sysfs.c
+--- util-linux-clean/lib/sysfs.c	2025-06-24 17:55:28.000000000 +1000
++++ util-linux-workdir/lib/sysfs.c	2026-11-23 17:42:21.449048744 +1000
+@@ -63,6 +63,18 @@
+ 	return pc;
+ }
+ 
++dev_t makedev(unsigned int maj, unsigned int min) {
++	return maj << 20 | (min & 0xFFFFF);
++}
++
++unsigned int major(dev_t dev) {
++	return dev >> 20;
++}
++
++unsigned int minor(dev_t dev) {
++	return dev & 0xFFFFF;
++}
++
+ /*
+  * sysfs_blkdev_* is sysfs extension to ul_path_* API for block devices.
+  *
+diff -ruN util-linux-clean/Makefile.am util-linux-workdir/Makefile.am
+--- util-linux-clean/Makefile.am	2025-06-24 17:55:28.000000000 +1000
++++ util-linux-workdir/Makefile.am	2025-06-24 17:55:28.000000000 +1000
+@@ -84,7 +84,7 @@
+ CLEANFILES =
+ DISTCLEANFILES =
+ 
+-SUBDIRS = po
++SUBDIRS = #po
+ 
+ RCS_FIND_IGNORE = \( -name SCCS -o -name BitKeeper -o -name .svn -o \
+ 		-name CVS -o -name .pc -o -name .hg -o -name .git \) -prune -o
+@@ -120,7 +120,6 @@
+ include pam_lastlog2/Makemodule.am
+ include bash-completion/Makemodule.am
+ include man-common/Makemodule.am
+-include po-man/Makemodule.am
+ 
+ include Documentation/Makemodule.am
+ include tests/Makemodule.am
+diff -ruN util-linux-clean/term-utils/agetty.c util-linux-workdir/term-utils/agetty.c
+--- util-linux-clean/term-utils/agetty.c	2025-06-24 17:55:28.000000000 +1000
++++ util-linux-workdir/term-utils/agetty.c	2025-06-24 17:55:28.000000000 +1000
+@@ -34,7 +34,7 @@
+ #include <pwd.h>
+ #include <arpa/inet.h>
+ #include <netdb.h>
+-#include <ifaddrs.h>
++// #include <ifaddrs.h>
+ #include <net/if.h>
+ #include <sys/utsname.h>
+ 
+@@ -92,9 +92,9 @@
+ #endif
+ 
+ /* If USE_SYSLOG is undefined all diagnostics go to /dev/console. */
+-#ifdef	USE_SYSLOG
++// #ifdef	USE_SYSLOG
+ #  include <syslog.h>
+-#endif
++// #endif
+ 
+ /*
+  * Some heuristics to find out what environment we are in: if it is not
+@@ -1106,6 +1106,7 @@
+ 		close(STDIN_FILENO);
+ 		errno = 0;
+ 
++#ifndef __frostyos__
+ 		if (op->flags & F_HANGUP) {
+ 
+ 			if (ioctl(fd, TIOCNOTTY))
+@@ -1124,6 +1125,7 @@
+ 			if (vhangup())
+ 				log_err(_("/dev/%s: vhangup() failed: %m"), tty);
+ 		} else
++#endif /* __frostyos__ */
+ 			close(fd);
+ 
+ 		debug("open(2)\n");
+@@ -2588,7 +2590,7 @@
+  * Prints IP for the specified interface (@iface), if the interface is not
+  * specified then prints the "best" one (UP, RUNNING, non-LOOPBACK). If not
+  * found the "best" interface then prints at least host IP.
+- */
++ *//*
+ static void output_iface_ip(struct issue *ie,
+ 			    struct ifaddrs *addrs,
+ 			    const char *iface,
+@@ -2610,11 +2612,11 @@
+ 			continue;
+ 
+ 		if (iface) {
+-			/* Filter out by interface name */
++			/* Filter out by interface name *//*
+ 		       if (strcmp(p->ifa_name, iface) != 0)
+ 				continue;
+ 		} else {
+-			/* Select the "best" interface */
++			/* Select the "best" interface *//*
+ 			if ((p->ifa_flags & IFF_LOOPBACK) ||
+ 			    !(p->ifa_flags & IFF_UP) ||
+ 			    !(p->ifa_flags & IFF_RUNNING))
+@@ -2640,7 +2642,7 @@
+ 	if (iface)
+ 		return;
+ 
+-	/* Hmm.. not found the best interface, print host IP at least */
++	/* Hmm.. not found the best interface, print host IP at least *//*
+ 	memset(&hints, 0, sizeof(hints));
+ 	hints.ai_family = family;
+ 	if (family == AF_INET6)
+@@ -2662,7 +2664,7 @@
+ 		freeaddrinfo(info);
+ 	}
+ 	free(host);
+-}
++}*/
+ 
+ /*
+  * parses \x{argument}, if not argument specified then returns NULL, the @fd
+@@ -2856,7 +2858,7 @@
+ 			fprintf (ie->output, "%d ", users);
+ 		break;
+ 	}
+-#if defined(RTMGRP_IPV4_IFADDR) && defined(RTMGRP_IPV6_IFADDR)
++#if defined(RTMGRP_IPV4_IFADDR) && defined(RTMGRP_IPV6_IFADDR) && !defined(__frostyos__)
+ 	case '4':
+ 	case '6':
+ 	{

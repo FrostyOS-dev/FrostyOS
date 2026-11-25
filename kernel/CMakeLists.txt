@@ -300,4 +300,4 @@ if (FROSTYOS_BUILD_TARGET STREQUAL "kernel")
     add_custom_target(install_kernel DEPENDS ${FROSTYOS_BOOT}/FrostyOS/kernel.elf)
 endif()
 
-install(DIRECTORY headers/frostyos/ DESTINATION data/include)
+# install(DIRECTORY headers/frostyos/ DESTINATION data/include)

@@ -1,0 +1,25 @@
+name=libxcrypt
+version=4.5.2
+revision=1
+tarball_url="https://github.com/besser82/libxcrypt/releases/download/v${version}/libxcrypt-${version}.tar.xz"
+tarball_sha512=87b363e2bdc03ea993a9d154eb59a75ef77edd0490a9b58d443de4e1b4eec5196408a1eb9b739718fd92f565fe5157469c1ea3d336a4a54ac0947750b16c44c1
+source_hostdeps="libtool automake autoconf pkgconfig"
+imagedeps="python3-passlib gcc"
+hostdeps="xgcc xbinutils pkgconfig libtool"
+deps="base"
+
+prepare() {
+    autoreconf -fvi
+}
+
+configure() {
+    ${source_dir}/configure --prefix=${prefix} --host=x86_64-frostyos --enable-obsolete-api=yes --disable-xcrypt-compat-files
+}
+
+build() {
+    make -j${parallelism}
+}
+
+package() {
+    make install DESTDIR=${dest_dir}
+}

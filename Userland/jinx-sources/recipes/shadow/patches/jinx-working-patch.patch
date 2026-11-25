@@ -1,0 +1,329 @@
+diff -ruN shadow-clean/lib/btrfs.h shadow-workdir/lib/btrfs.h
+--- shadow-clean/lib/btrfs.h	2026-08-21 02:19:11.984585682 +1000
++++ shadow-workdir/lib/btrfs.h	2026-11-24 15:54:19.878114964 +1000
+@@ -9,7 +9,7 @@
+ #include "config.h"
+ 
+ #include <stdbool.h>
+-#include <sys/statfs.h>
++// #include <sys/statfs.h>
+ 
+ 
+ #ifdef WITH_BTRFS
+diff -ruN shadow-clean/lib/shadow/gshadow/endsgent.c shadow-workdir/lib/shadow/gshadow/endsgent.c
+--- shadow-clean/lib/shadow/gshadow/endsgent.c	2025-10-19 22:27:50.778388641 +1000
++++ shadow-workdir/lib/shadow/gshadow/endsgent.c	2025-10-19 22:27:50.778388641 +1000
+@@ -16,7 +16,7 @@
+ #include "shadow/gshadow/gshadow.h"
+ 
+ 
+-#if defined(SHADOWGRP) && !__has_include(<gshadow.h>)
++// #if defined(SHADOWGRP) && !__has_include(<gshadow.h>)
+ // end-working-with shadow group entries
+ void
+ endsgent(void)
+@@ -27,4 +27,4 @@
+ 
+ 	gshadow = NULL;
+ }
+-#endif
++// #endif
+diff -ruN shadow-clean/lib/shadow/gshadow/endsgent.h shadow-workdir/lib/shadow/gshadow/endsgent.h
+--- shadow-clean/lib/shadow/gshadow/endsgent.h	2025-10-19 22:27:50.778388641 +1000
++++ shadow-workdir/lib/shadow/gshadow/endsgent.h	2025-10-19 22:27:50.778388641 +1000
+@@ -12,11 +12,11 @@
+ #include "config.h"
+ 
+ 
+-#if __has_include(<gshadow.h>)
+-# include <gshadow.h>
+-#else
++// #if __has_include(<gshadow.h>)
++// # include <gshadow.h>
++// #else
+ void endsgent(void);
+-#endif
++// #endif
+ 
+ 
+ #endif  // include guard
+diff -ruN shadow-clean/lib/shadow/gshadow/fgetsgent.c shadow-workdir/lib/shadow/gshadow/fgetsgent.c
+--- shadow-clean/lib/shadow/gshadow/fgetsgent.c	2026-04-12 19:16:27.828861278 +1000
++++ shadow-workdir/lib/shadow/gshadow/fgetsgent.c	2026-04-12 19:16:27.828861278 +1000
+@@ -29,7 +29,7 @@
+  * fgetsgent() reads the next line from the provided stream and
+  * converts it to a (struct sgrp).  NULL is returned on EOF.
+  */
+-#if defined(SHADOWGRP) && !__has_include(<gshadow.h>)
++// #if defined(SHADOWGRP) && !__has_include(<gshadow.h>)
+ // from-FILE get-next shadow group entry
+ struct sgrp *
+ fgetsgent(FILE *fp)
+@@ -57,4 +57,4 @@
+ 	free(buf);
+ 	return NULL;
+ }
+-#endif
++// #endif
+diff -ruN shadow-clean/lib/shadow/gshadow/fgetsgent.h shadow-workdir/lib/shadow/gshadow/fgetsgent.h
+--- shadow-clean/lib/shadow/gshadow/fgetsgent.h	2025-10-19 22:27:50.778388641 +1000
++++ shadow-workdir/lib/shadow/gshadow/fgetsgent.h	2025-10-19 22:27:50.778388641 +1000
+@@ -16,11 +16,11 @@
+ #include "shadow/gshadow/sgrp.h"
+ 
+ 
+-#if __has_include(<gshadow.h>)
+-# include <gshadow.h>
+-#else
++// #if __has_include(<gshadow.h>)
++// # include <gshadow.h>
++// #else
+ struct sgrp *fgetsgent(FILE *stream);
+-#endif
++// #endif
+ 
+ 
+ #endif  // include guard
+diff -ruN shadow-clean/lib/shadow/gshadow/getsgent.c shadow-workdir/lib/shadow/gshadow/getsgent.c
+--- shadow-clean/lib/shadow/gshadow/getsgent.c	2025-10-19 22:27:50.778388641 +1000
++++ shadow-workdir/lib/shadow/gshadow/getsgent.c	2025-10-19 22:27:50.778388641 +1000
+@@ -18,7 +18,7 @@
+ #include "shadow/gshadow/sgrp.h"
+ 
+ 
+-#if defined(SHADOWGRP) && !__has_include(<gshadow.h>)
++// #if defined(SHADOWGRP) && !__has_include(<gshadow.h>)
+ // get-next shadow group entry
+ struct sgrp *
+ getsgent(void)
+@@ -28,4 +28,4 @@
+ 	}
+ 	return fgetsgent(gshadow);
+ }
+-#endif
++// #endif
+diff -ruN shadow-clean/lib/shadow/gshadow/getsgent.h shadow-workdir/lib/shadow/gshadow/getsgent.h
+--- shadow-clean/lib/shadow/gshadow/getsgent.h	2025-10-19 22:27:50.778388641 +1000
++++ shadow-workdir/lib/shadow/gshadow/getsgent.h	2025-10-19 22:27:50.778388641 +1000
+@@ -14,11 +14,11 @@
+ #include "shadow/gshadow/sgrp.h"
+ 
+ 
+-#if __has_include(<gshadow.h>)
+-# include <gshadow.h>
+-#else
++// #if __has_include(<gshadow.h>)
++// # include <gshadow.h>
++// #else
+ struct sgrp *getsgent(void);
+-#endif
++// #endif
+ 
+ 
+ #endif  // include guard
+diff -ruN shadow-clean/lib/shadow/gshadow/getsgnam.c shadow-workdir/lib/shadow/gshadow/getsgnam.c
+--- shadow-clean/lib/shadow/gshadow/getsgnam.c	2025-10-19 22:27:50.778388641 +1000
++++ shadow-workdir/lib/shadow/gshadow/getsgnam.c	2025-10-19 22:27:50.778388641 +1000
+@@ -22,7 +22,7 @@
+ /*
+  * getsgnam - get a shadow group entry by name
+  */
+-#if defined(SHADOWGRP) && !__has_include(<gshadow.h>)
++// #if defined(SHADOWGRP) && !__has_include(<gshadow.h>)
+ // get shadow group entry-by-name
+ struct sgrp *
+ getsgnam(const char *name)
+@@ -38,4 +38,4 @@
+ 	}
+ 	return sgrp;
+ }
+-#endif
++// #endif
+diff -ruN shadow-clean/lib/shadow/gshadow/getsgnam.h shadow-workdir/lib/shadow/gshadow/getsgnam.h
+--- shadow-clean/lib/shadow/gshadow/getsgnam.h	2025-10-19 22:27:50.778388641 +1000
++++ shadow-workdir/lib/shadow/gshadow/getsgnam.h	2025-10-19 22:27:50.778388641 +1000
+@@ -14,11 +14,11 @@
+ #include "shadow/gshadow/sgrp.h"
+ 
+ 
+-#if __has_include(<gshadow.h>)
+-# include <gshadow.h>
+-#else
++// #if __has_include(<gshadow.h>)
++// # include <gshadow.h>
++// #else
+ struct sgrp *getsgnam(const char *);
+-#endif
++// #endif
+ 
+ 
+ #endif  // include guard
+diff -ruN shadow-clean/lib/shadow/gshadow/putsgent.c shadow-workdir/lib/shadow/gshadow/putsgent.c
+--- shadow-clean/lib/shadow/gshadow/putsgent.c	2026-09-21 01:27:02.211968805 +1000
++++ shadow-workdir/lib/shadow/gshadow/putsgent.c	2026-09-21 01:27:02.211968805 +1000
+@@ -27,7 +27,7 @@
+  * writes the result to the given stream.  This is the logical
+  * opposite of fgetsgent.
+  */
+-#if defined(SHADOWGRP) && !__has_include(<gshadow.h>)
++// #if defined(SHADOWGRP) && !__has_include(<gshadow.h>)
+ // put shadow group entry
+ int
+ putsgent(const struct sgrp *sgrp, FILE *fp)
+@@ -92,4 +92,4 @@
+ 	free (buf);
+ 	return 0;
+ }
+-#endif
++// #endif
+diff -ruN shadow-clean/lib/shadow/gshadow/putsgent.h shadow-workdir/lib/shadow/gshadow/putsgent.h
+--- shadow-clean/lib/shadow/gshadow/putsgent.h	2025-10-19 22:27:50.778388641 +1000
++++ shadow-workdir/lib/shadow/gshadow/putsgent.h	2025-10-19 22:27:50.778388641 +1000
+@@ -16,11 +16,11 @@
+ #include "shadow/gshadow/sgrp.h"
+ 
+ 
+-#if __has_include(<gshadow.h>)
+-# include <gshadow.h>
+-#else
++// #if __has_include(<gshadow.h>)
++// # include <gshadow.h>
++// #else
+ int putsgent(const struct sgrp *sgrp, FILE *fp);
+-#endif
++// #endif
+ 
+ 
+ #endif  // include guard
+diff -ruN shadow-clean/lib/shadow/gshadow/setsgent.c shadow-workdir/lib/shadow/gshadow/setsgent.c
+--- shadow-clean/lib/shadow/gshadow/setsgent.c	2025-10-19 22:27:50.778388641 +1000
++++ shadow-workdir/lib/shadow/gshadow/setsgent.c	2025-10-19 22:27:50.778388641 +1000
+@@ -17,7 +17,7 @@
+ #include "shadow/gshadow/gshadow.h"
+ 
+ 
+-#if defined(SHADOWGRP) && !__has_include(<gshadow.h>)
++// #if defined(SHADOWGRP) && !__has_include(<gshadow.h>)
+ // set-resources-for-working-with shadow group entries
+ void
+ setsgent(void)
+@@ -28,4 +28,4 @@
+ 		gshadow = fopen(_PATH_GSHADOW, "re");
+ 	}
+ }
+-#endif
++// #endif
+diff -ruN shadow-clean/lib/shadow/gshadow/setsgent.h shadow-workdir/lib/shadow/gshadow/setsgent.h
+--- shadow-clean/lib/shadow/gshadow/setsgent.h	2025-10-19 22:27:50.778388641 +1000
++++ shadow-workdir/lib/shadow/gshadow/setsgent.h	2025-10-19 22:27:50.778388641 +1000
+@@ -12,11 +12,11 @@
+ #include "config.h"
+ 
+ 
+-#if __has_include(<gshadow.h>)
+-# include <gshadow.h>
+-#else
++// #if __has_include(<gshadow.h>)
++// # include <gshadow.h>
++// #else
+ void setsgent(void);
+-#endif
++// #endif
+ 
+ 
+ #endif  // include guard
+diff -ruN shadow-clean/lib/shadow/gshadow/sgetsgent.c shadow-workdir/lib/shadow/gshadow/sgetsgent.c
+--- shadow-clean/lib/shadow/gshadow/sgetsgent.c	2026-09-24 00:20:00.534941753 +1000
++++ shadow-workdir/lib/shadow/gshadow/sgetsgent.c	2026-09-24 00:20:00.534941753 +1000
+@@ -21,7 +21,7 @@
+ #include "string/strtok/strsep2arr.h"
+ 
+ 
+-#if defined(SHADOWGRP) && !__has_include(<gshadow.h>)
++// #if defined(SHADOWGRP) && !__has_include(<gshadow.h>)
+ static struct sgrp  sgroup = {};
+ 
+ 
+@@ -72,4 +72,4 @@
+ 
+ 	return l;
+ }
+-#endif
++// #endif
+diff -ruN shadow-clean/lib/shadow/gshadow/sgetsgent.h shadow-workdir/lib/shadow/gshadow/sgetsgent.h
+--- shadow-clean/lib/shadow/gshadow/sgetsgent.h	2026-04-12 18:04:56.378979334 +1000
++++ shadow-workdir/lib/shadow/gshadow/sgetsgent.h	2026-04-12 18:04:56.378979334 +1000
+@@ -14,11 +14,11 @@
+ #include "shadow/gshadow/sgrp.h"
+ 
+ 
+-#if __has_include(<gshadow.h>)
+-# include <gshadow.h>
+-#else
++// #if __has_include(<gshadow.h>)
++// # include <gshadow.h>
++// #else
+ struct sgrp *sgetsgent(const char *);
+-#endif
++// #endif
+ 
+ 
+ #endif  // include guard
+diff -ruN shadow-clean/lib/shadow/gshadow/sgrp.h shadow-workdir/lib/shadow/gshadow/sgrp.h
+--- shadow-clean/lib/shadow/gshadow/sgrp.h	2025-10-19 22:27:50.778388641 +1000
++++ shadow-workdir/lib/shadow/gshadow/sgrp.h	2025-10-19 22:27:50.778388641 +1000
+@@ -12,16 +12,16 @@
+ #include "config.h"
+ 
+ 
+-#if __has_include(<gshadow.h>)
+-# include <gshadow.h>
+-#else
++// #if __has_include(<gshadow.h>)
++// # include <gshadow.h>
++// #else
+ struct sgrp {
+ 	char *sg_namp;		/* group name */
+ 	char *sg_passwd;	/* group password */
+ 	char **sg_adm;		/* group administrator list */
+ 	char **sg_mem;		/* group membership list */
+ };
+-#endif
++// #endif
+ 
+ 
+ #endif  // include guard
+diff -ruN shadow-clean/lib/user_busy.c shadow-workdir/lib/user_busy.c
+--- shadow-clean/lib/user_busy.c	2026-09-24 04:15:42.951598519 +1000
++++ shadow-workdir/lib/user_busy.c	2026-09-24 04:15:42.951598519 +1000
+@@ -16,6 +16,7 @@
+ #include <fcntl.h>
+ #include <unistd.h>
+ #include <utmpx.h>
++#include <signal.h>
+ 
+ #include "atoi/getnum.h"
+ #include "defines.h"
+diff -ruN shadow-clean/lib/utmp.c shadow-workdir/lib/utmp.c
+--- shadow-clean/lib/utmp.c	2026-09-24 04:15:42.951598519 +1000
++++ shadow-workdir/lib/utmp.c	2026-09-24 04:15:42.951598519 +1000
+@@ -25,6 +25,7 @@
+ #include <string.h>
+ #include <fcntl.h>
+ #include <unistd.h>
++#include <netinet/in.h>
+ 
+ #include "alloc/calloc.h"
+ #include "alloc/malloc.h"
+diff -ruN shadow-clean/src/useradd.c shadow-workdir/src/useradd.c
+--- shadow-clean/src/useradd.c	2026-09-24 04:15:42.955594066 +1000
++++ shadow-workdir/src/useradd.c	2026-09-24 04:15:42.955594066 +1000
+@@ -25,7 +25,7 @@
+ #include <stdio.h>
+ #include <string.h>
+ #include <sys/stat.h>
+-#include <sys/statfs.h>
++// #include <sys/statfs.h>
+ #include <sys/types.h>
+ #include <sys/wait.h>
+ #include <time.h>
