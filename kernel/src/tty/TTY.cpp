@@ -210,6 +210,24 @@ int TTY::Ioctl(size_t op, void* arg, int* result, Process* proc, const Credentia
         *result = 0;
         return 0;
     }
+    case TIOCNOTTY: {
+        if (proc->GetPID() != proc->GetSID()) {
+            proc->SetControllingTTY(nullptr);
+            *result = 0;
+            return 0;
+        }
+        if (GetSession() == proc->GetSID()) {
+            int64_t fg = GetForegroundPGID();
+            if (fg > 0) {
+                Scheduler::SignalProcessGroup(fg, SIGHUP);
+                Scheduler::SignalProcessGroup(fg, SIGCONT);
+            }
+            DetachSession();
+        }
+        Scheduler::SetSessionTTY(proc->GetSID(), nullptr);
+        *result = 0;
+        return 0;
+    }
     case TIOCGPGRP: {
         if (GetSession() == -1 || proc->GetSID() != GetSession())
             return ENOTTY;
